@@ -57,34 +57,22 @@ public class PromptService {
         }
 
         try {
-            String payload = objectMapper.writeValueAsString(buildPayload(request.answers()));
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
-                    .timeout(EXTERNAL_REQUEST_TIMEOUT)
-                    .header("Authorization", "Bearer " + apiKey)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() >= 400) {
-                String responsePreview = abbreviate(response.body(), 400);
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "OpenAI request failed with status " + response.statusCode() + ". Body: " + responsePreview
-                );
+            String systemPrompt = normalizeSystemPrompt(requestText(buildSystemPromptPayload(request.answers())));
+            if (!StringUtils.hasText(systemPrompt)) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include system prompt content.");
             }
 
-            JsonNode root = objectMapper.readTree(response.body());
-            String assistantContent = extractAssistantMessage(root);
-            if (!StringUtils.hasText(assistantContent)) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "OpenAI response did not include assistant content."
-                );
+            String alias = normalizeAlias(requestText(buildAliasPayload(systemPrompt)));
+            if (!StringUtils.hasText(alias)) {
+                alias = "새 클론";
             }
 
-            GeneratedCloneProfile profile = parseGeneratedCloneProfile(assistantContent);
+            String shortDescription = normalizeShortDescription(requestText(buildShortDescriptionPayload(systemPrompt)));
+            if (!StringUtils.hasText(shortDescription)) {
+                shortDescription = abbreviate(systemPrompt.replaceAll("\\s+", " ").trim(), 60);
+            }
+
+            GeneratedCloneProfile profile = new GeneratedCloneProfile(alias, shortDescription, systemPrompt);
             PromptGenerationLog log = saveGenerationLog(request.answers(), profile);
             return new PromptGenerateResult(log.getId(), log.getAlias(), log.getShortDescription(), log.getSystemPrompt());
         } catch (IOException exception) {
@@ -107,11 +95,52 @@ public class PromptService {
         return promptGenerationLogRepository.save(log);
     }
 
-    private OpenAiChatCompletionRequest buildPayload(List<PromptGenerateRequest.AnswerItem> answers) {
+    private OpenAiChatCompletionRequest buildSystemPromptPayload(List<PromptGenerateRequest.AnswerItem> answers) {
         return new OpenAiChatCompletionRequest(
                 appProperties.getOpenai().getModel(),
-                openAiContextAssembler.buildPromptGenerationMessages(answers)
+                openAiContextAssembler.buildSystemPromptGenerationMessages(answers)
         );
+    }
+
+    private OpenAiChatCompletionRequest buildAliasPayload(String systemPrompt) {
+        return new OpenAiChatCompletionRequest(
+                appProperties.getOpenai().getModel(),
+                openAiContextAssembler.buildAliasGenerationMessages(systemPrompt)
+        );
+    }
+
+    private OpenAiChatCompletionRequest buildShortDescriptionPayload(String systemPrompt) {
+        return new OpenAiChatCompletionRequest(
+                appProperties.getOpenai().getModel(),
+                openAiContextAssembler.buildShortDescriptionGenerationMessages(systemPrompt)
+        );
+    }
+
+    private String requestText(OpenAiChatCompletionRequest requestPayload) throws IOException, InterruptedException {
+        String payload = objectMapper.writeValueAsString(requestPayload);
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
+                .timeout(EXTERNAL_REQUEST_TIMEOUT)
+                .header("Authorization", "Bearer " + appProperties.getOpenai().getApiKey())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (response.statusCode() >= 400) {
+            String responsePreview = abbreviate(response.body(), 400);
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "OpenAI request failed with status " + response.statusCode() + ". Body: " + responsePreview
+            );
+        }
+
+        JsonNode root = objectMapper.readTree(response.body());
+        String assistantContent = extractAssistantMessage(root);
+        if (!StringUtils.hasText(assistantContent)) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include assistant content.");
+        }
+        return assistantContent.trim();
     }
 
     private String extractAssistantMessage(JsonNode root) {
@@ -138,23 +167,8 @@ public class PromptService {
         return value.substring(0, maxLength) + "...";
     }
 
-    private GeneratedCloneProfile parseGeneratedCloneProfile(String assistantContent) throws IOException {
-        JsonNode node = objectMapper.readTree(assistantContent);
-        String alias = normalizeAlias(node.path("alias").asText(""));
-        String shortDescription = normalizeShortDescription(node.path("shortDescription").asText(""));
-        String systemPrompt = node.path("systemPrompt").asText("").trim();
-
-        if (!StringUtils.hasText(systemPrompt)) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include systemPrompt.");
-        }
-        if (!StringUtils.hasText(alias)) {
-            alias = "새 클론";
-        }
-        if (!StringUtils.hasText(shortDescription)) {
-            shortDescription = abbreviate(systemPrompt.replaceAll("\\s+", " ").trim(), 60);
-        }
-
-        return new GeneratedCloneProfile(alias, shortDescription, systemPrompt);
+    private String normalizeSystemPrompt(String systemPrompt) {
+        return systemPrompt == null ? "" : systemPrompt.trim();
     }
 
     private String normalizeAlias(String alias) {

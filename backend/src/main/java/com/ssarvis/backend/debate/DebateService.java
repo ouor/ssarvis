@@ -202,11 +202,12 @@ public class DebateService {
         DebateTurn.Speaker speaker = isCloneATurn ? DebateTurn.Speaker.CLONE_A : DebateTurn.Speaker.CLONE_B;
         String stance = isCloneATurn ? "찬성" : "반대";
 
-        List<TranscriptEntry> transcript = existingTurns.stream()
-                .map(turn -> new TranscriptEntry(turn.getSpeaker(), turn.getContent()))
+        String activeSpeakerName = speaker.name();
+        List<OpenAiContextAssembler.DebateHistoryMessage> history = existingTurns.stream()
+                .map(turn -> new OpenAiContextAssembler.DebateHistoryMessage(turn.getSpeaker().name(), turn.getContent()))
                 .toList();
 
-        String message = generateDebateTurn(activeClone.getSystemPrompt(), debateSession.getTopic(), stance, transcript);
+        String message = generateDebateTurn(activeClone.getSystemPrompt(), debateSession.getTopic(), stance, activeSpeakerName, history);
         return new TurnContext(activeClone, activeVoice, speaker, existingTurns.size() + 1, message);
     }
 
@@ -228,7 +229,13 @@ public class DebateService {
         }
     }
 
-    private String generateDebateTurn(String systemPrompt, String topic, String stance, List<TranscriptEntry> transcript) {
+    private String generateDebateTurn(
+            String systemPrompt,
+            String topic,
+            String stance,
+            String activeSpeakerName,
+            List<OpenAiContextAssembler.DebateHistoryMessage> history
+    ) {
         String apiKey = appProperties.getOpenai().getApiKey();
         if (!StringUtils.hasText(apiKey)) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "OPENAI_API_KEY is not configured.");
@@ -241,7 +248,9 @@ public class DebateService {
                             systemPrompt,
                             topic,
                             stance,
-                            transcript.stream().map(entry -> "- " + entry.speaker().name() + ": " + entry.content()).toList()
+                            activeSpeakerName,
+                            history,
+                            appProperties.getOpenai().getChatHistoryTurns()
                     )
             ));
 
@@ -295,10 +304,6 @@ public class DebateService {
         }
         return value.length() <= maxLength ? value : value.substring(0, maxLength) + "...";
     }
-
-    private record TranscriptEntry(DebateTurn.Speaker speaker, String content) {
-    }
-
     private record TurnContext(
             PromptGenerationLog activeClone,
             RegisteredVoice activeVoice,

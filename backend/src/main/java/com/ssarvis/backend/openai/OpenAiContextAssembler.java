@@ -11,7 +11,7 @@ import org.springframework.util.StringUtils;
 @Component
 public class OpenAiContextAssembler {
 
-    public List<OpenAiMessage> buildPromptGenerationMessages(List<PromptGenerateRequest.AnswerItem> answers) {
+    public List<OpenAiMessage> buildSystemPromptGenerationMessages(List<PromptGenerateRequest.AnswerItem> answers) {
         StringBuilder answerSummary = new StringBuilder();
         for (PromptGenerateRequest.AnswerItem answer : answers) {
             if (answer == null || !StringUtils.hasText(answer.question()) || !StringUtils.hasText(answer.answer())) {
@@ -30,6 +30,20 @@ public class OpenAiContextAssembler {
         );
     }
 
+    public List<OpenAiMessage> buildAliasGenerationMessages(String systemPrompt) {
+        return List.of(
+                new OpenAiMessage("system", PromptTemplates.CLONE_ALIAS_GENERATOR_SYSTEM),
+                new OpenAiMessage("user", PromptTemplates.CLONE_ALIAS_GENERATOR_USER.formatted(systemPrompt))
+        );
+    }
+
+    public List<OpenAiMessage> buildShortDescriptionGenerationMessages(String systemPrompt) {
+        return List.of(
+                new OpenAiMessage("system", PromptTemplates.CLONE_SHORT_DESCRIPTION_GENERATOR_SYSTEM),
+                new OpenAiMessage("user", PromptTemplates.CLONE_SHORT_DESCRIPTION_GENERATOR_USER.formatted(systemPrompt))
+        );
+    }
+
     public List<OpenAiMessage> buildChatMessages(
             String systemPrompt,
             List<ChatMessage> history,
@@ -44,6 +58,7 @@ public class OpenAiContextAssembler {
             messages.add(new OpenAiMessage(role, message.getContent()));
         }
 
+        messages.add(new OpenAiMessage("system", PromptTemplates.CHAT_GENERATION_INSTRUCTION));
         messages.add(new OpenAiMessage("user", userMessage));
         return messages;
     }
@@ -52,16 +67,20 @@ public class OpenAiContextAssembler {
             String systemPrompt,
             String topic,
             String stance,
-            List<String> transcriptLines
+            String activeSpeakerName,
+            List<DebateHistoryMessage> history,
+            int maxTurns
     ) {
-        String transcript = transcriptLines.isEmpty()
-                ? "(아직 발언 없음)\n"
-                : String.join("\n", transcriptLines) + "\n";
+        List<OpenAiMessage> messages = new ArrayList<>();
+        messages.add(new OpenAiMessage("system", systemPrompt));
 
-        return List.of(
-                new OpenAiMessage("system", systemPrompt),
-                new OpenAiMessage("user", PromptTemplates.DEBATE_USER.formatted(topic, stance, transcript))
-        );
+        for (DebateHistoryMessage message : limitDebateHistoryToRecentTurns(history, maxTurns)) {
+            String role = activeSpeakerName.equals(message.speakerName()) ? "user" : "assistant";
+            messages.add(new OpenAiMessage(role, message.content()));
+        }
+
+        messages.add(new OpenAiMessage("system", PromptTemplates.DEBATE_GENERATION_INSTRUCTION.formatted(topic, stance)));
+        return messages;
     }
 
     private List<ChatMessage> limitHistoryToRecentTurns(List<ChatMessage> history, int maxTurns) {
@@ -76,5 +95,22 @@ public class OpenAiContextAssembler {
         }
 
         return history.subList(history.size() - maxMessages, history.size());
+    }
+
+    private List<DebateHistoryMessage> limitDebateHistoryToRecentTurns(List<DebateHistoryMessage> history, int maxTurns) {
+        int normalizedMaxTurns = Math.max(maxTurns, 0);
+        if (normalizedMaxTurns == 0 || history.isEmpty()) {
+            return List.of();
+        }
+
+        int maxMessages = normalizedMaxTurns * 2;
+        if (history.size() <= maxMessages) {
+            return history;
+        }
+
+        return history.subList(history.size() - maxMessages, history.size());
+    }
+
+    public record DebateHistoryMessage(String speakerName, String content) {
     }
 }
