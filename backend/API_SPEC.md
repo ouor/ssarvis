@@ -45,6 +45,8 @@ Body
 ```json
 {
   "promptGenerationLogId": 12,
+  "alias": "차분한 조력자",
+  "shortDescription": "차분하고 구조적인 설명을 선호하는 클론",
   "systemPrompt": "사용자와 대화할 때는 차분하고 사려 깊은 톤을 유지하세요..."
 }
 ```
@@ -214,14 +216,16 @@ Body
   {
     "cloneId": 12,
     "createdAt": "2026-03-25T11:20:00Z",
-    "preview": "당신은 사용자를 차분하고 신뢰감 있게 돕는 한국어 AI 어시스턴트다..."
+    "alias": "차분한 조력자",
+    "shortDescription": "차분하고 구조적인 설명을 선호하는 클론"
   }
 ]
 ```
 
 설명
 - 각 클론은 `prompt_generation_logs`의 한 레코드를 의미한다.
-- `preview`는 시스템 프롬프트 본문의 앞부분 요약이다.
+- `alias`는 프론트에서 클론 이름으로 노출되는 짧은 별칭이다.
+- `shortDescription`은 LLM이 생성한 간단한 소개 문장이다.
 
 ## POST `/api/chat/messages`
 
@@ -600,6 +604,8 @@ Status
 - 생성 시각
 - 사용한 모델명
 - 설문 응답 JSON
+- 생성된 별칭
+- 생성된 간단한 설명
 - 생성된 시스템 프롬프트 본문
 
 ### 채팅 응답 생성 성공 시

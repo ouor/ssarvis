@@ -30,7 +30,12 @@ class QuestionnaireControllerTest {
     @Test
     void generatePromptReturnsSystemPrompt() throws Exception {
         given(promptService.generateSystemPrompt(any()))
-                .willReturn(new PromptGenerateResult(15L, "사용자와 대화할 때는 차분하고 구조적인 설명을 우선하세요."));
+                .willReturn(new PromptGenerateResult(
+                        15L,
+                        "차분한 조력자",
+                        "차분하고 구조적인 설명을 선호하는 클론",
+                        "사용자와 대화할 때는 차분하고 구조적인 설명을 우선하세요."
+                ));
 
         mockMvc.perform(post("/api/system-prompt")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -42,10 +47,12 @@ class QuestionnaireControllerTest {
                                       "answer": "충분히 고민하고 정함"
                                     }
                                   ]
-                                }
+                }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.promptGenerationLogId").value(15))
+                .andExpect(jsonPath("$.alias").value("차분한 조력자"))
+                .andExpect(jsonPath("$.shortDescription").value("차분하고 구조적인 설명을 선호하는 클론"))
                 .andExpect(jsonPath("$.systemPrompt").value("사용자와 대화할 때는 차분하고 구조적인 설명을 우선하세요."));
     }
 

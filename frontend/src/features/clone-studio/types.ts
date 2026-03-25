@@ -11,7 +11,8 @@ export type ApiErrorResponse = {
 export type CloneOption = {
   cloneId: number
   createdAt: string
-  preview: string
+  alias: string
+  shortDescription: string
 }
 
 export type VoiceOption = {
@@ -42,6 +43,8 @@ export type DebateTurn = {
 
 export type PromptGenerateResponse = {
   promptGenerationLogId: number
+  alias: string
+  shortDescription: string
   systemPrompt: string
 }
 

@@ -238,7 +238,8 @@ export function useCloneStudio() {
       const nextClone: CloneOption = {
         cloneId: data.promptGenerationLogId,
         createdAt: new Date().toISOString(),
-        preview: data.systemPrompt,
+        alias: data.alias,
+        shortDescription: data.shortDescription,
       }
 
       setClones((current) => [nextClone, ...current.filter((clone) => clone.cloneId !== nextClone.cloneId)])

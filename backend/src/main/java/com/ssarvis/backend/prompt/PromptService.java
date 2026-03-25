@@ -11,6 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -72,17 +73,17 @@ public class PromptService {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String systemPrompt = extractAssistantMessage(root);
-            if (!StringUtils.hasText(systemPrompt)) {
+            String assistantContent = extractAssistantMessage(root);
+            if (!StringUtils.hasText(assistantContent)) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
                         "OpenAI response did not include assistant content."
                 );
             }
 
-            String trimmedPrompt = systemPrompt.trim();
-            PromptGenerationLog log = saveGenerationLog(request.answers(), trimmedPrompt);
-            return new PromptGenerateResult(log.getId(), trimmedPrompt);
+            GeneratedCloneProfile profile = parseGeneratedCloneProfile(assistantContent);
+            PromptGenerationLog log = saveGenerationLog(request.answers(), profile);
+            return new PromptGenerateResult(log.getId(), log.getAlias(), log.getShortDescription(), log.getSystemPrompt());
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize OpenAI request.", exception);
         } catch (InterruptedException exception) {
@@ -91,12 +92,14 @@ public class PromptService {
         }
     }
 
-    private PromptGenerationLog saveGenerationLog(List<PromptGenerateRequest.AnswerItem> answers, String systemPrompt) throws IOException {
+    private PromptGenerationLog saveGenerationLog(List<PromptGenerateRequest.AnswerItem> answers, GeneratedCloneProfile profile) throws IOException {
         String answersJson = objectMapper.writeValueAsString(answers);
         PromptGenerationLog log = new PromptGenerationLog(
                 appProperties.getOpenai().getModel(),
                 answersJson,
-                systemPrompt
+                profile.systemPrompt(),
+                profile.alias(),
+                profile.shortDescription()
         );
         return promptGenerationLogRepository.save(log);
     }
@@ -130,5 +133,44 @@ public class PromptService {
             return value;
         }
         return value.substring(0, maxLength) + "...";
+    }
+
+    private GeneratedCloneProfile parseGeneratedCloneProfile(String assistantContent) throws IOException {
+        JsonNode node = objectMapper.readTree(assistantContent);
+        String alias = normalizeAlias(node.path("alias").asText(""));
+        String shortDescription = normalizeShortDescription(node.path("shortDescription").asText(""));
+        String systemPrompt = node.path("systemPrompt").asText("").trim();
+
+        if (!StringUtils.hasText(systemPrompt)) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include systemPrompt.");
+        }
+        if (!StringUtils.hasText(alias)) {
+            alias = "새 클론";
+        }
+        if (!StringUtils.hasText(shortDescription)) {
+            shortDescription = abbreviate(systemPrompt.replaceAll("\\s+", " ").trim(), 60);
+        }
+
+        return new GeneratedCloneProfile(alias, shortDescription, systemPrompt);
+    }
+
+    private String normalizeAlias(String alias) {
+        String normalized = Normalizer.normalize(alias == null ? "" : alias, Normalizer.Form.NFC).trim();
+        normalized = normalized.replaceAll("\\s+", " ");
+        if (!StringUtils.hasText(normalized)) {
+            return "";
+        }
+        return normalized.length() <= 120 ? normalized : normalized.substring(0, 120);
+    }
+
+    private String normalizeShortDescription(String shortDescription) {
+        String normalized = (shortDescription == null ? "" : shortDescription).replaceAll("\\s+", " ").trim();
+        if (!StringUtils.hasText(normalized)) {
+            return "";
+        }
+        return normalized.length() <= 255 ? normalized : normalized.substring(0, 255);
+    }
+
+    private record GeneratedCloneProfile(String alias, String shortDescription, String systemPrompt) {
     }
 }

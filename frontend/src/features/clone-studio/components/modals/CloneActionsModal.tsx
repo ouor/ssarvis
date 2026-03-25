@@ -1,6 +1,6 @@
 import AppModal from '../../../../components/AppModal'
 import type { CloneOption } from '../../types'
-import { formatCloneName, previewTitle } from '../../utils'
+import { formatCloneName } from '../../utils'
 
 type CloneActionsModalProps = {
   clone: CloneOption
@@ -11,7 +11,7 @@ type CloneActionsModalProps = {
 
 function CloneActionsModal({ clone, onClose, onChatSelect, onDebateSelect }: CloneActionsModalProps) {
   return (
-    <AppModal onClose={onClose} subtitle={previewTitle(clone.preview)} title={formatCloneName(clone)}>
+    <AppModal onClose={onClose} subtitle={clone.shortDescription} title={formatCloneName(clone)}>
       <div className="modal-stack">
         <button className="action-card" onClick={onChatSelect} type="button">
           <strong>나와 대화하기</strong>

@@ -146,6 +146,8 @@ class PromptIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.promptGenerationLogId").isNumber())
+                .andExpect(jsonPath("$.alias").isString())
+                .andExpect(jsonPath("$.shortDescription").isString())
                 .andExpect(jsonPath("$.systemPrompt").isString())
                 .andReturn()
                 .getResponse()
@@ -176,6 +178,8 @@ class PromptIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.promptGenerationLogId").isNumber())
+                .andExpect(jsonPath("$.alias").isString())
+                .andExpect(jsonPath("$.shortDescription").isString())
                 .andExpect(jsonPath("$.systemPrompt").isString())
                 .andReturn()
                 .getResponse()
@@ -284,6 +288,8 @@ class PromptIntegrationTest {
 
         assertThat(latestLog.getModel()).isNotBlank();
         assertThat(latestLog.getAnswersJson()).contains("대화할 때 나는 보통");
+        assertThat(latestLog.getAlias()).isNotBlank();
+        assertThat(latestLog.getShortDescription()).isNotBlank();
         assertThat(latestLog.getSystemPrompt()).isNotBlank();
 
         ChatConversation conversation = chatConversationRepository.findById(conversationId).orElseThrow();

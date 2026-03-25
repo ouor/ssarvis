@@ -21,16 +21,9 @@ public class CloneController {
                 .map(log -> new CloneSummaryResponse(
                         log.getId(),
                         log.getCreatedAt(),
-                        summarize(log.getSystemPrompt())
+                        log.getAlias(),
+                        log.getShortDescription()
                 ))
                 .toList();
-    }
-
-    private String summarize(String systemPrompt) {
-        if (systemPrompt == null) {
-            return "";
-        }
-        String normalized = systemPrompt.replaceAll("\\s+", " ").trim();
-        return normalized.length() <= 140 ? normalized : normalized.substring(0, 140) + "...";
     }
 }

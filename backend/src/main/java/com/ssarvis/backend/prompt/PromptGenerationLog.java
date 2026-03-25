@@ -32,13 +32,21 @@ public class PromptGenerationLog {
     @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String systemPrompt;
 
+    @Column(nullable = false, length = 120)
+    private String alias;
+
+    @Column(nullable = false, length = 255)
+    private String shortDescription;
+
     protected PromptGenerationLog() {
     }
 
-    public PromptGenerationLog(String model, String answersJson, String systemPrompt) {
+    public PromptGenerationLog(String model, String answersJson, String systemPrompt, String alias, String shortDescription) {
         this.model = model;
         this.answersJson = answersJson;
         this.systemPrompt = systemPrompt;
+        this.alias = alias;
+        this.shortDescription = shortDescription;
     }
 
     @PrePersist
@@ -64,5 +72,13 @@ public class PromptGenerationLog {
 
     public String getSystemPrompt() {
         return systemPrompt;
+    }
+
+    public String getAlias() {
+        return alias;
+    }
+
+    public String getShortDescription() {
+        return shortDescription;
     }
 }

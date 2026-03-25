@@ -1,5 +1,5 @@
 import type { CloneOption } from '../types'
-import { formatCloneName, previewTitle } from '../utils'
+import { formatCloneName } from '../utils'
 
 type CloneGridSectionProps = {
   clones: CloneOption[]
@@ -32,8 +32,8 @@ function CloneGridSection({ clones, loadError, onCreateClone, onCloneSelect }: C
                 <span>{formatCloneName(clone)}</span>
                 <time>{new Date(clone.createdAt).toLocaleDateString('ko-KR')}</time>
               </div>
-              <h2>{previewTitle(clone.preview)}</h2>
-              <p>{clone.preview}</p>
+              <h2>{clone.alias}</h2>
+              <p>{clone.shortDescription}</p>
             </div>
           </button>
         ))}

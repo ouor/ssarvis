@@ -1,6 +1,6 @@
 import AppModal from '../../../../components/AppModal'
 import type { CloneOption, VoiceOption } from '../../types'
-import { formatCloneName, formatVoiceLabel, previewTitle } from '../../utils'
+import { formatCloneName, formatVoiceLabel } from '../../utils'
 
 type DebateSetupModalProps = {
   clone: CloneOption
@@ -60,7 +60,7 @@ function DebateSetupModal({
               .filter((item) => item.cloneId !== clone.cloneId)
               .map((item) => (
                 <option key={item.cloneId} value={item.cloneId}>
-                  {formatCloneName(item)} · {previewTitle(item.preview)}
+                  {formatCloneName(item)} · {item.shortDescription}
                 </option>
               ))}
           </select>

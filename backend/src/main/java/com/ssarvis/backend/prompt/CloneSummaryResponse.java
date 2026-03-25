@@ -5,6 +5,7 @@ import java.time.Instant;
 public record CloneSummaryResponse(
         Long cloneId,
         Instant createdAt,
-        String preview
+        String alias,
+        String shortDescription
 ) {
 }

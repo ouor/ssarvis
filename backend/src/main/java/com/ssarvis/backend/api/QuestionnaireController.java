@@ -23,6 +23,11 @@ public class QuestionnaireController {
     @PostMapping("/system-prompt")
     public PromptGenerateResponse generatePrompt(@Valid @RequestBody PromptGenerateRequest request) {
         PromptGenerateResult result = promptService.generateSystemPrompt(request);
-        return new PromptGenerateResponse(result.promptGenerationLogId(), result.systemPrompt());
+        return new PromptGenerateResponse(
+                result.promptGenerationLogId(),
+                result.alias(),
+                result.shortDescription(),
+                result.systemPrompt()
+        );
     }
 }
