@@ -102,6 +102,11 @@
   box-shadow: none;
 }
 
+.progress-copy {
+  margin-bottom: 16px;
+  color: var(--muted);
+}
+
 .question-list {
   display: grid;
   gap: 16px;
@@ -170,6 +175,7 @@
   margin-bottom: 16px;
   background: rgba(191, 54, 12, 0.08);
   color: #8d2c1b;
+  white-space: pre-wrap;
 }
 
 .prompt-output {
@@ -293,10 +299,7 @@
     border-radius: 22px;
   }
 
-  .panel-header {
-    flex-direction: column;
-  }
-
+  .panel-header,
   .chat-header {
     flex-direction: column;
   }
