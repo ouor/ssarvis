@@ -12,6 +12,7 @@ import type {
   VoiceRegisterResponse,
 } from '../types'
 import PcmStreamPlayer from '../../../utils/PcmStreamPlayer'
+import { useSpeechInput } from './useSpeechInput'
 
 export function useCloneStudio() {
   const [activeTab, setActiveTab] = useState<'clones' | 'live'>('clones')
@@ -43,6 +44,21 @@ export function useCloneStudio() {
   const debateAbortControllerRef = useRef<AbortController | null>(null)
   const debateSessionIdRef = useRef<number | null>(null)
   const debateRunningRef = useRef(false)
+  const liveChatInputRef = useRef('')
+
+  const speechInput = useSpeechInput({
+    getInput: () => liveChatInputRef.current,
+    onInputChange: (value) => {
+      setLiveChat((current) =>
+        current
+          ? {
+              ...current,
+              input: value,
+            }
+          : current
+      )
+    },
+  })
 
   const selectedClone =
     modalState?.type === 'clone-actions' || modalState?.type === 'voice-picker' || modalState?.type === 'debate-setup'
@@ -97,15 +113,33 @@ export function useCloneStudio() {
   }, [liveDebate])
 
   useEffect(() => {
+    liveChatInputRef.current = liveChat?.input ?? ''
+  }, [liveChat?.input])
+
+  useEffect(() => {
     if (activeTab !== 'live' && liveDebate?.running) {
       void handleDebateStop()
     }
   }, [activeTab, liveDebate?.running])
 
   useEffect(() => {
+    setLiveChat((current) =>
+      current
+        ? {
+            ...current,
+            speechSupported: speechInput.supported,
+            speechListening: speechInput.listening,
+            speechError: speechInput.error,
+          }
+        : current
+    )
+  }, [speechInput.supported, speechInput.listening, speechInput.error])
+
+  useEffect(() => {
     return () => {
       chatAbortControllerRef.current?.abort()
       debateAbortControllerRef.current?.abort()
+      void speechInput.stop()
       const debateSessionId = debateSessionIdRef.current
       if (debateSessionId) {
         void fetch(`${apiBaseUrl}/api/debates/${debateSessionId}/stop`, {
@@ -306,6 +340,8 @@ export function useCloneStudio() {
     if (!liveChat) {
       return
     }
+
+    await speechInput.stop()
 
     const player = new PcmStreamPlayer()
     const abortController = new AbortController()
@@ -563,6 +599,9 @@ export function useCloneStudio() {
       input: '',
       submitting: false,
       error: '',
+      speechSupported: speechInput.supported,
+      speechListening: false,
+      speechError: '',
     })
     setActiveTab('live')
     closeModal()
@@ -577,14 +616,20 @@ export function useCloneStudio() {
   }
 
   function handleChatInputChange(value: string) {
+    speechInput.clearError()
     setLiveChat((current) =>
       current
         ? {
             ...current,
             input: value,
+            speechError: '',
           }
         : current
     )
+  }
+
+  function handleChatSpeechToggle() {
+    void speechInput.toggle()
   }
 
   async function handleStartDebate() {
@@ -623,6 +668,7 @@ export function useCloneStudio() {
       error: '',
     }
 
+    await speechInput.stop()
     setLiveChat(null)
     setLiveDebate(nextState)
     setActiveTab('live')
@@ -703,6 +749,7 @@ export function useCloneStudio() {
     handleStartChat,
     handleChatSubmit,
     handleChatInputChange,
+    handleChatSpeechToggle,
     handleStartDebate,
     handleDebateStop,
   }

@@ -7,6 +7,7 @@ type LiveSessionPanelProps = {
   liveDebate: LiveDebateState | null
   onChatSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   onChatInputChange: (value: string) => void
+  onChatSpeechToggle: () => void
   onShowClones: () => void
   onDebateStop: () => Promise<void>
 }
@@ -16,6 +17,7 @@ function LiveSessionPanel({
   liveDebate,
   onChatSubmit,
   onChatInputChange,
+  onChatSpeechToggle,
   onShowClones,
   onDebateStop,
 }: LiveSessionPanelProps) {
@@ -69,13 +71,26 @@ function LiveSessionPanel({
                 value={liveChat.input}
               />
               {liveChat.error ? <p className="inline-error">{liveChat.error}</p> : null}
+              {liveChat.speechError ? <p className="inline-error">{liveChat.speechError}</p> : null}
               <div className="composer-actions">
                 <button className="secondary-button" onClick={onShowClones} type="button">
                   다른 클론 보기
                 </button>
-                <button className="primary-button" disabled={liveChat.submitting} type="submit">
-                  {liveChat.submitting ? '응답 생성 중...' : '보내기'}
-                </button>
+                <div className="composer-send-actions">
+                  <button
+                    aria-label={liveChat.speechListening ? '음성 인식 중지' : '음성 인식 시작'}
+                    className={`mic-button${liveChat.speechListening ? ' mic-button-listening' : ''}`}
+                    disabled={!liveChat.speechSupported || liveChat.submitting}
+                    onClick={onChatSpeechToggle}
+                    title={liveChat.speechSupported ? '음성으로 입력하기' : '이 브라우저는 음성 인식을 지원하지 않습니다.'}
+                    type="button"
+                  >
+                    마이크
+                  </button>
+                  <button className="primary-button" disabled={liveChat.submitting} type="submit">
+                    {liveChat.submitting ? '응답 생성 중...' : '보내기'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -229,8 +229,15 @@
   align-items: center;
 }
 
+.composer-send-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 .primary-button,
-.secondary-button {
+.secondary-button,
+.mic-button {
   border: none;
   border-radius: 999px;
   padding: 13px 22px;
@@ -248,8 +255,21 @@
   color: #355f57;
 }
 
+.mic-button {
+  min-width: 88px;
+  background: rgba(255, 239, 233, 0.94);
+  color: #a64d39;
+}
+
+.mic-button-listening {
+  background: linear-gradient(135deg, #d85c4b, #f27d68);
+  color: white;
+  box-shadow: 0 12px 28px rgba(216, 92, 75, 0.24);
+}
+
 .primary-button:disabled,
-.secondary-button:disabled {
+.secondary-button:disabled,
+.mic-button:disabled {
   opacity: 0.6;
   cursor: wait;
 }
@@ -296,6 +316,7 @@
   }
 
   .composer-actions,
+  .composer-send-actions,
   .modal-footer,
   .debate-summary,
   .clone-card-topline {

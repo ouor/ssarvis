@@ -84,6 +84,9 @@ export type LiveChatState = {
   input: string
   submitting: boolean
   error: string
+  speechSupported: boolean
+  speechListening: boolean
+  speechError: string
 }
 
 export type LiveDebateState = {

@@ -31,6 +31,7 @@ function CloneStudioPage() {
           liveChat={studio.liveChat}
           liveDebate={studio.liveDebate}
           onChatInputChange={studio.handleChatInputChange}
+          onChatSpeechToggle={studio.handleChatSpeechToggle}
           onChatSubmit={studio.handleChatSubmit}
           onDebateStop={studio.handleDebateStop}
           onShowClones={() => studio.setActiveTab('clones')}
