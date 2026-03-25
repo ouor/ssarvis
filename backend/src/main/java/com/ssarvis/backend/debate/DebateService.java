@@ -3,6 +3,8 @@ package com.ssarvis.backend.debate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
+import com.ssarvis.backend.openai.OpenAiChatCompletionRequest;
+import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import com.ssarvis.backend.voice.RegisteredVoice;
@@ -34,6 +36,7 @@ public class DebateService {
     private final DebateSessionRepository debateSessionRepository;
     private final DebateTurnRepository debateTurnRepository;
     private final VoiceService voiceService;
+    private final OpenAiContextAssembler openAiContextAssembler;
 
     public DebateService(
             HttpClient httpClient,
@@ -43,7 +46,8 @@ public class DebateService {
             RegisteredVoiceRepository registeredVoiceRepository,
             DebateSessionRepository debateSessionRepository,
             DebateTurnRepository debateTurnRepository,
-            VoiceService voiceService
+            VoiceService voiceService,
+            OpenAiContextAssembler openAiContextAssembler
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -53,6 +57,7 @@ public class DebateService {
         this.debateSessionRepository = debateSessionRepository;
         this.debateTurnRepository = debateTurnRepository;
         this.voiceService = voiceService;
+        this.openAiContextAssembler = openAiContextAssembler;
     }
 
     @Transactional
@@ -136,34 +141,16 @@ public class DebateService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "OPENAI_API_KEY is not configured.");
         }
 
-        StringBuilder transcriptText = new StringBuilder();
-        for (TranscriptEntry entry : transcript) {
-            transcriptText.append("- ").append(entry.speaker().name()).append(": ").append(entry.content()).append('\n');
-        }
-
-        String userPrompt = """
-                너는 지금 토론 중인 클론이다.
-                토론 주제: %s
-                너의 입장: %s
-
-                지금까지의 토론:
-                %s
-
-                요구사항:
-                - 한국어로 답변
-                - 자신의 입장을 분명하게 드러낼 것
-                - 상대 발언에 직접 반박하거나 응답할 것
-                - 2~4문단 또는 3~5문장 정도의 분량
-                - 토론체이되 과도하게 공격적이지 않을 것
-                - 메타 설명 없이 바로 발언만 출력
-                """.formatted(topic, stance, transcriptText.length() > 0 ? transcriptText : "(아직 발언 없음)\n");
-
         try {
-            String payload = objectMapper.writeValueAsString(new OpenAiRequest(
+            String payload = objectMapper.writeValueAsString(new OpenAiChatCompletionRequest(
                     appProperties.getOpenai().getModel(),
-                    List.of(
-                            new InputMessage("system", systemPrompt),
-                            new InputMessage("user", userPrompt)
+                    openAiContextAssembler.buildDebateMessages(
+                            systemPrompt,
+                            topic,
+                            stance,
+                            transcript.stream()
+                                    .map(entry -> "- " + entry.speaker().name() + ": " + entry.content())
+                                    .toList()
                     )
             ));
 
@@ -218,14 +205,5 @@ public class DebateService {
     }
 
     private record TranscriptEntry(DebateTurn.Speaker speaker, String content) {
-    }
-
-    private record OpenAiRequest(
-            String model,
-            List<InputMessage> messages
-    ) {
-    }
-
-    private record InputMessage(String role, String content) {
     }
 }

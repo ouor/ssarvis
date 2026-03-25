@@ -3,6 +3,8 @@ package com.ssarvis.backend.prompt;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
+import com.ssarvis.backend.openai.OpenAiChatCompletionRequest;
+import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -18,30 +20,24 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class PromptService {
 
-    private static final String DEVELOPER_PROMPT = """
-            You generate a single Korean system prompt for another assistant.
-            Use the user's questionnaire answers to infer tone, interaction style, boundaries, preferences, and likely communication needs.
-            Write only the final system prompt in Korean.
-            Keep it practical, specific, and ready to paste into an app.
-            Do not mention the survey, MBTI, or explain your reasoning.
-            Use short paragraphs or short bullet points only when useful.
-            """;
-
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final AppProperties appProperties;
     private final PromptGenerationLogRepository promptGenerationLogRepository;
+    private final OpenAiContextAssembler openAiContextAssembler;
 
     public PromptService(
             HttpClient httpClient,
             ObjectMapper objectMapper,
             AppProperties appProperties,
-            PromptGenerationLogRepository promptGenerationLogRepository
+            PromptGenerationLogRepository promptGenerationLogRepository,
+            OpenAiContextAssembler openAiContextAssembler
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
         this.promptGenerationLogRepository = promptGenerationLogRepository;
+        this.openAiContextAssembler = openAiContextAssembler;
     }
 
     public PromptGenerateResult generateSystemPrompt(PromptGenerateRequest request) {
@@ -105,36 +101,10 @@ public class PromptService {
         return promptGenerationLogRepository.save(log);
     }
 
-    private OpenAiRequest buildPayload(List<PromptGenerateRequest.AnswerItem> answers) {
-        StringBuilder prompt = new StringBuilder("""
-                아래 설문 응답을 바탕으로, 사용자를 더 잘 보조하기 위한 시스템 프롬프트를 작성해 주세요.
-                응답 요약:
-
-                """);
-
-        for (PromptGenerateRequest.AnswerItem answer : answers) {
-            if (answer == null || !StringUtils.hasText(answer.question()) || !StringUtils.hasText(answer.answer())) {
-                continue;
-            }
-            prompt.append("- ").append(answer.question().trim()).append(": ").append(answer.answer().trim()).append('\n');
-        }
-
-        prompt.append("""
-
-                요구사항:
-                - 한국어로 작성
-                - 친절하지만 과하게 가볍지 않은 톤
-                - 사용자의 의사결정 방식, 대화 스타일, 선호하는 설명 방식이 드러나게 작성
-                - 다른 LLM이 그대로 시스템 프롬프트로 사용할 수 있어야 함
-                - 불필요한 서론, 제목, 따옴표 없이 본문만 출력
-                """);
-
-        return new OpenAiRequest(
+    private OpenAiChatCompletionRequest buildPayload(List<PromptGenerateRequest.AnswerItem> answers) {
+        return new OpenAiChatCompletionRequest(
                 appProperties.getOpenai().getModel(),
-                List.of(
-                        new InputMessage("system", DEVELOPER_PROMPT),
-                        new InputMessage("user", prompt.toString())
-                )
+                openAiContextAssembler.buildPromptGenerationMessages(answers)
         );
     }
 
@@ -160,14 +130,5 @@ public class PromptService {
             return value;
         }
         return value.substring(0, maxLength) + "...";
-    }
-
-    private record OpenAiRequest(
-            String model,
-            List<InputMessage> messages
-    ) {
-    }
-
-    private record InputMessage(String role, String content) {
     }
 }

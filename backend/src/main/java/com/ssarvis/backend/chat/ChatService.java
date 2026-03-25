@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.openai.OpenAiChatCompletionRequest;
+import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import com.ssarvis.backend.voice.VoiceService;
 import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.io.IOException;
@@ -31,6 +33,7 @@ public class ChatService {
     private final ChatConversationRepository chatConversationRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final VoiceService voiceService;
+    private final OpenAiContextAssembler openAiContextAssembler;
 
     public ChatService(
             HttpClient httpClient,
@@ -39,7 +42,8 @@ public class ChatService {
             PromptGenerationLogRepository promptGenerationLogRepository,
             ChatConversationRepository chatConversationRepository,
             ChatMessageRepository chatMessageRepository,
-            VoiceService voiceService
+            VoiceService voiceService,
+            OpenAiContextAssembler openAiContextAssembler
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -48,6 +52,7 @@ public class ChatService {
         this.chatConversationRepository = chatConversationRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.voiceService = voiceService;
+        this.openAiContextAssembler = openAiContextAssembler;
     }
 
     @Transactional
@@ -152,35 +157,16 @@ public class ChatService {
         }
     }
 
-    private OpenAiRequest buildPayload(String systemPrompt, List<ChatMessage> history, String userMessage) {
-        List<InputMessage> messages = new ArrayList<>();
-        messages.add(new InputMessage("system", systemPrompt));
-
-        for (ChatMessage message : limitHistoryToRecentTurns(history)) {
-            String role = message.getRole() == ChatMessage.Role.USER ? "user" : "assistant";
-            messages.add(new InputMessage(role, message.getContent()));
-        }
-
-        messages.add(new InputMessage("user", userMessage));
-
-        return new OpenAiRequest(
+    private OpenAiChatCompletionRequest buildPayload(String systemPrompt, List<ChatMessage> history, String userMessage) {
+        return new OpenAiChatCompletionRequest(
                 appProperties.getOpenai().getModel(),
-                messages
+                openAiContextAssembler.buildChatMessages(
+                        systemPrompt,
+                        history,
+                        userMessage,
+                        appProperties.getOpenai().getChatHistoryTurns()
+                )
         );
-    }
-
-    private List<ChatMessage> limitHistoryToRecentTurns(List<ChatMessage> history) {
-        int maxTurns = Math.max(appProperties.getOpenai().getChatHistoryTurns(), 0);
-        if (maxTurns == 0 || history.isEmpty()) {
-            return List.of();
-        }
-
-        int maxMessages = maxTurns * 2;
-        if (history.size() <= maxMessages) {
-            return history;
-        }
-
-        return history.subList(history.size() - maxMessages, history.size());
     }
 
     private String extractAssistantMessage(JsonNode root) {
@@ -205,14 +191,5 @@ public class ChatService {
             return value;
         }
         return value.substring(0, maxLength) + "...";
-    }
-
-    private record OpenAiRequest(
-            String model,
-            List<InputMessage> messages
-    ) {
-    }
-
-    private record InputMessage(String role, String content) {
     }
 }
