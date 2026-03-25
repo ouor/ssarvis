@@ -1,5 +1,6 @@
 package com.ssarvis.backend.debate;
 
+import com.ssarvis.backend.voice.GeneratedAudioAsset;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -9,8 +10,8 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Lob;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -43,6 +44,10 @@ public class DebateTurn {
     @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String content;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "audio_asset_id")
+    private GeneratedAudioAsset audioAsset;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -50,10 +55,21 @@ public class DebateTurn {
     }
 
     public DebateTurn(DebateSession debateSession, Speaker speaker, int turnIndex, String content) {
+        this(debateSession, speaker, turnIndex, content, null);
+    }
+
+    public DebateTurn(
+            DebateSession debateSession,
+            Speaker speaker,
+            int turnIndex,
+            String content,
+            GeneratedAudioAsset audioAsset
+    ) {
         this.debateSession = debateSession;
         this.speaker = speaker;
         this.turnIndex = turnIndex;
         this.content = content;
+        this.audioAsset = audioAsset;
     }
 
     @PrePersist
@@ -79,6 +95,10 @@ public class DebateTurn {
 
     public String getContent() {
         return content;
+    }
+
+    public GeneratedAudioAsset getAudioAsset() {
+        return audioAsset;
     }
 
     public Instant getCreatedAt() {

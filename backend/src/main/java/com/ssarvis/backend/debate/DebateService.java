@@ -89,10 +89,15 @@ public class DebateService {
             String stance = isCloneATurn ? "찬성" : "반대";
             String message = generateDebateTurn(activeClone.getSystemPrompt(), request.topic().trim(), stance, transcript);
 
-            debateTurnRepository.save(new DebateTurn(debateSession, speaker, index + 1, message));
-            transcript.add(new TranscriptEntry(speaker, message));
-
             VoiceSynthesisResult tts = voiceService.synthesize(message, activeVoice.getId());
+            debateTurnRepository.save(new DebateTurn(
+                    debateSession,
+                    speaker,
+                    index + 1,
+                    message,
+                    tts != null ? tts.audioAsset() : null
+            ));
+            transcript.add(new TranscriptEntry(speaker, message));
             responses.add(new DebateTurnResponse(
                     index + 1,
                     speaker.name(),

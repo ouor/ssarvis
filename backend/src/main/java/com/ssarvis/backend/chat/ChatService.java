@@ -61,20 +61,27 @@ public class ChatService {
                 ? List.of()
                 : chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId());
 
-        String assistantMessage = generateAssistantMessage(
-                conversation.getPromptGenerationLog().getSystemPrompt(),
-                history,
-                request.message().trim()
-        );
-
         ChatConversation savedConversation = conversation.getId() == null
                 ? chatConversationRepository.save(conversation)
                 : conversation;
 
-        chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.USER, request.message().trim()));
-        chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.ASSISTANT, assistantMessage));
+        String userMessage = request.message().trim();
+        String assistantMessage = generateAssistantMessage(
+                conversation.getPromptGenerationLog().getSystemPrompt(),
+                history,
+                userMessage
+        );
+
+        chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.USER, userMessage));
 
         VoiceSynthesisResult ttsResult = voiceService.synthesize(assistantMessage, request.registeredVoiceId());
+        chatMessageRepository.save(new ChatMessage(
+                savedConversation,
+                ChatMessage.Role.ASSISTANT,
+                assistantMessage,
+                ttsResult != null ? ttsResult.audioAsset() : null
+        ));
+
         return new ChatResult(
                 savedConversation.getId(),
                 assistantMessage,

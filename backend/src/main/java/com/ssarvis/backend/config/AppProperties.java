@@ -10,6 +10,8 @@ public class AppProperties {
     private final Openai openai = new Openai();
     private final Cors cors = new Cors();
     private final Dashscope dashscope = new Dashscope();
+    private final Media media = new Media();
+    private final Storage storage = new Storage();
 
     public Openai getOpenai() {
         return openai;
@@ -21,6 +23,14 @@ public class AppProperties {
 
     public Dashscope getDashscope() {
         return dashscope;
+    }
+
+    public Media getMedia() {
+        return media;
+    }
+
+    public Storage getStorage() {
+        return storage;
     }
 
     public static class Openai {
@@ -92,6 +102,110 @@ public class AppProperties {
 
         public void setTtsModel(String ttsModel) {
             this.ttsModel = ttsModel;
+        }
+    }
+
+    public static class Media {
+        private String ffmpegPath = "ffmpeg";
+
+        public String getFfmpegPath() {
+            return ffmpegPath;
+        }
+
+        public void setFfmpegPath(String ffmpegPath) {
+            this.ffmpegPath = ffmpegPath;
+        }
+    }
+
+    public static class Storage {
+        private final S3 s3 = new S3();
+
+        public S3 getS3() {
+            return s3;
+        }
+    }
+
+    public static class S3 {
+        private boolean enabled;
+        private String bucket;
+        private String region = "ap-northeast-2";
+        private String endpoint;
+        private String accessKey;
+        private String secretKey;
+        private String keyPrefix = "ssarvis/tts";
+        private boolean pathStyleAccess;
+        private String publicBaseUrl;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getBucket() {
+            return bucket;
+        }
+
+        public void setBucket(String bucket) {
+            this.bucket = bucket;
+        }
+
+        public String getRegion() {
+            return region;
+        }
+
+        public void setRegion(String region) {
+            this.region = region;
+        }
+
+        public String getEndpoint() {
+            return endpoint;
+        }
+
+        public void setEndpoint(String endpoint) {
+            this.endpoint = endpoint;
+        }
+
+        public String getAccessKey() {
+            return accessKey;
+        }
+
+        public void setAccessKey(String accessKey) {
+            this.accessKey = accessKey;
+        }
+
+        public String getSecretKey() {
+            return secretKey;
+        }
+
+        public void setSecretKey(String secretKey) {
+            this.secretKey = secretKey;
+        }
+
+        public String getKeyPrefix() {
+            return keyPrefix;
+        }
+
+        public void setKeyPrefix(String keyPrefix) {
+            this.keyPrefix = keyPrefix;
+        }
+
+        public boolean isPathStyleAccess() {
+            return pathStyleAccess;
+        }
+
+        public void setPathStyleAccess(boolean pathStyleAccess) {
+            this.pathStyleAccess = pathStyleAccess;
+        }
+
+        public String getPublicBaseUrl() {
+            return publicBaseUrl;
+        }
+
+        public void setPublicBaseUrl(String publicBaseUrl) {
+            this.publicBaseUrl = publicBaseUrl;
         }
     }
 }

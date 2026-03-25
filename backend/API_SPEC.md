@@ -494,6 +494,16 @@ Body
 - `DASHSCOPE_API_KEY`
 - `DASHSCOPE_BASE_URL`
 - `DASHSCOPE_TTS_MODEL`
+- `FFMPEG_PATH`
+- `S3_ENABLED`
+- `S3_BUCKET`
+- `S3_REGION`
+- `S3_ENDPOINT`
+- `S3_ACCESS_KEY`
+- `S3_SECRET_KEY`
+- `S3_KEY_PREFIX`
+- `S3_PATH_STYLE_ACCESS`
+- `S3_PUBLIC_BASE_URL`
 - `DB_URL`
 - `DB_USERNAME`
 - `DB_PASSWORD`
@@ -501,6 +511,8 @@ Body
 참고
 - `integrationTest` Gradle 태스크는 `backend/.env` 파일이 있으면 그 값을 읽어 테스트 프로세스 환경변수로 주입한다.
 - 현재 `integrationTest`는 실제 OpenAI, 실제 DashScope, 실제 MySQL을 호출한다.
+- `S3_ENABLED=true` 이고 S3 설정이 유효하면, DashScope에서 받은 TTS 오디오는 ffmpeg로 MP3 인코딩 후 S3에 업로드된다.
+- 프론트 응답은 기존과 동일하게 Base64 오디오를 포함하고, S3 업로드는 서버 내부 저장 및 이력 관리 용도로 수행된다.
 
 ## Persistence Side Effects
 
@@ -524,7 +536,12 @@ Body
 - 어떤 시스템 프롬프트 생성 로그에서 시작된 대화인지
 - 사용자 메시지 본문
 - 어시스턴트 메시지 본문
+- 선택적으로 연결된 TTS 오디오 자산 참조
 - 각 레코드 생성 시각
+
+추가 동작
+- `S3_ENABLED=true` 일 때는 DashScope TTS 원본을 ffmpeg로 MP3 인코딩한 뒤 S3에 업로드한다.
+- 업로드된 오디오 메타데이터는 `generated_audio_assets` 테이블에 저장되고, 어시스턴트 메시지는 해당 자산을 참조한다.
 
 ### 음성 등록 성공 시
 
@@ -552,4 +569,22 @@ Body
 - 각 클론에 연결된 등록 음성 참조
 - 논쟁 주제
 - 각 발언의 순서, 발화자, 본문
+- 선택적으로 연결된 TTS 오디오 자산 참조
+- 생성 시각
+
+### 생성 음성 저장 성공 시
+
+아래 테이블에 인코딩 및 업로드된 오디오 자산 정보가 저장된다.
+
+- `generated_audio_assets`
+
+저장되는 정보
+- 스토리지 제공자명
+- 버킷 이름
+- 오브젝트 키
+- 오브젝트 URL
+- DashScope 원본 오디오 MIME 타입
+- ffmpeg 인코딩 후 저장된 MIME 타입
+- 원본/저장 바이트 크기
+- DashScope 등록 음성 ID
 - 생성 시각

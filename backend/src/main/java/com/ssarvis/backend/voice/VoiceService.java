@@ -29,17 +29,20 @@ public class VoiceService {
     private final ObjectMapper objectMapper;
     private final AppProperties appProperties;
     private final RegisteredVoiceRepository registeredVoiceRepository;
+    private final AudioStorageService audioStorageService;
 
     public VoiceService(
             HttpClient httpClient,
             ObjectMapper objectMapper,
             AppProperties appProperties,
-            RegisteredVoiceRepository registeredVoiceRepository
+            RegisteredVoiceRepository registeredVoiceRepository,
+            AudioStorageService audioStorageService
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
         this.registeredVoiceRepository = registeredVoiceRepository;
+        this.audioStorageService = audioStorageService;
     }
 
     public RegisteredVoice registerVoice(MultipartFile sampleFile) {
@@ -150,7 +153,12 @@ public class VoiceService {
                     .firstValue("Content-Type")
                     .orElse("audio/wav");
             String audioBase64 = Base64.getEncoder().encodeToString(audioResponse.body());
-            return new VoiceSynthesisResult(voice.getProviderVoiceId(), audioMimeType, audioBase64);
+            GeneratedAudioAsset audioAsset = audioStorageService.storeDashscopeAudio(
+                    audioResponse.body(),
+                    audioMimeType,
+                    voice.getProviderVoiceId()
+            );
+            return new VoiceSynthesisResult(voice.getProviderVoiceId(), audioMimeType, audioBase64, audioAsset);
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to request DashScope TTS.", exception);
         } catch (InterruptedException exception) {

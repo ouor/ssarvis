@@ -19,6 +19,8 @@ import com.ssarvis.backend.debate.DebateTurn;
 import com.ssarvis.backend.debate.DebateTurnRepository;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.voice.GeneratedAudioAsset;
+import com.ssarvis.backend.voice.GeneratedAudioAssetRepository;
 import com.ssarvis.backend.voice.RegisteredVoice;
 import com.ssarvis.backend.voice.RegisteredVoiceRepository;
 import java.net.URI;
@@ -62,6 +64,9 @@ class PromptIntegrationTest {
     private RegisteredVoiceRepository registeredVoiceRepository;
 
     @Autowired
+    private GeneratedAudioAssetRepository generatedAudioAssetRepository;
+
+    @Autowired
     private DebateSessionRepository debateSessionRepository;
 
     @Autowired
@@ -100,6 +105,10 @@ class PromptIntegrationTest {
                 .filter(voice -> voice.getCreatedAt() != null && !voice.getCreatedAt().isBefore(testStartedAt))
                 .map(RegisteredVoice::getId)
                 .forEach(registeredVoiceRepository::deleteById);
+        generatedAudioAssetRepository.findAll().stream()
+                .filter(asset -> asset.getCreatedAt() != null && !asset.getCreatedAt().isBefore(testStartedAt))
+                .map(GeneratedAudioAsset::getId)
+                .forEach(generatedAudioAssetRepository::deleteById);
         promptGenerationLogRepository.findAll().stream()
                 .filter(log -> log.getCreatedAt() != null && !log.getCreatedAt().isBefore(testStartedAt))
                 .map(PromptGenerationLog::getId)
@@ -113,6 +122,7 @@ class PromptIntegrationTest {
         long beforeConversationCount = chatConversationRepository.count();
         long beforeMessageCount = chatMessageRepository.count();
         long beforeRegisteredVoiceCount = registeredVoiceRepository.count();
+        long beforeAudioAssetCount = generatedAudioAssetRepository.count();
 
         String promptResponseBody = mockMvc.perform(post("/api/system-prompt")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -248,12 +258,18 @@ class PromptIntegrationTest {
         long afterConversationCount = chatConversationRepository.count();
         long afterMessageCount = chatMessageRepository.count();
         long afterRegisteredVoiceCount = registeredVoiceRepository.count();
+        long afterAudioAssetCount = generatedAudioAssetRepository.count();
         long debateSessionCount = debateSessionRepository.count();
         long debateTurnCount = debateTurnRepository.count();
         assertThat(afterCount).isEqualTo(beforeCount + 2);
         assertThat(afterConversationCount).isEqualTo(beforeConversationCount + 1);
         assertThat(afterMessageCount).isEqualTo(beforeMessageCount + 2);
         assertThat(afterRegisteredVoiceCount).isEqualTo(beforeRegisteredVoiceCount + 1);
+        if (appProperties.getStorage().getS3().isEnabled()) {
+            assertThat(afterAudioAssetCount).isEqualTo(beforeAudioAssetCount + 3);
+        } else {
+            assertThat(afterAudioAssetCount).isEqualTo(beforeAudioAssetCount);
+        }
         assertThat(debateSessionCount).isGreaterThanOrEqualTo(1);
         assertThat(debateTurnCount).isGreaterThanOrEqualTo(2);
 
@@ -274,6 +290,15 @@ class PromptIntegrationTest {
         assertThat(messages.get(0).getContent()).contains("오늘 일정 정리 방법");
         assertThat(messages.get(1).getRole()).isEqualTo(ChatMessage.Role.ASSISTANT);
         assertThat(messages.get(1).getContent()).isNotBlank();
+        if (appProperties.getStorage().getS3().isEnabled()) {
+            List<GeneratedAudioAsset> generatedAudioAssets = generatedAudioAssetRepository.findAll();
+            assertThat(generatedAudioAssets).hasSize((int) afterAudioAssetCount);
+            assertThat(generatedAudioAssets).allSatisfy(asset -> {
+                assertThat(asset.getObjectKey()).endsWith(".mp3");
+                assertThat(asset.getObjectUrl()).isNotBlank();
+                assertThat(asset.getStoredAudioMimeType()).isEqualTo("audio/mpeg");
+            });
+        }
         assertThat(chatResponse.get("ttsVoiceId").asText()).isNotBlank();
         assertThat(chatResponse.get("ttsAudioMimeType").asText()).startsWith("audio/");
         assertThat(chatResponse.get("ttsAudioBase64").asText()).isNotBlank();
