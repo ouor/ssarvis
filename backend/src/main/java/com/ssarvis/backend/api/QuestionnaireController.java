@@ -1,6 +1,7 @@
 package com.ssarvis.backend.api;
 
 import com.ssarvis.backend.prompt.PromptGenerateRequest;
+import com.ssarvis.backend.prompt.PromptGenerateResult;
 import com.ssarvis.backend.prompt.PromptGenerateResponse;
 import com.ssarvis.backend.prompt.PromptService;
 import jakarta.validation.Valid;
@@ -21,6 +22,7 @@ public class QuestionnaireController {
 
     @PostMapping("/system-prompt")
     public PromptGenerateResponse generatePrompt(@Valid @RequestBody PromptGenerateRequest request) {
-        return new PromptGenerateResponse(promptService.generateSystemPrompt(request));
+        PromptGenerateResult result = promptService.generateSystemPrompt(request);
+        return new PromptGenerateResponse(result.promptGenerationLogId(), result.systemPrompt());
     }
 }

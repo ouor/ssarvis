@@ -1,64 +1,108 @@
-package com.ssarvis.backend.prompt;
+package com.ssarvis.backend.chat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ssarvis.backend.config.AppProperties;
+import com.ssarvis.backend.prompt.PromptGenerationLog;
+import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
+import com.ssarvis.backend.config.AppProperties;
 
 @Service
-public class PromptService {
-
-    private static final String DEVELOPER_PROMPT = """
-            You generate a single Korean system prompt for another assistant.
-            Use the user's questionnaire answers to infer tone, interaction style, boundaries, preferences, and likely communication needs.
-            Write only the final system prompt in Korean.
-            Keep it practical, specific, and ready to paste into an app.
-            Do not mention the survey, MBTI, or explain your reasoning.
-            Use short paragraphs or short bullet points only when useful.
-            """;
+public class ChatService {
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final AppProperties appProperties;
     private final PromptGenerationLogRepository promptGenerationLogRepository;
+    private final ChatConversationRepository chatConversationRepository;
+    private final ChatMessageRepository chatMessageRepository;
 
-    public PromptService(
+    public ChatService(
             HttpClient httpClient,
             ObjectMapper objectMapper,
             AppProperties appProperties,
-            PromptGenerationLogRepository promptGenerationLogRepository
+            PromptGenerationLogRepository promptGenerationLogRepository,
+            ChatConversationRepository chatConversationRepository,
+            ChatMessageRepository chatMessageRepository
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
         this.promptGenerationLogRepository = promptGenerationLogRepository;
+        this.chatConversationRepository = chatConversationRepository;
+        this.chatMessageRepository = chatMessageRepository;
     }
 
-    public PromptGenerateResult generateSystemPrompt(PromptGenerateRequest request) {
-        if (request == null || request.answers() == null || request.answers().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one answer is required.");
+    @Transactional
+    public ChatResult reply(ChatRequest request) {
+        if (request == null || !StringUtils.hasText(request.message())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message must not be blank.");
         }
 
-        String apiKey = appProperties.getOpenai().getApiKey();
-        if (!StringUtils.hasText(apiKey)) {
+        ChatConversation conversation = resolveConversation(request);
+        List<ChatMessage> history = conversation.getId() == null
+                ? List.of()
+                : chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId());
+
+        String assistantMessage = generateAssistantMessage(
+                conversation.getPromptGenerationLog().getSystemPrompt(),
+                history,
+                request.message().trim()
+        );
+
+        ChatConversation savedConversation = conversation.getId() == null
+                ? chatConversationRepository.save(conversation)
+                : conversation;
+
+        chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.USER, request.message().trim()));
+        chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.ASSISTANT, assistantMessage));
+
+        return new ChatResult(savedConversation.getId(), assistantMessage);
+    }
+
+    private ChatConversation resolveConversation(ChatRequest request) {
+        if (request.conversationId() != null) {
+            return chatConversationRepository.findById(request.conversationId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found."));
+        }
+
+        if (request.promptGenerationLogId() == null) {
             throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "OPENAI_API_KEY is not configured."
+                    HttpStatus.BAD_REQUEST,
+                    "promptGenerationLogId is required when conversationId is not provided."
             );
         }
 
+        PromptGenerationLog promptGenerationLog = promptGenerationLogRepository.findById(request.promptGenerationLogId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prompt generation log not found."));
+
+        return new ChatConversation(promptGenerationLog);
+    }
+
+    private String generateAssistantMessage(
+            String systemPrompt,
+            List<ChatMessage> history,
+            String userMessage
+    ) {
+        String apiKey = appProperties.getOpenai().getApiKey();
+        if (!StringUtils.hasText(apiKey)) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "OPENAI_API_KEY is not configured.");
+        }
+
         try {
-            String payload = objectMapper.writeValueAsString(buildPayload(request.answers()));
+            String payload = objectMapper.writeValueAsString(buildPayload(systemPrompt, history, userMessage));
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/responses"))
                     .header("Authorization", "Bearer " + apiKey)
@@ -68,25 +112,19 @@ public class PromptService {
 
             HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             if (response.statusCode() >= 400) {
-                String responsePreview = abbreviate(response.body(), 400);
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        "OpenAI request failed with status " + response.statusCode() + ". Body: " + responsePreview
+                        "OpenAI request failed with status " + response.statusCode() + ". Body: " + abbreviate(response.body(), 400)
                 );
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String systemPrompt = extractOutputText(root);
-            if (!StringUtils.hasText(systemPrompt)) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "OpenAI response did not include output_text."
-                );
+            String assistantMessage = extractOutputText(root);
+            if (!StringUtils.hasText(assistantMessage)) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include output_text.");
             }
 
-            String trimmedPrompt = systemPrompt.trim();
-            PromptGenerationLog log = saveGenerationLog(request.answers(), trimmedPrompt);
-            return new PromptGenerateResult(log.getId(), trimmedPrompt);
+            return assistantMessage.trim();
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize OpenAI request.", exception);
         } catch (InterruptedException exception) {
@@ -95,48 +133,22 @@ public class PromptService {
         }
     }
 
-    private PromptGenerationLog saveGenerationLog(List<PromptGenerateRequest.AnswerItem> answers, String systemPrompt) throws IOException {
-        String answersJson = objectMapper.writeValueAsString(answers);
-        PromptGenerationLog log = new PromptGenerationLog(
-                appProperties.getOpenai().getModel(),
-                answersJson,
-                systemPrompt
-        );
-        return promptGenerationLogRepository.save(log);
-    }
+    private OpenAiRequest buildPayload(String systemPrompt, List<ChatMessage> history, String userMessage) {
+        List<InputMessage> input = new ArrayList<>();
+        input.add(new InputMessage("developer", systemPrompt));
 
-    private OpenAiRequest buildPayload(List<PromptGenerateRequest.AnswerItem> answers) {
-        StringBuilder prompt = new StringBuilder("""
-                아래 설문 응답을 바탕으로, 사용자를 더 잘 보조하기 위한 시스템 프롬프트를 작성해 주세요.
-                응답 요약:
-
-                """);
-
-        for (PromptGenerateRequest.AnswerItem answer : answers) {
-            if (answer == null || !StringUtils.hasText(answer.question()) || !StringUtils.hasText(answer.answer())) {
-                continue;
-            }
-            prompt.append("- ").append(answer.question().trim()).append(": ").append(answer.answer().trim()).append('\n');
+        for (ChatMessage message : history) {
+            String role = message.getRole() == ChatMessage.Role.USER ? "user" : "assistant";
+            input.add(new InputMessage(role, message.getContent()));
         }
 
-        prompt.append("""
-
-                요구사항:
-                - 한국어로 작성
-                - 친절하지만 과하게 가볍지 않은 톤
-                - 사용자의 의사결정 방식, 대화 스타일, 선호하는 설명 방식이 드러나게 작성
-                - 다른 LLM이 그대로 시스템 프롬프트로 사용할 수 있어야 함
-                - 불필요한 서론, 제목, 따옴표 없이 본문만 출력
-                """);
+        input.add(new InputMessage("user", userMessage));
 
         return new OpenAiRequest(
                 appProperties.getOpenai().getModel(),
                 new Reasoning("low"),
                 new Text("medium"),
-                List.of(
-                        new InputMessage("developer", DEVELOPER_PROMPT),
-                        new InputMessage("user", prompt.toString())
-                )
+                input
         );
     }
 

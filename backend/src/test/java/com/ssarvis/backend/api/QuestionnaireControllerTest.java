@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ssarvis.backend.prompt.PromptGenerateResult;
 import com.ssarvis.backend.prompt.PromptService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,7 +30,7 @@ class QuestionnaireControllerTest {
     @Test
     void generatePromptReturnsSystemPrompt() throws Exception {
         given(promptService.generateSystemPrompt(any()))
-                .willReturn("사용자와 대화할 때는 차분하고 구조적인 설명을 우선하세요.");
+                .willReturn(new PromptGenerateResult(15L, "사용자와 대화할 때는 차분하고 구조적인 설명을 우선하세요."));
 
         mockMvc.perform(post("/api/system-prompt")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -44,6 +45,7 @@ class QuestionnaireControllerTest {
                                 }
                                 """))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.promptGenerationLogId").value(15))
                 .andExpect(jsonPath("$.systemPrompt").value("사용자와 대화할 때는 차분하고 구조적인 설명을 우선하세요."));
     }
 

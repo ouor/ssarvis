@@ -13,6 +13,26 @@ type AnswerItem = {
   answer: string
 }
 
+type ApiErrorResponse = {
+  message?: string
+  details?: string[]
+}
+
+type PromptGenerateResponse = {
+  promptGenerationLogId: number
+  systemPrompt: string
+}
+
+type ChatResponse = {
+  conversationId: number
+  assistantMessage: string
+}
+
+type ChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const questionAssetPath = `${import.meta.env.BASE_URL}questions.json`
 
@@ -23,6 +43,12 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [error, setError] = useState('')
+  const [promptGenerationLogId, setPromptGenerationLogId] = useState<number | null>(null)
+  const [conversationId, setConversationId] = useState<number | null>(null)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatSubmitting, setChatSubmitting] = useState(false)
+  const [chatError, setChatError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -69,6 +95,34 @@ function App() {
     }))
   }
 
+  async function readErrorMessage(response: Response, fallbackMessage: string) {
+    const contentType = response.headers.get('Content-Type') ?? ''
+
+    if (contentType.includes('application/json')) {
+      try {
+        const errorBody: ApiErrorResponse = await response.json()
+        const details = errorBody.details?.filter((detail) => detail.trim().length > 0) ?? []
+
+        if (details.length > 0) {
+          return [errorBody.message, ...details].filter(Boolean).join('\n')
+        }
+
+        if (errorBody.message?.trim()) {
+          return errorBody.message
+        }
+      } catch {
+        return fallbackMessage
+      }
+    }
+
+    try {
+      const text = (await response.text()).trim()
+      return text || fallbackMessage
+    } catch {
+      return fallbackMessage
+    }
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -97,17 +151,76 @@ function App() {
       })
 
       if (!response.ok) {
-        const message = await response.text()
-        throw new Error(message || `시스템 프롬프트 생성에 실패했습니다. (${response.status})`)
+        const message = await readErrorMessage(response, `시스템 프롬프트 생성에 실패했습니다. (${response.status})`)
+        throw new Error(message)
       }
 
-      const data: { systemPrompt: string } = await response.json()
+      const data: PromptGenerateResponse = await response.json()
+      setPromptGenerationLogId(data.promptGenerationLogId)
+      setConversationId(null)
+      setChatMessages([])
+      setChatInput('')
+      setChatError('')
       setSystemPrompt(data.systemPrompt)
     } catch (submitError) {
+      setPromptGenerationLogId(null)
+      setConversationId(null)
+      setChatMessages([])
       setSystemPrompt('')
       setError(submitError instanceof Error ? submitError.message : '시스템 프롬프트 생성 중 오류가 발생했습니다.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleChatSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!promptGenerationLogId) {
+      setChatError('먼저 시스템 프롬프트를 생성해야 채팅을 시작할 수 있습니다.')
+      return
+    }
+
+    if (!chatInput.trim()) {
+      setChatError('메시지를 입력해 주세요.')
+      return
+    }
+
+    const message = chatInput.trim()
+
+    setChatSubmitting(true)
+    setChatError('')
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/chat/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          promptGenerationLogId,
+          conversationId,
+          message,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorMessage = await readErrorMessage(response, `채팅 응답 생성에 실패했습니다. (${response.status})`)
+        throw new Error(errorMessage)
+      }
+
+      const data: ChatResponse = await response.json()
+      setConversationId(data.conversationId)
+      setChatMessages((current) => [
+        ...current,
+        { role: 'user', content: message },
+        { role: 'assistant', content: data.assistantMessage },
+      ])
+      setChatInput('')
+    } catch (submitError) {
+      setChatError(submitError instanceof Error ? submitError.message : '채팅 중 오류가 발생했습니다.')
+    } finally {
+      setChatSubmitting(false)
     }
   }
 
@@ -186,8 +299,53 @@ function App() {
           {error ? <div className="feedback error">{error}</div> : null}
 
           {systemPrompt ? (
-            <div className="prompt-output">
-              <pre>{systemPrompt}</pre>
+            <div className="result-stack">
+              <div className="prompt-output">
+                <pre>{systemPrompt}</pre>
+              </div>
+
+              <section className="chat-panel">
+                <div className="chat-header">
+                  <div>
+                    <p className="section-label">Chat</p>
+                    <h2>생성된 프롬프트로 대화하기</h2>
+                  </div>
+                  <span className="chat-status">
+                    {conversationId ? `대화 ID ${conversationId}` : '새 대화'}
+                  </span>
+                </div>
+
+                {chatError ? <div className="feedback error">{chatError}</div> : null}
+
+                <div className="chat-list">
+                  {chatMessages.length > 0 ? (
+                    chatMessages.map((message, index) => (
+                      <article className={`chat-bubble ${message.role}`} key={`${message.role}-${index}`}>
+                        <p className="chat-role">{message.role === 'user' ? '나' : 'Assistant'}</p>
+                        <p>{message.content}</p>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="empty-state">
+                      방금 생성한 시스템 프롬프트를 기반으로 바로 대화를 시작할 수 있습니다.
+                    </div>
+                  )}
+                </div>
+
+                <form className="chat-form" onSubmit={handleChatSubmit}>
+                  <textarea
+                    className="chat-input"
+                    disabled={chatSubmitting}
+                    onChange={(event) => setChatInput(event.target.value)}
+                    placeholder="예: 오늘 해야 할 일을 우선순위로 정리해줘."
+                    rows={4}
+                    value={chatInput}
+                  />
+                  <button className="primary-button" disabled={chatSubmitting} type="submit">
+                    {chatSubmitting ? '응답 생성 중...' : '메시지 보내기'}
+                  </button>
+                </form>
+              </section>
             </div>
           ) : (
             <div className="empty-state">
