@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import QuestionnairePanel from '../components/QuestionnairePanel'
 import type { Question } from '../components/QuestionnairePanel'
@@ -42,7 +42,7 @@ type VoiceRegisterResponse = {
 type DebateResponse = {
   debateSessionId: number
   topic: string
-  turns: Array<{
+  turn: {
     turnIndex: number
     speaker: string
     cloneId: number
@@ -50,7 +50,7 @@ type DebateResponse = {
     ttsVoiceId?: string | null
     ttsAudioMimeType?: string | null
     ttsAudioBase64?: string | null
-  }>
+  }
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -81,10 +81,16 @@ function PromptBuilderPage() {
   const [cloneAVoiceId, setCloneAVoiceId] = useState('')
   const [cloneBVoiceId, setCloneBVoiceId] = useState('')
   const [debateTopic, setDebateTopic] = useState('')
-  const [debateTurns, setDebateTurns] = useState('2')
+  const [debateSessionId, setDebateSessionId] = useState<number | null>(null)
+  const [debateRunning, setDebateRunning] = useState(false)
+  const [debateStopping, setDebateStopping] = useState(false)
   const [debateTurnsList, setDebateTurnsList] = useState<DebateTurn[]>([])
   const [debateSubmitting, setDebateSubmitting] = useState(false)
   const [debateError, setDebateError] = useState('')
+
+  const debateSessionIdRef = useRef<number | null>(null)
+  const debateRunningRef = useRef(false)
+  const lastHandledTurnRef = useRef<number | null>(null)
 
   function buildAudioDataUrl(mimeType?: string | null, base64?: string | null) {
     if (!mimeType || !base64) {
@@ -140,6 +146,23 @@ function PromptBuilderPage() {
     void loadVoices()
 
     return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    debateSessionIdRef.current = debateSessionId
+  }, [debateSessionId])
+
+  useEffect(() => {
+    debateRunningRef.current = debateRunning
+  }, [debateRunning])
+
+  useEffect(() => {
+    return () => {
+      const activeSessionId = debateSessionIdRef.current
+      if (activeSessionId && debateRunningRef.current) {
+        void stopDebateSession(activeSessionId, true)
+      }
+    }
   }, [])
 
   async function loadClones() {
@@ -357,6 +380,17 @@ function PromptBuilderPage() {
     }
   }
 
+  function mapDebateTurn(turn: DebateResponse['turn']): DebateTurn {
+    return {
+      turnIndex: turn.turnIndex,
+      speaker: turn.speaker,
+      cloneId: turn.cloneId,
+      content: turn.content,
+      ttsAudioDataUrl: buildAudioDataUrl(turn.ttsAudioMimeType, turn.ttsAudioBase64),
+      ttsVoiceId: turn.ttsVoiceId ?? undefined,
+    }
+  }
+
   async function handleDebateSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -371,6 +405,10 @@ function PromptBuilderPage() {
     if (!debateTopic.trim()) {
       setDebateError('논쟁 주제를 입력해 주세요.')
       return
+    }
+
+    if (debateSessionIdRef.current && debateRunningRef.current) {
+      await handleDebateStop()
     }
 
     setDebateSubmitting(true)
@@ -388,45 +426,85 @@ function PromptBuilderPage() {
           cloneAVoiceId: Number(cloneAVoiceId),
           cloneBVoiceId: Number(cloneBVoiceId),
           topic: debateTopic,
-          turnsPerClone: Number(debateTurns),
         }),
       })
 
       if (!response.ok) {
-        const message = await readErrorMessage(response, `논쟁 생성에 실패했습니다. (${response.status})`)
+        const message = await readErrorMessage(response, `논쟁 시작에 실패했습니다. (${response.status})`)
         throw new Error(message)
       }
 
       const data: DebateResponse = await response.json()
-      const turns: DebateTurn[] = data.turns.map((turn) => ({
-        turnIndex: turn.turnIndex,
-        speaker: turn.speaker,
-        cloneId: turn.cloneId,
-        content: turn.content,
-        ttsAudioDataUrl: buildAudioDataUrl(turn.ttsAudioMimeType, turn.ttsAudioBase64),
-        ttsVoiceId: turn.ttsVoiceId ?? undefined,
-      }))
-      setDebateTurnsList(turns)
-      await autoplayAudioSequence(turns.map((turn) => turn.ttsAudioDataUrl).filter(Boolean) as string[])
+      setDebateSessionId(data.debateSessionId)
+      setDebateRunning(true)
+      setDebateStopping(false)
+      setDebateTurnsList([mapDebateTurn(data.turn)])
+      lastHandledTurnRef.current = null
     } catch (submitError) {
-      setDebateError(submitError instanceof Error ? submitError.message : '논쟁 생성 중 오류가 발생했습니다.')
+      setDebateSessionId(null)
+      setDebateRunning(false)
+      setDebateTurnsList([])
+      setDebateError(submitError instanceof Error ? submitError.message : '논쟁 시작 중 오류가 발생했습니다.')
     } finally {
       setDebateSubmitting(false)
     }
   }
 
-  async function autoplayAudioSequence(audioUrls: string[]) {
-    for (const audioUrl of audioUrls) {
-      try {
-        await new Promise<void>((resolve) => {
-          const audio = new Audio(audioUrl)
-          audio.onended = () => resolve()
-          audio.onerror = () => resolve()
-          audio.play().catch(() => resolve())
-        })
-      } catch {
-        // Ignore autoplay failures. The controls remain visible for manual playback.
+  async function handleDebateTurnPlaybackFinished(turnIndex: number) {
+    const sessionId = debateSessionIdRef.current
+    if (!debateRunningRef.current || !sessionId) {
+      return
+    }
+    if (lastHandledTurnRef.current === turnIndex) {
+      return
+    }
+
+    lastHandledTurnRef.current = turnIndex
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/debates/${sessionId}/next`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const message = await readErrorMessage(response, `다음 논쟁 턴 생성에 실패했습니다. (${response.status})`)
+        throw new Error(message)
       }
+
+      const data: DebateResponse = await response.json()
+      setDebateTurnsList((current) => [...current, mapDebateTurn(data.turn)])
+    } catch (turnError) {
+      setDebateRunning(false)
+      setDebateError(turnError instanceof Error ? turnError.message : '다음 논쟁 턴 생성 중 오류가 발생했습니다.')
+    }
+  }
+
+  async function stopDebateSession(sessionId: number, keepalive = false) {
+    await fetch(`${apiBaseUrl}/api/debates/${sessionId}/stop`, {
+      method: 'POST',
+      keepalive,
+    })
+  }
+
+  async function handleDebateStop() {
+    const sessionId = debateSessionIdRef.current
+    if (!sessionId) {
+      return
+    }
+
+    setDebateStopping(true)
+
+    try {
+      await stopDebateSession(sessionId)
+    } catch {
+      // Ignore stop request failures and still stop local loop.
+    } finally {
+      setDebateRunning(false)
+      setDebateStopping(false)
+      setDebateSessionId(null)
+      debateSessionIdRef.current = null
+      debateRunningRef.current = false
+      lastHandledTurnRef.current = null
     }
   }
 
@@ -479,17 +557,20 @@ function PromptBuilderPage() {
         cloneBVoiceId={cloneBVoiceId}
         clones={clones}
         debateError={debateError}
+        debateRunning={debateRunning}
+        debateSessionId={debateSessionId}
+        debateStopping={debateStopping}
         debateSubmitting={debateSubmitting}
         debateTopic={debateTopic}
-        debateTurns={debateTurns}
         debateTurnsList={debateTurnsList}
         onCloneAChange={setCloneAId}
         onCloneAVoiceChange={setCloneAVoiceId}
         onCloneBChange={setCloneBId}
         onCloneBVoiceChange={setCloneBVoiceId}
+        onDebateStop={handleDebateStop}
         onDebateSubmit={handleDebateSubmit}
         onTopicChange={setDebateTopic}
-        onTurnsChange={setDebateTurns}
+        onTurnPlaybackFinished={handleDebateTurnPlaybackFinished}
         voices={voices}
       />
     </main>

@@ -1,10 +1,8 @@
 package com.ssarvis.backend.debate;
 
-import java.util.List;
-
-public record DebateResponse(
+public record DebateProgressResponse(
         Long debateSessionId,
         String topic,
-        List<DebateTurnResponse> turns
+        DebateTurnResponse turn
 ) {
 }

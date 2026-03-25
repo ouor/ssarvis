@@ -232,8 +232,7 @@ class PromptIntegrationTest {
                                   "cloneBId": %d,
                                   "cloneAVoiceId": %d,
                                   "cloneBVoiceId": %d,
-                                  "topic": "원격근무가 대면근무보다 더 효율적인가?",
-                                  "turnsPerClone": 1
+                                  "topic": "원격근무가 대면근무보다 더 효율적인가?"
                                 }
                                 """.formatted(
                                 promptGenerationLogId,
@@ -243,16 +242,22 @@ class PromptIntegrationTest {
                         )))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.debateSessionId").isNumber())
-                .andExpect(jsonPath("$.turns[0].speaker").value("CLONE_A"))
-                .andExpect(jsonPath("$.turns[0].ttsVoiceId").isString())
-                .andExpect(jsonPath("$.turns[1].speaker").value("CLONE_B"))
-                .andExpect(jsonPath("$.turns[1].ttsAudioBase64").isString())
+                .andExpect(jsonPath("$.turn.speaker").value("CLONE_A"))
+                .andExpect(jsonPath("$.turn.ttsVoiceId").isString())
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
         JsonNode debateResponse = objectMapper.readTree(debateResponseBody);
         long debateSessionId = debateResponse.get("debateSessionId").asLong();
+
+        mockMvc.perform(post("/api/debates/%d/next".formatted(debateSessionId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.turn.speaker").value("CLONE_B"))
+                .andExpect(jsonPath("$.turn.ttsAudioBase64").isString());
+
+        mockMvc.perform(post("/api/debates/%d/stop".formatted(debateSessionId)))
+                .andExpect(status().isNoContent());
 
         long afterCount = promptGenerationLogRepository.count();
         long afterConversationCount = chatConversationRepository.count();

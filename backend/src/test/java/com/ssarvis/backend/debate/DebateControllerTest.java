@@ -1,6 +1,7 @@
 package com.ssarvis.backend.debate;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -27,15 +28,12 @@ class DebateControllerTest {
     private DebateService debateService;
 
     @Test
-    void createDebateReturnsTurns() throws Exception {
-        given(debateService.debate(any()))
-                .willReturn(new DebateResponse(
+    void startDebateReturnsFirstTurn() throws Exception {
+        given(debateService.startDebate(any()))
+                .willReturn(new DebateProgressResponse(
                         9L,
                         "원격근무가 더 효율적인가?",
-                        List.of(
-                                new DebateTurnResponse(1, "CLONE_A", 1L, "저는 원격근무가 더 효율적이라고 봅니다.", "voice-a", "audio/wav", "UklG"),
-                                new DebateTurnResponse(2, "CLONE_B", 2L, "저는 대면 협업의 효율이 더 높다고 봅니다.", "voice-b", "audio/wav", "UklH")
-                        )
+                        new DebateTurnResponse(1, "CLONE_A", 1L, "저는 원격근무가 더 효율적이라고 봅니다.", "voice-a", "audio/wav", "UklG")
                 ));
 
         mockMvc.perform(post("/api/debates")
@@ -46,14 +44,35 @@ class DebateControllerTest {
                                   "cloneBId": 2,
                                   "cloneAVoiceId": 10,
                                   "cloneBVoiceId": 11,
-                                  "topic": "원격근무가 더 효율적인가?",
-                                  "turnsPerClone": 1
+                                  "topic": "원격근무가 더 효율적인가?"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.debateSessionId").value(9))
-                .andExpect(jsonPath("$.turns[0].speaker").value("CLONE_A"))
-                .andExpect(jsonPath("$.turns[0].ttsVoiceId").value("voice-a"))
-                .andExpect(jsonPath("$.turns[1].speaker").value("CLONE_B"));
+                .andExpect(jsonPath("$.turn.speaker").value("CLONE_A"))
+                .andExpect(jsonPath("$.turn.ttsVoiceId").value("voice-a"));
+    }
+
+    @Test
+    void createNextTurnReturnsSingleTurn() throws Exception {
+        given(debateService.createNextTurn(9L))
+                .willReturn(new DebateProgressResponse(
+                        9L,
+                        "원격근무가 더 효율적인가?",
+                        new DebateTurnResponse(2, "CLONE_B", 2L, "저는 대면 협업의 효율이 더 높다고 봅니다.", "voice-b", "audio/wav", "UklH")
+                ));
+
+        mockMvc.perform(post("/api/debates/9/next"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").value(9))
+                .andExpect(jsonPath("$.turn.speaker").value("CLONE_B"));
+    }
+
+    @Test
+    void stopDebateReturnsNoContent() throws Exception {
+        willDoNothing().given(debateService).stopDebate(9L);
+
+        mockMvc.perform(post("/api/debates/9/stop"))
+                .andExpect(status().isNoContent());
     }
 }

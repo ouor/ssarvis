@@ -61,7 +61,7 @@ public class DebateService {
     }
 
     @Transactional
-    public DebateResponse debate(DebateRequest request) {
+    public DebateProgressResponse startDebate(DebateStartRequest request) {
         validateRequest(request);
 
         PromptGenerationLog cloneA = promptGenerationLogRepository.findById(request.cloneAId())
@@ -78,46 +78,65 @@ public class DebateService {
                 cloneB,
                 cloneAVoice,
                 cloneBVoice,
-                request.topic().trim(),
-                request.turnsPerClone()
+                request.topic().trim()
         ));
 
-        List<DebateTurnResponse> responses = new ArrayList<>();
-        List<TranscriptEntry> transcript = new ArrayList<>();
-        int totalTurns = request.turnsPerClone() * 2;
-
-        for (int index = 0; index < totalTurns; index++) {
-            boolean isCloneATurn = index % 2 == 0;
-            PromptGenerationLog activeClone = isCloneATurn ? cloneA : cloneB;
-            RegisteredVoice activeVoice = isCloneATurn ? cloneAVoice : cloneBVoice;
-            DebateTurn.Speaker speaker = isCloneATurn ? DebateTurn.Speaker.CLONE_A : DebateTurn.Speaker.CLONE_B;
-            String stance = isCloneATurn ? "찬성" : "반대";
-            String message = generateDebateTurn(activeClone.getSystemPrompt(), request.topic().trim(), stance, transcript);
-
-            VoiceSynthesisResult tts = voiceService.synthesize(message, activeVoice.getId());
-            debateTurnRepository.save(new DebateTurn(
-                    debateSession,
-                    speaker,
-                    index + 1,
-                    message,
-                    tts != null ? tts.audioAsset() : null
-            ));
-            transcript.add(new TranscriptEntry(speaker, message));
-            responses.add(new DebateTurnResponse(
-                    index + 1,
-                    speaker.name(),
-                    activeClone.getId(),
-                    message,
-                    tts != null ? tts.voiceId() : null,
-                    tts != null ? tts.audioMimeType() : null,
-                    tts != null ? tts.audioBase64() : null
-            ));
-        }
-
-        return new DebateResponse(debateSession.getId(), debateSession.getTopic(), responses);
+        DebateTurnResponse firstTurn = createNextTurnInternal(debateSession);
+        return new DebateProgressResponse(debateSession.getId(), debateSession.getTopic(), firstTurn);
     }
 
-    private void validateRequest(DebateRequest request) {
+    @Transactional
+    public DebateProgressResponse createNextTurn(Long debateSessionId) {
+        DebateSession debateSession = debateSessionRepository.findById(debateSessionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found."));
+
+        DebateTurnResponse turn = createNextTurnInternal(debateSession);
+        return new DebateProgressResponse(debateSession.getId(), debateSession.getTopic(), turn);
+    }
+
+    @Transactional
+    public void stopDebate(Long debateSessionId) {
+        if (!debateSessionRepository.existsById(debateSessionId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found.");
+        }
+    }
+
+    private DebateTurnResponse createNextTurnInternal(DebateSession debateSession) {
+        List<DebateTurn> existingTurns = debateTurnRepository.findByDebateSessionIdOrderByTurnIndexAsc(debateSession.getId());
+        boolean isCloneATurn = existingTurns.size() % 2 == 0;
+        PromptGenerationLog activeClone = isCloneATurn ? debateSession.getCloneA() : debateSession.getCloneB();
+        RegisteredVoice activeVoice = isCloneATurn ? debateSession.getCloneAVoice() : debateSession.getCloneBVoice();
+        DebateTurn.Speaker speaker = isCloneATurn ? DebateTurn.Speaker.CLONE_A : DebateTurn.Speaker.CLONE_B;
+        String stance = isCloneATurn ? "찬성" : "반대";
+
+        List<TranscriptEntry> transcript = existingTurns.stream()
+                .map(turn -> new TranscriptEntry(turn.getSpeaker(), turn.getContent()))
+                .toList();
+
+        String message = generateDebateTurn(activeClone.getSystemPrompt(), debateSession.getTopic(), stance, transcript);
+        VoiceSynthesisResult tts = voiceService.synthesize(message, activeVoice.getId());
+        int turnIndex = existingTurns.size() + 1;
+
+        debateTurnRepository.save(new DebateTurn(
+                debateSession,
+                speaker,
+                turnIndex,
+                message,
+                tts != null ? tts.audioAsset() : null
+        ));
+
+        return new DebateTurnResponse(
+                turnIndex,
+                speaker.name(),
+                activeClone.getId(),
+                message,
+                tts != null ? tts.voiceId() : null,
+                tts != null ? tts.audioMimeType() : null,
+                tts != null ? tts.audioBase64() : null
+        );
+    }
+
+    private void validateRequest(DebateStartRequest request) {
         if (request == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debate request is required.");
         }

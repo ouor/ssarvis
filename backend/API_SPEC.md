@@ -384,7 +384,8 @@ Body
 
 ## POST `/api/debates`
 
-두 클론을 선택하고 주제를 주면, 각 클론이 서로 반대 입장에서 번갈아 논쟁한다.
+두 클론과 주제를 받아 논쟁 세션을 시작하고, 첫 번째 발언만 생성한다.
+이후 브라우저는 오디오 재생이 끝날 때마다 다음 턴 API를 호출해 논쟁을 계속 이어갈 수 있다.
 각 발언은 DB에 저장되고, 선택한 음성으로 TTS 오디오도 함께 내려온다.
 
 ### Request Body
@@ -395,8 +396,7 @@ Body
   "cloneBId": 13,
   "cloneAVoiceId": 5,
   "cloneBVoiceId": 6,
-  "topic": "원격근무가 대면근무보다 더 효율적인가?",
-  "turnsPerClone": 2
+  "topic": "원격근무가 대면근무보다 더 효율적인가?"
 }
 ```
 
@@ -405,7 +405,7 @@ Body
 - `cloneAId`, `cloneBId`는 서로 다른 값이어야 한다.
 - `cloneAVoiceId`, `cloneBVoiceId`는 모두 필요하다.
 - `topic`은 비어 있으면 안 된다.
-- `turnsPerClone`는 1 이상 3 이하이다.
+- 첫 응답은 항상 `CLONE_A`의 발언이다.
 - 각 발언은 선택한 등록 음성으로 TTS를 생성한다.
 
 ### Success Response
@@ -419,28 +419,55 @@ Body
 {
   "debateSessionId": 8,
   "topic": "원격근무가 대면근무보다 더 효율적인가?",
-  "turns": [
-    {
-      "turnIndex": 1,
-      "speaker": "CLONE_A",
-      "cloneId": 12,
-      "content": "저는 원격근무가 더 효율적이라고 봅니다...",
-      "ttsVoiceId": "qwen-tts-vc-samplevoice-voice-20260325184538121-0d52",
-      "ttsAudioMimeType": "audio/wav",
-      "ttsAudioBase64": "UklGR..."
-    },
-    {
-      "turnIndex": 2,
-      "speaker": "CLONE_B",
-      "cloneId": 13,
-      "content": "저는 대면근무가 더 효율적이라고 봅니다...",
-      "ttsVoiceId": "qwen-tts-vc-samplevoice-voice-20260325184538121-0d52",
-      "ttsAudioMimeType": "audio/wav",
-      "ttsAudioBase64": "UklGR..."
-    }
-  ]
+  "turn": {
+    "turnIndex": 1,
+    "speaker": "CLONE_A",
+    "cloneId": 12,
+    "content": "저는 원격근무가 더 효율적이라고 봅니다...",
+    "ttsVoiceId": "qwen-tts-vc-samplevoice-voice-20260325184538121-0d52",
+    "ttsAudioMimeType": "audio/wav",
+    "ttsAudioBase64": "UklGR..."
+  }
 }
 ```
+
+## POST `/api/debates/{debateSessionId}/next`
+
+기존 논쟁 세션의 다음 턴 1개를 생성한다.
+세션은 `CLONE_A -> CLONE_B -> CLONE_A -> ...` 순서로 계속 이어진다.
+
+### Success Response
+
+Status
+- `200 OK`
+
+Body
+
+```json
+{
+  "debateSessionId": 8,
+  "topic": "원격근무가 대면근무보다 더 효율적인가?",
+  "turn": {
+    "turnIndex": 2,
+    "speaker": "CLONE_B",
+    "cloneId": 13,
+    "content": "저는 대면근무가 더 효율적이라고 봅니다...",
+    "ttsVoiceId": "qwen-tts-vc-samplevoice-voice-20260325184538121-0d52",
+    "ttsAudioMimeType": "audio/wav",
+    "ttsAudioBase64": "UklGR..."
+  }
+}
+```
+
+## POST `/api/debates/{debateSessionId}/stop`
+
+논쟁 세션을 중단한다.
+브라우저가 자동으로 다음 턴을 요청하는 루프를 멈출 때 사용한다.
+
+### Success Response
+
+Status
+- `204 No Content`
 
 ### Error Responses
 
@@ -464,9 +491,9 @@ Body
   "timestamp": "2026-03-25T11:31:00Z",
   "status": 404,
   "error": "Not Found",
-  "message": "Clone A not found.",
+  "message": "Debate session not found.",
   "details": [],
-  "path": "/api/debates"
+  "path": "/api/debates/8/next"
 }
 ```
 

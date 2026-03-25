@@ -55,15 +55,14 @@ public class DebateSession {
             PromptGenerationLog cloneB,
             RegisteredVoice cloneAVoice,
             RegisteredVoice cloneBVoice,
-            String topic,
-            int turnsPerClone
+            String topic
     ) {
         this.cloneA = cloneA;
         this.cloneB = cloneB;
         this.cloneAVoice = cloneAVoice;
         this.cloneBVoice = cloneBVoice;
         this.topic = topic;
-        this.turnsPerClone = turnsPerClone;
+        this.turnsPerClone = 0;
     }
 
     @PrePersist
