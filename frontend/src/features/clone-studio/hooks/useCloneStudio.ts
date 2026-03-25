@@ -27,6 +27,7 @@ export function useCloneStudio() {
   const [voices, setVoices] = useState<VoiceOption[]>([])
   const [voiceLoadError, setVoiceLoadError] = useState('')
   const [selectedVoiceId, setSelectedVoiceId] = useState('')
+  const [voiceAlias, setVoiceAlias] = useState('')
   const [voiceFile, setVoiceFile] = useState<File | null>(null)
   const [voiceRegistering, setVoiceRegistering] = useState(false)
   const [voiceRegisterError, setVoiceRegisterError] = useState('')
@@ -150,6 +151,7 @@ export function useCloneStudio() {
 
   function resetVoicePickerState() {
     setSelectedVoiceId('')
+    setVoiceAlias('')
     setVoiceFile(null)
     setVoiceRegisterError('')
   }
@@ -262,6 +264,9 @@ export function useCloneStudio() {
     try {
       const formData = new FormData()
       formData.append('sample', voiceFile)
+      if (voiceAlias.trim()) {
+        formData.append('alias', voiceAlias.trim())
+      }
 
       const response = await fetch(`${apiBaseUrl}/api/voices`, {
         method: 'POST',
@@ -276,6 +281,7 @@ export function useCloneStudio() {
       const nextVoice: VoiceOption = {
         registeredVoiceId: data.registeredVoiceId,
         voiceId: data.voiceId,
+        displayName: data.displayName,
         preferredName: data.preferredName,
         originalFilename: data.originalFilename,
         audioMimeType: data.audioMimeType,
@@ -286,6 +292,7 @@ export function useCloneStudio() {
       setSelectedVoiceId(String(nextVoice.registeredVoiceId))
       setDebateVoiceAId(String(nextVoice.registeredVoiceId))
       setDebateVoiceBId(String(nextVoice.registeredVoiceId))
+      setVoiceAlias('')
       setVoiceFile(null)
     } catch (error) {
       setVoiceRegisterError(error instanceof Error ? error.message : '목소리 등록 중 오류가 발생했습니다.')
@@ -664,6 +671,8 @@ export function useCloneStudio() {
     voiceLoadError,
     selectedVoiceId,
     setSelectedVoiceId,
+    voiceAlias,
+    setVoiceAlias,
     voiceRegistering,
     voiceRegisterError,
     debateTopic,

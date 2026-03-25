@@ -204,6 +204,7 @@
 .composer-input,
 .field-stack select,
 .field-stack textarea,
+.voice-upload-card input[type='text'],
 .voice-upload-card input[type='file'] {
   width: 100%;
   padding: 16px 18px;

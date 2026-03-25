@@ -28,11 +28,12 @@ class VoiceControllerTest {
 
     @Test
     void registerVoiceReturnsRegisteredVoice() throws Exception {
-        given(voiceService.registerVoice(any()))
+        given(voiceService.registerVoice(any(), any()))
                 .willReturn(new RegisteredVoice(
                         "voice-provider-1",
                         "qwen3-tts-vc-2026-01-22",
                         "sample-voice-1",
+                        "차분한 민지",
                         "sample.mp3",
                         "audio/mpeg"
                 ));
@@ -42,6 +43,7 @@ class VoiceControllerTest {
         mockMvc.perform(multipart("/api/voices").file(sample))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.voiceId").value("voice-provider-1"))
+                .andExpect(jsonPath("$.displayName").value("차분한 민지"))
                 .andExpect(jsonPath("$.preferredName").value("sample-voice-1"))
                 .andExpect(jsonPath("$.originalFilename").value("sample.mp3"))
                 .andExpect(jsonPath("$.audioMimeType").value("audio/mpeg"));
@@ -49,7 +51,7 @@ class VoiceControllerTest {
 
     @Test
     void registerVoicePropagatesErrors() throws Exception {
-        given(voiceService.registerVoice(any()))
+        given(voiceService.registerVoice(any(), any()))
                 .willThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Voice sample file is required."));
 
         MockMultipartFile sample = new MockMultipartFile("sample", "empty.mp3", "audio/mpeg", new byte[0]);

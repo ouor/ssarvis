@@ -17,6 +17,7 @@ export type CloneOption = {
 export type VoiceOption = {
   registeredVoiceId: number
   voiceId: string
+  displayName: string
   preferredName: string
   originalFilename: string
   audioMimeType: string
@@ -47,6 +48,7 @@ export type PromptGenerateResponse = {
 export type VoiceRegisterResponse = {
   registeredVoiceId: number
   voiceId: string
+  displayName: string
   preferredName: string
   originalFilename: string
   audioMimeType: string

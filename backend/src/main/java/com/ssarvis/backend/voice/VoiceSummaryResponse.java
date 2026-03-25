@@ -5,6 +5,7 @@ import java.time.Instant;
 public record VoiceSummaryResponse(
         Long registeredVoiceId,
         String voiceId,
+        String displayName,
         String preferredName,
         String originalFilename,
         String audioMimeType,

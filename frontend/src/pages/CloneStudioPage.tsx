@@ -68,9 +68,11 @@ function CloneStudioPage() {
           onBack={studio.goBackToCloneActions}
           onClose={studio.closeModal}
           onStartChat={studio.handleStartChat}
+          onVoiceAliasChange={studio.setVoiceAlias}
           onVoiceFileChange={studio.handleVoiceFileChange}
           onVoiceRegister={studio.handleVoiceRegister}
           onVoiceSelect={studio.setSelectedVoiceId}
+          voiceAlias={studio.voiceAlias}
           selectedVoiceId={studio.selectedVoiceId}
           voiceLoadError={studio.voiceLoadError}
           voiceRegisterError={studio.voiceRegisterError}

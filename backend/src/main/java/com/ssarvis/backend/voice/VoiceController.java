@@ -23,11 +23,15 @@ public class VoiceController {
     }
 
     @PostMapping(consumes = "multipart/form-data")
-    public VoiceRegisterResponse registerVoice(@RequestParam("sample") MultipartFile sample) {
-        RegisteredVoice voice = voiceService.registerVoice(sample);
+    public VoiceRegisterResponse registerVoice(
+            @RequestParam("sample") MultipartFile sample,
+            @RequestParam(value = "alias", required = false) String alias
+    ) {
+        RegisteredVoice voice = voiceService.registerVoice(sample, alias);
         return new VoiceRegisterResponse(
                 voice.getId(),
                 voice.getProviderVoiceId(),
+                voice.getDisplayName(),
                 voice.getPreferredName(),
                 voice.getOriginalFilename(),
                 voice.getAudioMimeType()

@@ -47,7 +47,7 @@ public class VoiceService {
         this.audioStorageService = audioStorageService;
     }
 
-    public RegisteredVoice registerVoice(MultipartFile sampleFile) {
+    public RegisteredVoice registerVoice(MultipartFile sampleFile, String alias) {
         AppProperties.Dashscope dashscope = appProperties.getDashscope();
         if (!StringUtils.hasText(dashscope.getApiKey())) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "DASHSCOPE_API_KEY is not configured.");
@@ -60,7 +60,8 @@ public class VoiceService {
         }
 
         try {
-            String preferredName = buildPreferredName(sampleFile.getOriginalFilename());
+            String displayName = buildDisplayName(alias, sampleFile.getOriginalFilename());
+            String preferredName = buildPreferredName(displayName, sampleFile.getOriginalFilename());
             String dataUri = "data:" + sampleFile.getContentType() + ";base64,"
                     + Base64.getEncoder().encodeToString(sampleFile.getBytes());
 
@@ -99,6 +100,7 @@ public class VoiceService {
                     providerVoiceId,
                     dashscope.getTtsModel(),
                     preferredName,
+                    displayName,
                     sampleFile.getOriginalFilename() != null ? sampleFile.getOriginalFilename() : "voice-sample",
                     sampleFile.getContentType()
             ));
@@ -115,6 +117,7 @@ public class VoiceService {
                 .map(voice -> new VoiceSummaryResponse(
                         voice.getId(),
                         voice.getProviderVoiceId(),
+                        voice.getDisplayName(),
                         voice.getPreferredName(),
                         voice.getOriginalFilename(),
                         voice.getAudioMimeType(),
@@ -385,8 +388,22 @@ public class VoiceService {
                 | ((bytes[offset + 3] & 0xff) << 24);
     }
 
-    private String buildPreferredName(String originalFilename) {
+    private String buildDisplayName(String alias, String originalFilename) {
+        if (StringUtils.hasText(alias)) {
+            return alias.trim();
+        }
+
         String baseName = StringUtils.hasText(originalFilename) ? originalFilename : "voice";
+        int extensionIndex = baseName.lastIndexOf('.');
+        if (extensionIndex > 0) {
+            baseName = baseName.substring(0, extensionIndex);
+        }
+        return baseName;
+    }
+
+    private String buildPreferredName(String alias, String originalFilename) {
+        String baseName = StringUtils.hasText(alias) ? alias : originalFilename;
+        baseName = StringUtils.hasText(baseName) ? baseName : "voice";
         int extensionIndex = baseName.lastIndexOf('.');
         if (extensionIndex > 0) {
             baseName = baseName.substring(0, extensionIndex);

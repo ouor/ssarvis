@@ -26,6 +26,9 @@ public class RegisteredVoice {
     @Column(nullable = false, length = 255)
     private String preferredName;
 
+    @Column(length = 255)
+    private String displayName;
+
     @Column(nullable = false, length = 255)
     private String originalFilename;
 
@@ -42,12 +45,14 @@ public class RegisteredVoice {
             String providerVoiceId,
             String targetModel,
             String preferredName,
+            String displayName,
             String originalFilename,
             String audioMimeType
     ) {
         this.providerVoiceId = providerVoiceId;
         this.targetModel = targetModel;
         this.preferredName = preferredName;
+        this.displayName = displayName;
         this.originalFilename = originalFilename;
         this.audioMimeType = audioMimeType;
     }
@@ -71,6 +76,10 @@ public class RegisteredVoice {
 
     public String getPreferredName() {
         return preferredName;
+    }
+
+    public String getDisplayName() {
+        return (displayName == null || displayName.isBlank()) ? preferredName : displayName;
     }
 
     public String getOriginalFilename() {

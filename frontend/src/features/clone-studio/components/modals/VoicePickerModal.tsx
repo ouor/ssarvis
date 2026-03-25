@@ -7,12 +7,14 @@ type VoicePickerModalProps = {
   clone: CloneOption
   voices: VoiceOption[]
   selectedVoiceId: string
+  voiceAlias: string
   voiceLoadError: string
   voiceRegistering: boolean
   voiceRegisterError: string
   onClose: () => void
   onBack: () => void
   onVoiceSelect: (voiceId: string) => void
+  onVoiceAliasChange: (value: string) => void
   onVoiceFileChange: (event: ChangeEvent<HTMLInputElement>) => void
   onVoiceRegister: (event: FormEvent<HTMLFormElement>) => Promise<void>
   onStartChat: () => Promise<void>
@@ -22,12 +24,14 @@ function VoicePickerModal({
   clone,
   voices,
   selectedVoiceId,
+  voiceAlias,
   voiceLoadError,
   voiceRegistering,
   voiceRegisterError,
   onClose,
   onBack,
   onVoiceSelect,
+  onVoiceAliasChange,
   onVoiceFileChange,
   onVoiceRegister,
   onStartChat,
@@ -74,6 +78,12 @@ function VoicePickerModal({
             <strong>새 목소리 등록</strong>
             <p>짧은 음성 파일을 업로드하면 선택 목록에 바로 추가됩니다.</p>
           </div>
+          <input
+            onChange={(event) => onVoiceAliasChange(event.target.value)}
+            placeholder="사용할 별칭 입력 (예: 차분한 민지)"
+            type="text"
+            value={voiceAlias}
+          />
           <input accept="audio/*" onChange={onVoiceFileChange} type="file" />
           {voiceRegisterError ? <p className="inline-error">{voiceRegisterError}</p> : null}
           <button className="secondary-button" disabled={voiceRegistering} type="submit">

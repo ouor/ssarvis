@@ -5,7 +5,7 @@ export function formatCloneName(clone: CloneOption) {
 }
 
 export function formatVoiceLabel(voice: VoiceOption) {
-  return `${voice.preferredName} · ${voice.originalFilename}`
+  return `${voice.displayName || voice.preferredName} · ${voice.originalFilename}`
 }
 
 export function previewTitle(preview: string) {

@@ -115,9 +115,11 @@ Content Type
 
 Form field
 - `sample`: 업로드할 음성 파일
+- `alias`: 사용자가 붙일 음성 별칭, 선택 값
 
 예시
 - `sample=voice.mp3`
+- `alias=차분한 민지`
 
 ### Request Rules
 
@@ -137,6 +139,7 @@ Body
 {
   "registeredVoiceId": 5,
   "voiceId": "qwen-tts-vc-samplevoice-voice-20260325184538121-0d52",
+  "displayName": "차분한 민지",
   "preferredName": "samplevoice",
   "originalFilename": "voice.mp3",
   "audioMimeType": "audio/mpeg"
@@ -144,6 +147,7 @@ Body
 ```
 
 설명
+- `displayName`은 프론트에 보여줄 사용자 입력 별칭이다. 별칭을 보내지 않으면 파일명 기반 값이 사용된다.
 - `preferredName`은 서버가 업로드 파일명을 바탕으로 내부적으로 생성하는 DashScope 등록용 이름이다.
 - 이후 채팅 요청에서 `registeredVoiceId`를 보내면 이 등록 음성을 사용해 TTS를 생성한다.
 
@@ -398,6 +402,7 @@ Body
   {
     "registeredVoiceId": 5,
     "voiceId": "qwen-tts-vc-samplevoice-voice-20260325184538121-0d52",
+    "displayName": "차분한 민지",
     "preferredName": "samplevoice",
     "originalFilename": "voice.mp3",
     "audioMimeType": "audio/mpeg",
@@ -623,6 +628,7 @@ Status
 
 저장되는 정보
 - DashScope 등록 음성 ID
+- 사용자 표시용 `displayName`
 - 대상 TTS 모델명
 - 내부 생성된 `preferredName`
 - 업로드한 원본 파일명
