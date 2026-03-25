@@ -1,0 +1,59 @@
+package com.ssarvis.backend.debate;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.ssarvis.backend.api.GlobalExceptionHandler;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(DebateController.class)
+@Import(GlobalExceptionHandler.class)
+class DebateControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private DebateService debateService;
+
+    @Test
+    void createDebateReturnsTurns() throws Exception {
+        given(debateService.debate(any()))
+                .willReturn(new DebateResponse(
+                        9L,
+                        "원격근무가 더 효율적인가?",
+                        List.of(
+                                new DebateTurnResponse(1, "CLONE_A", 1L, "저는 원격근무가 더 효율적이라고 봅니다.", "voice-a", "audio/wav", "UklG"),
+                                new DebateTurnResponse(2, "CLONE_B", 2L, "저는 대면 협업의 효율이 더 높다고 봅니다.", "voice-b", "audio/wav", "UklH")
+                        )
+                ));
+
+        mockMvc.perform(post("/api/debates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cloneAId": 1,
+                                  "cloneBId": 2,
+                                  "cloneAVoiceId": 10,
+                                  "cloneBVoiceId": 11,
+                                  "topic": "원격근무가 더 효율적인가?",
+                                  "turnsPerClone": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").value(9))
+                .andExpect(jsonPath("$.turns[0].speaker").value("CLONE_A"))
+                .andExpect(jsonPath("$.turns[0].ttsVoiceId").value("voice-a"))
+                .andExpect(jsonPath("$.turns[1].speaker").value("CLONE_B"));
+    }
+}

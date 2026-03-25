@@ -11,6 +11,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -102,6 +103,19 @@ public class VoiceService {
             Thread.currentThread().interrupt();
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "DashScope voice registration was interrupted.", exception);
         }
+    }
+
+    public List<VoiceSummaryResponse> listVoices() {
+        return registeredVoiceRepository.findAllByOrderByIdDesc().stream()
+                .map(voice -> new VoiceSummaryResponse(
+                        voice.getId(),
+                        voice.getProviderVoiceId(),
+                        voice.getPreferredName(),
+                        voice.getOriginalFilename(),
+                        voice.getAudioMimeType(),
+                        voice.getCreatedAt()
+                ))
+                .toList();
     }
 
     public VoiceSynthesisResult synthesize(String text, Long registeredVoiceId) {

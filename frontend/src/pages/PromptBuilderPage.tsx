@@ -4,6 +4,8 @@ import QuestionnairePanel from '../components/QuestionnairePanel'
 import type { Question } from '../components/QuestionnairePanel'
 import ResultPanel from '../components/ResultPanel'
 import type { ChatMessage } from '../components/ResultPanel'
+import DebatePanel from '../components/DebatePanel'
+import type { CloneOption, DebateTurn, VoiceOption } from '../components/DebatePanel'
 import './PromptBuilderPage.css'
 
 type AnswerItem = {
@@ -37,6 +39,20 @@ type VoiceRegisterResponse = {
   audioMimeType: string
 }
 
+type DebateResponse = {
+  debateSessionId: number
+  topic: string
+  turns: Array<{
+    turnIndex: number
+    speaker: string
+    cloneId: number
+    content: string
+    ttsVoiceId?: string | null
+    ttsAudioMimeType?: string | null
+    ttsAudioBase64?: string | null
+  }>
+}
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const questionAssetPath = `${import.meta.env.BASE_URL}questions.json`
 
@@ -58,6 +74,17 @@ function PromptBuilderPage() {
   const [registeredVoiceLabel, setRegisteredVoiceLabel] = useState('')
   const [voiceRegistering, setVoiceRegistering] = useState(false)
   const [voiceRegisterError, setVoiceRegisterError] = useState('')
+  const [clones, setClones] = useState<CloneOption[]>([])
+  const [voices, setVoices] = useState<VoiceOption[]>([])
+  const [cloneAId, setCloneAId] = useState('')
+  const [cloneBId, setCloneBId] = useState('')
+  const [cloneAVoiceId, setCloneAVoiceId] = useState('')
+  const [cloneBVoiceId, setCloneBVoiceId] = useState('')
+  const [debateTopic, setDebateTopic] = useState('')
+  const [debateTurns, setDebateTurns] = useState('2')
+  const [debateTurnsList, setDebateTurnsList] = useState<DebateTurn[]>([])
+  const [debateSubmitting, setDebateSubmitting] = useState(false)
+  const [debateError, setDebateError] = useState('')
 
   function buildAudioDataUrl(mimeType?: string | null, base64?: string | null) {
     if (!mimeType || !base64) {
@@ -109,9 +136,37 @@ function PromptBuilderPage() {
     }
 
     loadQuestions()
+    void loadClones()
+    void loadVoices()
 
     return () => controller.abort()
   }, [])
+
+  async function loadClones() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/clones`)
+      if (!response.ok) {
+        return
+      }
+      const data: CloneOption[] = await response.json()
+      setClones(data)
+    } catch {
+      // Ignore background clone refresh failures.
+    }
+  }
+
+  async function loadVoices() {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/voices`)
+      if (!response.ok) {
+        return
+      }
+      const data: VoiceOption[] = await response.json()
+      setVoices(data)
+    } catch {
+      // Ignore background voice refresh failures.
+    }
+  }
 
   const answeredCount = Object.values(answers).filter((answer) => answer.trim().length > 0).length
   const isComplete = questions.length > 0 && answeredCount === questions.length
@@ -191,6 +246,7 @@ function PromptBuilderPage() {
       setChatError('')
       setVoiceRegisterError('')
       setSystemPrompt(data.systemPrompt)
+      void loadClones()
     } catch (submitError) {
       setPromptGenerationLogId(null)
       setConversationId(null)
@@ -230,6 +286,9 @@ function PromptBuilderPage() {
       const data: VoiceRegisterResponse = await response.json()
       setRegisteredVoiceId(data.registeredVoiceId)
       setRegisteredVoiceLabel(`${data.originalFilename} -> ${data.voiceId}`)
+      setCloneAVoiceId(String(data.registeredVoiceId))
+      setCloneBVoiceId(String(data.registeredVoiceId))
+      void loadVoices()
     } catch (registerError) {
       setRegisteredVoiceId(null)
       setRegisteredVoiceLabel('')
@@ -298,6 +357,79 @@ function PromptBuilderPage() {
     }
   }
 
+  async function handleDebateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!cloneAId || !cloneBId) {
+      setDebateError('논쟁할 두 클론을 모두 선택해 주세요.')
+      return
+    }
+    if (!cloneAVoiceId || !cloneBVoiceId) {
+      setDebateError('두 클론에 사용할 음성을 모두 선택해 주세요.')
+      return
+    }
+    if (!debateTopic.trim()) {
+      setDebateError('논쟁 주제를 입력해 주세요.')
+      return
+    }
+
+    setDebateSubmitting(true)
+    setDebateError('')
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/debates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          cloneAId: Number(cloneAId),
+          cloneBId: Number(cloneBId),
+          cloneAVoiceId: Number(cloneAVoiceId),
+          cloneBVoiceId: Number(cloneBVoiceId),
+          topic: debateTopic,
+          turnsPerClone: Number(debateTurns),
+        }),
+      })
+
+      if (!response.ok) {
+        const message = await readErrorMessage(response, `논쟁 생성에 실패했습니다. (${response.status})`)
+        throw new Error(message)
+      }
+
+      const data: DebateResponse = await response.json()
+      const turns: DebateTurn[] = data.turns.map((turn) => ({
+        turnIndex: turn.turnIndex,
+        speaker: turn.speaker,
+        cloneId: turn.cloneId,
+        content: turn.content,
+        ttsAudioDataUrl: buildAudioDataUrl(turn.ttsAudioMimeType, turn.ttsAudioBase64),
+        ttsVoiceId: turn.ttsVoiceId ?? undefined,
+      }))
+      setDebateTurnsList(turns)
+      await autoplayAudioSequence(turns.map((turn) => turn.ttsAudioDataUrl).filter(Boolean) as string[])
+    } catch (submitError) {
+      setDebateError(submitError instanceof Error ? submitError.message : '논쟁 생성 중 오류가 발생했습니다.')
+    } finally {
+      setDebateSubmitting(false)
+    }
+  }
+
+  async function autoplayAudioSequence(audioUrls: string[]) {
+    for (const audioUrl of audioUrls) {
+      try {
+        await new Promise<void>((resolve) => {
+          const audio = new Audio(audioUrl)
+          audio.onended = () => resolve()
+          audio.onerror = () => resolve()
+          audio.play().catch(() => resolve())
+        })
+      } catch {
+        // Ignore autoplay failures. The controls remain visible for manual playback.
+      }
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -339,6 +471,27 @@ function PromptBuilderPage() {
           voiceRegistering={voiceRegistering}
         />
       </section>
+
+      <DebatePanel
+        cloneAId={cloneAId}
+        cloneAVoiceId={cloneAVoiceId}
+        cloneBId={cloneBId}
+        cloneBVoiceId={cloneBVoiceId}
+        clones={clones}
+        debateError={debateError}
+        debateSubmitting={debateSubmitting}
+        debateTopic={debateTopic}
+        debateTurns={debateTurns}
+        debateTurnsList={debateTurnsList}
+        onCloneAChange={setCloneAId}
+        onCloneAVoiceChange={setCloneAVoiceId}
+        onCloneBChange={setCloneBId}
+        onCloneBVoiceChange={setCloneBVoiceId}
+        onDebateSubmit={handleDebateSubmit}
+        onTopicChange={setDebateTopic}
+        onTurnsChange={setDebateTurns}
+        voices={voices}
+      />
     </main>
   )
 }

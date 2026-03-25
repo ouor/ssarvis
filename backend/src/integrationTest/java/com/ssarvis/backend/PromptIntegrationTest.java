@@ -13,6 +13,10 @@ import com.ssarvis.backend.chat.ChatConversationRepository;
 import com.ssarvis.backend.chat.ChatMessage;
 import com.ssarvis.backend.chat.ChatMessageRepository;
 import com.ssarvis.backend.config.AppProperties;
+import com.ssarvis.backend.debate.DebateSession;
+import com.ssarvis.backend.debate.DebateSessionRepository;
+import com.ssarvis.backend.debate.DebateTurn;
+import com.ssarvis.backend.debate.DebateTurnRepository;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import com.ssarvis.backend.voice.RegisteredVoice;
@@ -58,6 +62,12 @@ class PromptIntegrationTest {
     private RegisteredVoiceRepository registeredVoiceRepository;
 
     @Autowired
+    private DebateSessionRepository debateSessionRepository;
+
+    @Autowired
+    private DebateTurnRepository debateTurnRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     @Autowired
@@ -78,6 +88,14 @@ class PromptIntegrationTest {
                 .filter(conversation -> conversation.getCreatedAt() != null && !conversation.getCreatedAt().isBefore(testStartedAt))
                 .map(ChatConversation::getId)
                 .forEach(chatConversationRepository::deleteById);
+        debateTurnRepository.findAll().stream()
+                .filter(turn -> turn.getCreatedAt() != null && !turn.getCreatedAt().isBefore(testStartedAt))
+                .map(DebateTurn::getId)
+                .forEach(debateTurnRepository::deleteById);
+        debateSessionRepository.findAll().stream()
+                .filter(session -> session.getCreatedAt() != null && !session.getCreatedAt().isBefore(testStartedAt))
+                .map(DebateSession::getId)
+                .forEach(debateSessionRepository::deleteById);
         registeredVoiceRepository.findAll().stream()
                 .filter(voice -> voice.getCreatedAt() != null && !voice.getCreatedAt().isBefore(testStartedAt))
                 .map(RegisteredVoice::getId)
@@ -126,6 +144,36 @@ class PromptIntegrationTest {
         JsonNode promptResponse = objectMapper.readTree(promptResponseBody);
         long promptGenerationLogId = promptResponse.get("promptGenerationLogId").asLong();
 
+        String secondPromptResponseBody = mockMvc.perform(post("/api/system-prompt")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "answers": [
+                                    {
+                                      "question": "대화할 때 나는 보통",
+                                      "answer": "먼저 말을 거는 편"
+                                    },
+                                    {
+                                      "question": "평소 결정은 어떤 편인가요?",
+                                      "answer": "빠르게 정함"
+                                    },
+                                    {
+                                      "question": "좋아하는 분위기에 가까운 것은?",
+                                      "answer": "밝고 가벼운 분위기"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.promptGenerationLogId").isNumber())
+                .andExpect(jsonPath("$.systemPrompt").isString())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode secondPromptResponse = objectMapper.readTree(secondPromptResponseBody);
+        long secondPromptGenerationLogId = secondPromptResponse.get("promptGenerationLogId").asLong();
+
         SampleAudio dashScopeSampleAudio = createDashScopeSampleAudio();
         String voiceResponseBody = mockMvc.perform(multipart("/api/voices")
                         .file(new MockMultipartFile(
@@ -166,14 +214,48 @@ class PromptIntegrationTest {
         JsonNode chatResponse = objectMapper.readTree(chatResponseBody);
         long conversationId = chatResponse.get("conversationId").asLong();
 
+        String debateResponseBody = mockMvc.perform(post("/api/debates")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cloneAId": %d,
+                                  "cloneBId": %d,
+                                  "cloneAVoiceId": %d,
+                                  "cloneBVoiceId": %d,
+                                  "topic": "원격근무가 대면근무보다 더 효율적인가?",
+                                  "turnsPerClone": 1
+                                }
+                                """.formatted(
+                                promptGenerationLogId,
+                                secondPromptGenerationLogId,
+                                registeredVoiceId,
+                                registeredVoiceId
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").isNumber())
+                .andExpect(jsonPath("$.turns[0].speaker").value("CLONE_A"))
+                .andExpect(jsonPath("$.turns[0].ttsVoiceId").isString())
+                .andExpect(jsonPath("$.turns[1].speaker").value("CLONE_B"))
+                .andExpect(jsonPath("$.turns[1].ttsAudioBase64").isString())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode debateResponse = objectMapper.readTree(debateResponseBody);
+        long debateSessionId = debateResponse.get("debateSessionId").asLong();
+
         long afterCount = promptGenerationLogRepository.count();
         long afterConversationCount = chatConversationRepository.count();
         long afterMessageCount = chatMessageRepository.count();
         long afterRegisteredVoiceCount = registeredVoiceRepository.count();
-        assertThat(afterCount).isEqualTo(beforeCount + 1);
+        long debateSessionCount = debateSessionRepository.count();
+        long debateTurnCount = debateTurnRepository.count();
+        assertThat(afterCount).isEqualTo(beforeCount + 2);
         assertThat(afterConversationCount).isEqualTo(beforeConversationCount + 1);
         assertThat(afterMessageCount).isEqualTo(beforeMessageCount + 2);
         assertThat(afterRegisteredVoiceCount).isEqualTo(beforeRegisteredVoiceCount + 1);
+        assertThat(debateSessionCount).isGreaterThanOrEqualTo(1);
+        assertThat(debateTurnCount).isGreaterThanOrEqualTo(2);
 
         PromptGenerationLog latestLog = promptGenerationLogRepository.findAll().stream()
                 .max(Comparator.comparing(PromptGenerationLog::getId))
@@ -195,6 +277,17 @@ class PromptIntegrationTest {
         assertThat(chatResponse.get("ttsVoiceId").asText()).isNotBlank();
         assertThat(chatResponse.get("ttsAudioMimeType").asText()).startsWith("audio/");
         assertThat(chatResponse.get("ttsAudioBase64").asText()).isNotBlank();
+
+        DebateSession debateSession = debateSessionRepository.findById(debateSessionId).orElseThrow();
+        assertThat(debateSession.getCloneA().getId()).isEqualTo(promptGenerationLogId);
+        assertThat(debateSession.getCloneB().getId()).isEqualTo(secondPromptGenerationLogId);
+
+        List<DebateTurn> debateTurns = debateTurnRepository.findByDebateSessionIdOrderByTurnIndexAsc(debateSessionId);
+        assertThat(debateTurns).hasSize(2);
+        assertThat(debateTurns.get(0).getSpeaker()).isEqualTo(DebateTurn.Speaker.CLONE_A);
+        assertThat(debateTurns.get(1).getSpeaker()).isEqualTo(DebateTurn.Speaker.CLONE_B);
+        assertThat(debateTurns.get(0).getContent()).isNotBlank();
+        assertThat(debateTurns.get(1).getContent()).isNotBlank();
     }
 
     private SampleAudio createDashScopeSampleAudio() throws Exception {

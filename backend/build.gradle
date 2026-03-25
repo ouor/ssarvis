@@ -80,6 +80,10 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
+tasks.named('bootRun') {
+	environment dotenv
+}
+
 tasks.register('integrationTest', Test) {
 	description = 'Runs integration tests against real external services.'
 	group = 'verification'
