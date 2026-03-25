@@ -19,6 +19,12 @@ public class ChatController {
     @PostMapping("/messages")
     public ChatResponse sendMessage(@Valid @RequestBody ChatRequest request) {
         ChatResult result = chatService.reply(request);
-        return new ChatResponse(result.conversationId(), result.assistantMessage());
+        return new ChatResponse(
+                result.conversationId(),
+                result.assistantMessage(),
+                result.ttsVoiceId(),
+                result.ttsAudioMimeType(),
+                result.ttsAudioBase64()
+        );
     }
 }

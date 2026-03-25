@@ -208,6 +208,41 @@
   gap: 16px;
 }
 
+.voice-panel {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(18, 41, 89, 0.08);
+  border-radius: 22px;
+  background: rgba(250, 248, 243, 0.9);
+}
+
+.voice-file-input {
+  width: 100%;
+}
+
+.secondary-button {
+  appearance: none;
+  border: 1px solid rgba(18, 41, 89, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-strong);
+  padding: 12px 16px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.voice-status {
+  color: var(--muted);
+  word-break: break-word;
+}
+
 .chat-header {
   display: flex;
   gap: 16px;
@@ -256,6 +291,21 @@
 .chat-form {
   display: grid;
   gap: 12px;
+}
+
+.tts-block {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.tts-block audio {
+  width: 100%;
+}
+
+.tts-caption {
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .chat-input {

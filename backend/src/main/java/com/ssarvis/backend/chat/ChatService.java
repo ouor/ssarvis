@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.voice.VoiceService;
+import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -28,6 +30,7 @@ public class ChatService {
     private final PromptGenerationLogRepository promptGenerationLogRepository;
     private final ChatConversationRepository chatConversationRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final VoiceService voiceService;
 
     public ChatService(
             HttpClient httpClient,
@@ -35,7 +38,8 @@ public class ChatService {
             AppProperties appProperties,
             PromptGenerationLogRepository promptGenerationLogRepository,
             ChatConversationRepository chatConversationRepository,
-            ChatMessageRepository chatMessageRepository
+            ChatMessageRepository chatMessageRepository,
+            VoiceService voiceService
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -43,6 +47,7 @@ public class ChatService {
         this.promptGenerationLogRepository = promptGenerationLogRepository;
         this.chatConversationRepository = chatConversationRepository;
         this.chatMessageRepository = chatMessageRepository;
+        this.voiceService = voiceService;
     }
 
     @Transactional
@@ -69,7 +74,14 @@ public class ChatService {
         chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.USER, request.message().trim()));
         chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.ASSISTANT, assistantMessage));
 
-        return new ChatResult(savedConversation.getId(), assistantMessage);
+        VoiceSynthesisResult ttsResult = voiceService.synthesize(assistantMessage, request.registeredVoiceId());
+        return new ChatResult(
+                savedConversation.getId(),
+                assistantMessage,
+                ttsResult != null ? ttsResult.voiceId() : null,
+                ttsResult != null ? ttsResult.audioMimeType() : null,
+                ttsResult != null ? ttsResult.audioBase64() : null
+        );
     }
 
     private ChatConversation resolveConversation(ChatRequest request) {

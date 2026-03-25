@@ -9,6 +9,7 @@ public class AppProperties {
 
     private final Openai openai = new Openai();
     private final Cors cors = new Cors();
+    private final Dashscope dashscope = new Dashscope();
 
     public Openai getOpenai() {
         return openai;
@@ -16,6 +17,10 @@ public class AppProperties {
 
     public Cors getCors() {
         return cors;
+    }
+
+    public Dashscope getDashscope() {
+        return dashscope;
     }
 
     public static class Openai {
@@ -57,6 +62,36 @@ public class AppProperties {
 
         public void setAllowedOrigins(List<String> allowedOrigins) {
             this.allowedOrigins = allowedOrigins;
+        }
+    }
+
+    public static class Dashscope {
+        private String apiKey;
+        private String baseUrl = "https://dashscope-intl.aliyuncs.com/api/v1";
+        private String ttsModel = "qwen3-tts-vc-2026-01-22";
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getTtsModel() {
+            return ttsModel;
+        }
+
+        public void setTtsModel(String ttsModel) {
+            this.ttsModel = ttsModel;
         }
     }
 }

@@ -1,6 +1,8 @@
 type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
+  ttsAudioDataUrl?: string
+  ttsVoiceId?: string
 }
 
 type ResultPanelProps = {
@@ -10,8 +12,13 @@ type ResultPanelProps = {
   chatSubmitting: boolean
   conversationId: number | null
   error: string
+  onVoiceFileChange: (file: File | null) => void
   onChatInputChange: (value: string) => void
   onChatSubmit: React.FormEventHandler<HTMLFormElement>
+  onVoiceRegister: React.FormEventHandler<HTMLFormElement>
+  registeredVoiceLabel: string
+  voiceRegisterError: string
+  voiceRegistering: boolean
   systemPrompt: string
 }
 
@@ -22,9 +29,14 @@ function ResultPanel({
   chatSubmitting,
   conversationId,
   error,
+  onVoiceFileChange,
   onChatInputChange,
   onChatSubmit,
+  onVoiceRegister,
+  registeredVoiceLabel,
   systemPrompt,
+  voiceRegisterError,
+  voiceRegistering,
 }: ResultPanelProps) {
   return (
     <aside className="result-panel">
@@ -54,6 +66,24 @@ function ResultPanel({
               </span>
             </div>
 
+            <form className="voice-panel" onSubmit={onVoiceRegister}>
+              <div>
+                <p className="section-label">Voice</p>
+                <h2>내 음성 등록하기</h2>
+              </div>
+              <input
+                accept="audio/*"
+                className="voice-file-input"
+                onChange={(event) => onVoiceFileChange(event.target.files?.[0] ?? null)}
+                type="file"
+              />
+              <button className="secondary-button" disabled={voiceRegistering} type="submit">
+                {voiceRegistering ? '등록 중...' : '음성 등록'}
+              </button>
+              {registeredVoiceLabel ? <p className="voice-status">{registeredVoiceLabel}</p> : null}
+              {voiceRegisterError ? <div className="feedback error">{voiceRegisterError}</div> : null}
+            </form>
+
             {chatError ? <div className="feedback error">{chatError}</div> : null}
 
             <div className="chat-list">
@@ -62,6 +92,12 @@ function ResultPanel({
                   <article className={`chat-bubble ${message.role}`} key={`${message.role}-${index}`}>
                     <p className="chat-role">{message.role === 'user' ? '나' : 'Assistant'}</p>
                     <p>{message.content}</p>
+                    {message.ttsAudioDataUrl ? (
+                      <div className="tts-block">
+                        <audio controls preload="none" src={message.ttsAudioDataUrl} />
+                        {message.ttsVoiceId ? <p className="tts-caption">Voice: {message.ttsVoiceId}</p> : null}
+                      </div>
+                    ) : null}
                   </article>
                 ))
               ) : (

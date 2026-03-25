@@ -1,6 +1,7 @@
 package com.ssarvis.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -11,8 +12,16 @@ import com.ssarvis.backend.chat.ChatConversation;
 import com.ssarvis.backend.chat.ChatConversationRepository;
 import com.ssarvis.backend.chat.ChatMessage;
 import com.ssarvis.backend.chat.ChatMessageRepository;
+import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.voice.RegisteredVoice;
+import com.ssarvis.backend.voice.RegisteredVoiceRepository;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -24,6 +33,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 @Tag("integration")
@@ -45,7 +55,16 @@ class PromptIntegrationTest {
     private ChatMessageRepository chatMessageRepository;
 
     @Autowired
+    private RegisteredVoiceRepository registeredVoiceRepository;
+
+    @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private HttpClient httpClient;
+
+    @Autowired
+    private AppProperties appProperties;
 
     private Instant testStartedAt = Instant.now();
 
@@ -59,6 +78,10 @@ class PromptIntegrationTest {
                 .filter(conversation -> conversation.getCreatedAt() != null && !conversation.getCreatedAt().isBefore(testStartedAt))
                 .map(ChatConversation::getId)
                 .forEach(chatConversationRepository::deleteById);
+        registeredVoiceRepository.findAll().stream()
+                .filter(voice -> voice.getCreatedAt() != null && !voice.getCreatedAt().isBefore(testStartedAt))
+                .map(RegisteredVoice::getId)
+                .forEach(registeredVoiceRepository::deleteById);
         promptGenerationLogRepository.findAll().stream()
                 .filter(log -> log.getCreatedAt() != null && !log.getCreatedAt().isBefore(testStartedAt))
                 .map(PromptGenerationLog::getId)
@@ -71,6 +94,7 @@ class PromptIntegrationTest {
         long beforeCount = promptGenerationLogRepository.count();
         long beforeConversationCount = chatConversationRepository.count();
         long beforeMessageCount = chatMessageRepository.count();
+        long beforeRegisteredVoiceCount = registeredVoiceRepository.count();
 
         String promptResponseBody = mockMvc.perform(post("/api/system-prompt")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -102,17 +126,39 @@ class PromptIntegrationTest {
         JsonNode promptResponse = objectMapper.readTree(promptResponseBody);
         long promptGenerationLogId = promptResponse.get("promptGenerationLogId").asLong();
 
+        SampleAudio dashScopeSampleAudio = createDashScopeSampleAudio();
+        String voiceResponseBody = mockMvc.perform(multipart("/api/voices")
+                        .file(new MockMultipartFile(
+                                "sample",
+                                "dashscope-sample",
+                                dashScopeSampleAudio.contentType(),
+                                dashScopeSampleAudio.bytes()
+                        )))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.registeredVoiceId").isNumber())
+                .andExpect(jsonPath("$.voiceId").isString())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        JsonNode voiceResponse = objectMapper.readTree(voiceResponseBody);
+        long registeredVoiceId = voiceResponse.get("registeredVoiceId").asLong();
+
         String chatResponseBody = mockMvc.perform(post("/api/chat/messages")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "promptGenerationLogId": %d,
+                                  "registeredVoiceId": %d,
                                   "message": "내 말투에 맞춰 오늘 일정 정리 방법을 알려줘."
                                 }
-                                """.formatted(promptGenerationLogId)))
+                                """.formatted(promptGenerationLogId, registeredVoiceId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conversationId").isNumber())
                 .andExpect(jsonPath("$.assistantMessage").isString())
+                .andExpect(jsonPath("$.ttsVoiceId").isString())
+                .andExpect(jsonPath("$.ttsAudioMimeType").isString())
+                .andExpect(jsonPath("$.ttsAudioBase64").isString())
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -123,9 +169,11 @@ class PromptIntegrationTest {
         long afterCount = promptGenerationLogRepository.count();
         long afterConversationCount = chatConversationRepository.count();
         long afterMessageCount = chatMessageRepository.count();
+        long afterRegisteredVoiceCount = registeredVoiceRepository.count();
         assertThat(afterCount).isEqualTo(beforeCount + 1);
         assertThat(afterConversationCount).isEqualTo(beforeConversationCount + 1);
         assertThat(afterMessageCount).isEqualTo(beforeMessageCount + 2);
+        assertThat(afterRegisteredVoiceCount).isEqualTo(beforeRegisteredVoiceCount + 1);
 
         PromptGenerationLog latestLog = promptGenerationLogRepository.findAll().stream()
                 .max(Comparator.comparing(PromptGenerationLog::getId))
@@ -144,5 +192,53 @@ class PromptIntegrationTest {
         assertThat(messages.get(0).getContent()).contains("오늘 일정 정리 방법");
         assertThat(messages.get(1).getRole()).isEqualTo(ChatMessage.Role.ASSISTANT);
         assertThat(messages.get(1).getContent()).isNotBlank();
+        assertThat(chatResponse.get("ttsVoiceId").asText()).isNotBlank();
+        assertThat(chatResponse.get("ttsAudioMimeType").asText()).startsWith("audio/");
+        assertThat(chatResponse.get("ttsAudioBase64").asText()).isNotBlank();
+    }
+
+    private SampleAudio createDashScopeSampleAudio() throws Exception {
+        String apiKey = appProperties.getDashscope().getApiKey();
+        String baseUrl = appProperties.getDashscope().getBaseUrl();
+
+        String payload = """
+                {
+                  "model": "qwen3-tts-flash",
+                  "input": {
+                    "text": "Hello, this is a DashScope integration test voice sample.",
+                    "voice": "Cherry"
+                  }
+                }
+                """;
+
+        HttpRequest synthesisRequest = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + "/services/aigc/multimodal-generation/generation"))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
+                .build();
+
+        HttpResponse<String> synthesisResponse = httpClient.send(
+                synthesisRequest,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
+        assertThat(synthesisResponse.statusCode()).isEqualTo(200);
+
+        JsonNode synthesisRoot = objectMapper.readTree(synthesisResponse.body());
+        String audioUrl = synthesisRoot.path("output").path("audio").path("url").asText();
+        assertThat(audioUrl).isNotBlank();
+
+        HttpRequest audioRequest = HttpRequest.newBuilder()
+                .uri(URI.create(audioUrl))
+                .GET()
+                .build();
+        HttpResponse<byte[]> audioResponse = httpClient.send(audioRequest, HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(audioResponse.statusCode()).isEqualTo(200);
+        assertThat(audioResponse.body()).isNotEmpty();
+        String contentType = audioResponse.headers().firstValue("Content-Type").orElse("audio/mpeg");
+        return new SampleAudio(audioResponse.body(), contentType);
+    }
+
+    private record SampleAudio(byte[] bytes, String contentType) {
     }
 }

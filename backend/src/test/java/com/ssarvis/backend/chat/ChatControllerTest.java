@@ -29,7 +29,13 @@ class ChatControllerTest {
     @Test
     void sendMessageReturnsAssistantMessage() throws Exception {
         given(chatService.reply(any()))
-                .willReturn(new ChatResult(41L, "안녕하세요. 어떤 부분이 궁금한지 편하게 말씀해 주세요."));
+                .willReturn(new ChatResult(
+                        41L,
+                        "안녕하세요. 어떤 부분이 궁금한지 편하게 말씀해 주세요.",
+                        "voice-demo",
+                        "audio/wav",
+                        "UklGRg=="
+                ));
 
         mockMvc.perform(post("/api/chat/messages")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -41,7 +47,10 @@ class ChatControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conversationId").value(41))
-                .andExpect(jsonPath("$.assistantMessage").value("안녕하세요. 어떤 부분이 궁금한지 편하게 말씀해 주세요."));
+                .andExpect(jsonPath("$.assistantMessage").value("안녕하세요. 어떤 부분이 궁금한지 편하게 말씀해 주세요."))
+                .andExpect(jsonPath("$.ttsVoiceId").value("voice-demo"))
+                .andExpect(jsonPath("$.ttsAudioMimeType").value("audio/wav"))
+                .andExpect(jsonPath("$.ttsAudioBase64").value("UklGRg=="));
     }
 
     @Test

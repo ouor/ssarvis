@@ -24,6 +24,17 @@ type PromptGenerateResponse = {
 type ChatResponse = {
   conversationId: number
   assistantMessage: string
+  ttsVoiceId?: string | null
+  ttsAudioMimeType?: string | null
+  ttsAudioBase64?: string | null
+}
+
+type VoiceRegisterResponse = {
+  registeredVoiceId: number
+  voiceId: string
+  preferredName: string
+  originalFilename: string
+  audioMimeType: string
 }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -42,6 +53,31 @@ function PromptBuilderPage() {
   const [chatInput, setChatInput] = useState('')
   const [chatSubmitting, setChatSubmitting] = useState(false)
   const [chatError, setChatError] = useState('')
+  const [voiceFile, setVoiceFile] = useState<File | null>(null)
+  const [registeredVoiceId, setRegisteredVoiceId] = useState<number | null>(null)
+  const [registeredVoiceLabel, setRegisteredVoiceLabel] = useState('')
+  const [voiceRegistering, setVoiceRegistering] = useState(false)
+  const [voiceRegisterError, setVoiceRegisterError] = useState('')
+
+  function buildAudioDataUrl(mimeType?: string | null, base64?: string | null) {
+    if (!mimeType || !base64) {
+      return undefined
+    }
+    return `data:${mimeType};base64,${base64}`
+  }
+
+  async function autoplayAudio(dataUrl?: string) {
+    if (!dataUrl) {
+      return
+    }
+
+    try {
+      const audio = new Audio(dataUrl)
+      await audio.play()
+    } catch {
+      // Autoplay may be blocked by the browser. The audio controls remain available for manual playback.
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -153,6 +189,7 @@ function PromptBuilderPage() {
       setChatMessages([])
       setChatInput('')
       setChatError('')
+      setVoiceRegisterError('')
       setSystemPrompt(data.systemPrompt)
     } catch (submitError) {
       setPromptGenerationLogId(null)
@@ -162,6 +199,43 @@ function PromptBuilderPage() {
       setError(submitError instanceof Error ? submitError.message : '시스템 프롬프트 생성 중 오류가 발생했습니다.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleVoiceRegister(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!voiceFile) {
+      setVoiceRegisterError('등록할 음성 파일을 선택해 주세요.')
+      return
+    }
+
+    setVoiceRegistering(true)
+    setVoiceRegisterError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('sample', voiceFile)
+
+      const response = await fetch(`${apiBaseUrl}/api/voices`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const message = await readErrorMessage(response, `음성 등록에 실패했습니다. (${response.status})`)
+        throw new Error(message)
+      }
+
+      const data: VoiceRegisterResponse = await response.json()
+      setRegisteredVoiceId(data.registeredVoiceId)
+      setRegisteredVoiceLabel(`${data.originalFilename} -> ${data.voiceId}`)
+    } catch (registerError) {
+      setRegisteredVoiceId(null)
+      setRegisteredVoiceLabel('')
+      setVoiceRegisterError(registerError instanceof Error ? registerError.message : '음성 등록 중 오류가 발생했습니다.')
+    } finally {
+      setVoiceRegistering(false)
     }
   }
 
@@ -192,6 +266,7 @@ function PromptBuilderPage() {
         body: JSON.stringify({
           promptGenerationLogId,
           conversationId,
+          registeredVoiceId,
           message,
         }),
       })
@@ -202,13 +277,20 @@ function PromptBuilderPage() {
       }
 
       const data: ChatResponse = await response.json()
+      const ttsAudioDataUrl = buildAudioDataUrl(data.ttsAudioMimeType, data.ttsAudioBase64)
       setConversationId(data.conversationId)
       setChatMessages((current) => [
         ...current,
         { role: 'user', content: message },
-        { role: 'assistant', content: data.assistantMessage },
+        {
+          role: 'assistant',
+          content: data.assistantMessage,
+          ttsAudioDataUrl,
+          ttsVoiceId: data.ttsVoiceId ?? undefined,
+        },
       ])
       setChatInput('')
+      void autoplayAudio(ttsAudioDataUrl)
     } catch (submitError) {
       setChatError(submitError instanceof Error ? submitError.message : '채팅 중 오류가 발생했습니다.')
     } finally {
@@ -247,9 +329,14 @@ function PromptBuilderPage() {
           chatSubmitting={chatSubmitting}
           conversationId={conversationId}
           error={error}
+          onVoiceFileChange={setVoiceFile}
           onChatInputChange={setChatInput}
           onChatSubmit={handleChatSubmit}
+          onVoiceRegister={handleVoiceRegister}
+          registeredVoiceLabel={registeredVoiceLabel}
           systemPrompt={systemPrompt}
+          voiceRegisterError={voiceRegisterError}
+          voiceRegistering={voiceRegistering}
         />
       </section>
     </main>
