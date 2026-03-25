@@ -1,19 +1,28 @@
 class PcmStreamPlayer {
   private readonly audioContext: AudioContext
-  private readonly sampleRate: number
   private readonly chunks: Uint8Array[] = []
+  private sampleRate: number
+  private channels: number
   private nextStartTime = 0
   private activeSources = 0
   private streamFinished = false
+  private trailingByte: number | null = null
   private finishResolver: (() => void) | null = null
   private finishPromise: Promise<void>
+  private wavUrl: string | null = null
 
-  constructor(sampleRate = 24000) {
+  constructor(sampleRate = 24000, channels = 1) {
     this.sampleRate = sampleRate
+    this.channels = channels
     this.audioContext = new AudioContext()
     this.finishPromise = new Promise<void>((resolve) => {
       this.finishResolver = resolve
     })
+  }
+
+  configure(sampleRate: number, channels: number) {
+    this.sampleRate = sampleRate > 0 ? sampleRate : this.sampleRate
+    this.channels = channels > 0 ? channels : this.channels
   }
 
   async appendBase64Chunk(base64Chunk: string) {
@@ -21,15 +30,28 @@ class PcmStreamPlayer {
       await this.audioContext.resume()
     }
 
-    const bytes = this.decodeBase64(base64Chunk)
+    const bytes = this.normalizeChunk(this.decodeBase64(base64Chunk))
+    if (bytes.byteLength === 0) {
+      return
+    }
+
     this.chunks.push(bytes)
 
-    const pcm = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 2))
-    const audioBuffer = this.audioContext.createBuffer(1, pcm.length, this.sampleRate)
-    const channelData = audioBuffer.getChannelData(0)
+    const totalSamples = Math.floor(bytes.byteLength / 2)
+    const frameCount = Math.floor(totalSamples / this.channels)
+    if (frameCount <= 0) {
+      return
+    }
 
-    for (let index = 0; index < pcm.length; index += 1) {
-      channelData[index] = pcm[index] / 32768
+    const audioBuffer = this.audioContext.createBuffer(this.channels, frameCount, this.sampleRate)
+    const view = new DataView(bytes.buffer, bytes.byteOffset, frameCount * this.channels * 2)
+
+    for (let channel = 0; channel < this.channels; channel += 1) {
+      const channelData = audioBuffer.getChannelData(channel)
+      for (let frame = 0; frame < frameCount; frame += 1) {
+        const sampleIndex = (frame * this.channels + channel) * 2
+        channelData[frame] = view.getInt16(sampleIndex, true) / 32768
+      }
     }
 
     const source = this.audioContext.createBufferSource()
@@ -71,7 +93,11 @@ class PcmStreamPlayer {
     const pcmBytes = this.concatChunks()
     const wavBytes = this.wrapPcmAsWav(pcmBytes)
     const blob = new Blob([wavBytes], { type: 'audio/wav' })
-    return URL.createObjectURL(blob)
+    if (this.wavUrl) {
+      URL.revokeObjectURL(this.wavUrl)
+    }
+    this.wavUrl = URL.createObjectURL(blob)
+    return this.wavUrl
   }
 
   private concatChunks() {
@@ -98,10 +124,10 @@ class PcmStreamPlayer {
     this.writeAscii(wav, 12, 'fmt ')
     view.setUint32(16, 16, true)
     view.setUint16(20, 1, true)
-    view.setUint16(22, 1, true)
+    view.setUint16(22, this.channels, true)
     view.setUint32(24, this.sampleRate, true)
-    view.setUint32(28, this.sampleRate * 2, true)
-    view.setUint16(32, 2, true)
+    view.setUint32(28, this.sampleRate * this.channels * 2, true)
+    view.setUint16(32, this.channels * 2, true)
     view.setUint16(34, 16, true)
     this.writeAscii(wav, 36, 'data')
     view.setUint32(40, pcmBytes.byteLength, true)
@@ -123,6 +149,31 @@ class PcmStreamPlayer {
       bytes[index] = binary.charCodeAt(index)
     }
     return bytes
+  }
+
+  private normalizeChunk(bytes: Uint8Array) {
+    if (this.trailingByte === null && bytes.byteLength % 2 === 0) {
+      return bytes
+    }
+
+    const extraLength = this.trailingByte !== null ? 1 : 0
+    const merged = new Uint8Array(extraLength + bytes.byteLength)
+    let offset = 0
+
+    if (this.trailingByte !== null) {
+      merged[0] = this.trailingByte
+      offset = 1
+      this.trailingByte = null
+    }
+
+    merged.set(bytes, offset)
+
+    if (merged.byteLength % 2 === 1) {
+      this.trailingByte = merged[merged.byteLength - 1]
+      return merged.slice(0, merged.byteLength - 1)
+    }
+
+    return merged
   }
 }
 

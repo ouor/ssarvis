@@ -26,7 +26,6 @@ public class VoiceService {
 
     private static final String LANGUAGE_TYPE = "Auto";
     private static final int MAX_TTS_TEXT_LENGTH = 600;
-    private static final int WAV_HEADER_SIZE = 44;
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -269,21 +268,66 @@ public class VoiceService {
             ByteArrayOutputStream fullAudioBytes,
             VoiceChunkListener chunkListener
     ) throws IOException {
-        byte[] buffer = new byte[4096];
-        int bytesRead;
-        int totalBytes = 0;
+        byte[] riffHeader = readExactBytes(inputStream, 12);
+        if (riffHeader.length < 12) {
+            fullAudioBytes.write(riffHeader);
+            return;
+        }
 
-        while ((bytesRead = inputStream.read(buffer)) != -1) {
-            fullAudioBytes.write(buffer, 0, bytesRead);
+        fullAudioBytes.write(riffHeader);
+        if (!"RIFF".equals(new String(riffHeader, 0, 4, StandardCharsets.US_ASCII))
+                || !"WAVE".equals(new String(riffHeader, 8, 4, StandardCharsets.US_ASCII))) {
+            fullAudioBytes.write(inputStream.readAllBytes());
+            return;
+        }
 
-            int offset = 0;
-            if (totalBytes < WAV_HEADER_SIZE) {
-                offset = Math.min(WAV_HEADER_SIZE - totalBytes, bytesRead);
+        while (true) {
+            byte[] chunkHeader = readExactBytes(inputStream, 8);
+            if (chunkHeader.length == 0) {
+                return;
+            }
+            if (chunkHeader.length < 8) {
+                fullAudioBytes.write(chunkHeader);
+                return;
             }
 
-            if (offset < bytesRead && chunkListener != null) {
-                byte[] pcmChunk = new byte[bytesRead - offset];
-                System.arraycopy(buffer, offset, pcmChunk, 0, pcmChunk.length);
+            fullAudioBytes.write(chunkHeader);
+            String chunkId = new String(chunkHeader, 0, 4, StandardCharsets.US_ASCII);
+            int chunkSize = littleEndianInt(chunkHeader, 4);
+
+            if ("data".equals(chunkId)) {
+                streamExactChunkData(inputStream, fullAudioBytes, chunkListener, chunkSize);
+                byte[] remaining = inputStream.readAllBytes();
+                fullAudioBytes.write(remaining);
+                return;
+            }
+
+            copyExactBytes(inputStream, fullAudioBytes, chunkSize);
+            if ((chunkSize & 1) == 1) {
+                copyExactBytes(inputStream, fullAudioBytes, 1);
+            }
+        }
+    }
+
+    private void streamExactChunkData(
+            InputStream inputStream,
+            ByteArrayOutputStream fullAudioBytes,
+            VoiceChunkListener chunkListener,
+            int chunkSize
+    ) throws IOException {
+        byte[] buffer = new byte[4096];
+        int remaining = chunkSize;
+
+        while (remaining > 0) {
+            int bytesRead = inputStream.read(buffer, 0, Math.min(buffer.length, remaining));
+            if (bytesRead == -1) {
+                throw new IOException("Unexpected end of WAV data chunk.");
+            }
+
+            fullAudioBytes.write(buffer, 0, bytesRead);
+            if (chunkListener != null && bytesRead > 0) {
+                byte[] pcmChunk = new byte[bytesRead];
+                System.arraycopy(buffer, 0, pcmChunk, 0, bytesRead);
                 try {
                     chunkListener.onAudioChunk(Base64.getEncoder().encodeToString(pcmChunk));
                 } catch (Exception exception) {
@@ -291,8 +335,54 @@ public class VoiceService {
                 }
             }
 
-            totalBytes += bytesRead;
+            remaining -= bytesRead;
         }
+
+        if ((chunkSize & 1) == 1) {
+            copyExactBytes(inputStream, fullAudioBytes, 1);
+        }
+    }
+
+    private byte[] readExactBytes(InputStream inputStream, int expectedLength) throws IOException {
+        byte[] buffer = new byte[expectedLength];
+        int offset = 0;
+
+        while (offset < expectedLength) {
+            int bytesRead = inputStream.read(buffer, offset, expectedLength - offset);
+            if (bytesRead == -1) {
+                break;
+            }
+            offset += bytesRead;
+        }
+
+        if (offset == expectedLength) {
+            return buffer;
+        }
+
+        byte[] partial = new byte[offset];
+        System.arraycopy(buffer, 0, partial, 0, offset);
+        return partial;
+    }
+
+    private void copyExactBytes(InputStream inputStream, ByteArrayOutputStream outputStream, int length) throws IOException {
+        byte[] buffer = new byte[4096];
+        int remaining = length;
+
+        while (remaining > 0) {
+            int bytesRead = inputStream.read(buffer, 0, Math.min(buffer.length, remaining));
+            if (bytesRead == -1) {
+                throw new IOException("Unexpected end of WAV chunk.");
+            }
+            outputStream.write(buffer, 0, bytesRead);
+            remaining -= bytesRead;
+        }
+    }
+
+    private int littleEndianInt(byte[] bytes, int offset) {
+        return (bytes[offset] & 0xff)
+                | ((bytes[offset + 1] & 0xff) << 8)
+                | ((bytes[offset + 2] & 0xff) << 16)
+                | ((bytes[offset + 3] & 0xff) << 24);
     }
 
     private String buildPreferredName(String originalFilename) {

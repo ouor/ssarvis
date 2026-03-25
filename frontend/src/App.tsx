@@ -1,7 +1,7 @@
-import PromptBuilderPage from './pages/PromptBuilderPage'
+import CloneStudioPage from './pages/CloneStudioPage'
 
 function App() {
-  return <PromptBuilderPage />
+  return <CloneStudioPage />
 }
 
 export default App
