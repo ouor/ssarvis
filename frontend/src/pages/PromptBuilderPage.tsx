@@ -6,6 +6,7 @@ import ResultPanel from '../components/ResultPanel'
 import type { ChatMessage } from '../components/ResultPanel'
 import DebatePanel from '../components/DebatePanel'
 import type { CloneOption, DebateTurn, VoiceOption } from '../components/DebatePanel'
+import PcmStreamPlayer from '../utils/PcmStreamPlayer'
 import './PromptBuilderPage.css'
 
 type AnswerItem = {
@@ -23,14 +24,6 @@ type PromptGenerateResponse = {
   systemPrompt: string
 }
 
-type ChatResponse = {
-  conversationId: number
-  assistantMessage: string
-  ttsVoiceId?: string | null
-  ttsAudioMimeType?: string | null
-  ttsAudioBase64?: string | null
-}
-
 type VoiceRegisterResponse = {
   registeredVoiceId: number
   voiceId: string
@@ -39,19 +32,12 @@ type VoiceRegisterResponse = {
   audioMimeType: string
 }
 
-type DebateResponse = {
-  debateSessionId: number
-  topic: string
-  turn: {
-    turnIndex: number
-    speaker: string
-    cloneId: number
-    content: string
-    ttsVoiceId?: string | null
-    ttsAudioMimeType?: string | null
-    ttsAudioBase64?: string | null
-  }
-}
+type StreamEvent =
+  | { type: 'message'; conversationId: number; assistantMessage: string }
+  | { type: 'turn'; debateSessionId: number; topic: string; turn: { turnIndex: number; speaker: string; cloneId: number; content: string } }
+  | { type: 'audio_chunk'; audioFormat: string; sampleRate: number; channels: number; chunkBase64: string }
+  | { type: 'done'; conversationId?: number; debateSessionId?: number; turnIndex?: number; ttsVoiceId?: string; hasAudio?: boolean }
+  | { type: 'error'; message: string }
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 const questionAssetPath = `${import.meta.env.BASE_URL}questions.json`
@@ -90,27 +76,9 @@ function PromptBuilderPage() {
 
   const debateSessionIdRef = useRef<number | null>(null)
   const debateRunningRef = useRef(false)
-  const lastHandledTurnRef = useRef<number | null>(null)
-
-  function buildAudioDataUrl(mimeType?: string | null, base64?: string | null) {
-    if (!mimeType || !base64) {
-      return undefined
-    }
-    return `data:${mimeType};base64,${base64}`
-  }
-
-  async function autoplayAudio(dataUrl?: string) {
-    if (!dataUrl) {
-      return
-    }
-
-    try {
-      const audio = new Audio(dataUrl)
-      await audio.play()
-    } catch {
-      // Autoplay may be blocked by the browser. The audio controls remain available for manual playback.
-    }
-  }
+  const chatAbortControllerRef = useRef<AbortController | null>(null)
+  const debateAbortControllerRef = useRef<AbortController | null>(null)
+  const debatePlayerRef = useRef<PcmStreamPlayer | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -120,10 +88,7 @@ function PromptBuilderPage() {
       setError('')
 
       try {
-        const response = await fetch(questionAssetPath, {
-          signal: controller.signal,
-        })
-
+        const response = await fetch(questionAssetPath, { signal: controller.signal })
         if (!response.ok) {
           throw new Error(`질문 목록을 불러오지 못했습니다. (${response.status})`)
         }
@@ -134,7 +99,6 @@ function PromptBuilderPage() {
         if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
           return
         }
-
         setError(fetchError instanceof Error ? fetchError.message : '질문 목록을 불러오는 중 오류가 발생했습니다.')
       } finally {
         setLoadingQuestions(false)
@@ -158,8 +122,11 @@ function PromptBuilderPage() {
 
   useEffect(() => {
     return () => {
+      chatAbortControllerRef.current?.abort()
+      debateAbortControllerRef.current?.abort()
+      void debatePlayerRef.current?.dispose()
       const activeSessionId = debateSessionIdRef.current
-      if (activeSessionId && debateRunningRef.current) {
+      if (activeSessionId) {
         void stopDebateSession(activeSessionId, true)
       }
     }
@@ -229,6 +196,39 @@ function PromptBuilderPage() {
     }
   }
 
+  async function readNdjsonStream(response: Response, onEvent: (event: StreamEvent) => Promise<void> | void) {
+    if (!response.body) {
+      throw new Error('스트림 응답 본문이 비어 있습니다.')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) {
+          continue
+        }
+        await onEvent(JSON.parse(trimmed) as StreamEvent)
+      }
+    }
+
+    if (buffer.trim()) {
+      await onEvent(JSON.parse(buffer) as StreamEvent)
+    }
+  }
+
   async function handlePromptSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -250,15 +250,12 @@ function PromptBuilderPage() {
     try {
       const response = await fetch(`${apiBaseUrl}/api/system-prompt`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
 
       if (!response.ok) {
-        const message = await readErrorMessage(response, `시스템 프롬프트 생성에 실패했습니다. (${response.status})`)
-        throw new Error(message)
+        throw new Error(await readErrorMessage(response, `시스템 프롬프트 생성에 실패했습니다. (${response.status})`))
       }
 
       const data: PromptGenerateResponse = await response.json()
@@ -302,8 +299,7 @@ function PromptBuilderPage() {
       })
 
       if (!response.ok) {
-        const message = await readErrorMessage(response, `음성 등록에 실패했습니다. (${response.status})`)
-        throw new Error(message)
+        throw new Error(await readErrorMessage(response, `음성 등록에 실패했습니다. (${response.status})`))
       }
 
       const data: VoiceRegisterResponse = await response.json()
@@ -335,59 +331,172 @@ function PromptBuilderPage() {
     }
 
     const message = chatInput.trim()
+    const abortController = new AbortController()
+    const player = new PcmStreamPlayer()
+    chatAbortControllerRef.current = abortController
 
     setChatSubmitting(true)
     setChatError('')
+    setChatMessages((current) => [...current, { role: 'user', content: message }])
+    setChatInput('')
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/chat/messages`, {
+      const response = await fetch(`${apiBaseUrl}/api/chat/messages/stream`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           promptGenerationLogId,
           conversationId,
           registeredVoiceId,
           message,
         }),
+        signal: abortController.signal,
       })
 
       if (!response.ok) {
-        const errorMessage = await readErrorMessage(response, `채팅 응답 생성에 실패했습니다. (${response.status})`)
-        throw new Error(errorMessage)
+        throw new Error(await readErrorMessage(response, `채팅 스트림 생성에 실패했습니다. (${response.status})`))
       }
 
-      const data: ChatResponse = await response.json()
-      const ttsAudioDataUrl = buildAudioDataUrl(data.ttsAudioMimeType, data.ttsAudioBase64)
-      setConversationId(data.conversationId)
-      setChatMessages((current) => [
-        ...current,
-        { role: 'user', content: message },
-        {
-          role: 'assistant',
-          content: data.assistantMessage,
-          ttsAudioDataUrl,
-          ttsVoiceId: data.ttsVoiceId ?? undefined,
-        },
-      ])
-      setChatInput('')
-      void autoplayAudio(ttsAudioDataUrl)
+      let pendingVoiceId: string | undefined
+
+      await readNdjsonStream(response, async (streamEvent) => {
+        if (streamEvent.type === 'message') {
+          setConversationId(streamEvent.conversationId)
+          setChatMessages((current) => [...current, { role: 'assistant', content: streamEvent.assistantMessage }])
+          return
+        }
+
+        if (streamEvent.type === 'audio_chunk') {
+          await player.appendBase64Chunk(streamEvent.chunkBase64)
+          return
+        }
+
+        if (streamEvent.type === 'done') {
+          pendingVoiceId = streamEvent.ttsVoiceId || undefined
+          await player.finish()
+          const wavUrl = player.buildWavUrl()
+          setChatMessages((current) => {
+            const next = [...current]
+            for (let index = next.length - 1; index >= 0; index -= 1) {
+              if (next[index].role === 'assistant' && !next[index].ttsAudioDataUrl) {
+                next[index] = {
+                  ...next[index],
+                  ttsAudioDataUrl: wavUrl,
+                  ttsVoiceId: pendingVoiceId,
+                }
+                break
+              }
+            }
+            return next
+          })
+          return
+        }
+
+        if (streamEvent.type === 'error') {
+          throw new Error(streamEvent.message)
+        }
+      })
     } catch (submitError) {
+      if (submitError instanceof DOMException && submitError.name === 'AbortError') {
+        return
+      }
       setChatError(submitError instanceof Error ? submitError.message : '채팅 중 오류가 발생했습니다.')
     } finally {
+      await player.dispose()
+      chatAbortControllerRef.current = null
       setChatSubmitting(false)
     }
   }
 
-  function mapDebateTurn(turn: DebateResponse['turn']): DebateTurn {
+  function mapDebateTurn(turn: { turnIndex: number; speaker: string; cloneId: number; content: string }, ttsAudioDataUrl?: string, ttsVoiceId?: string): DebateTurn {
     return {
       turnIndex: turn.turnIndex,
       speaker: turn.speaker,
       cloneId: turn.cloneId,
       content: turn.content,
-      ttsAudioDataUrl: buildAudioDataUrl(turn.ttsAudioMimeType, turn.ttsAudioBase64),
-      ttsVoiceId: turn.ttsVoiceId ?? undefined,
+      ttsAudioDataUrl,
+      ttsVoiceId,
+    }
+  }
+
+  async function streamDebateTurn(url: string, body?: object) {
+    const abortController = new AbortController()
+    const player = new PcmStreamPlayer()
+    debateAbortControllerRef.current = abortController
+    debatePlayerRef.current = player
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+        signal: abortController.signal,
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, `논쟁 스트림 생성에 실패했습니다. (${response.status})`))
+      }
+
+      let currentTurn: DebateTurn | null = null
+      let voiceId: string | undefined
+
+      await readNdjsonStream(response, async (streamEvent) => {
+        if (streamEvent.type === 'turn') {
+          setDebateSessionId(streamEvent.debateSessionId)
+          currentTurn = mapDebateTurn(streamEvent.turn)
+          setDebateTurnsList((current) => [...current, currentTurn!])
+          return
+        }
+
+        if (streamEvent.type === 'audio_chunk') {
+          await player.appendBase64Chunk(streamEvent.chunkBase64)
+          return
+        }
+
+        if (streamEvent.type === 'done') {
+          voiceId = streamEvent.ttsVoiceId || undefined
+          await player.finish()
+          const wavUrl = player.buildWavUrl()
+          if (currentTurn) {
+            setDebateTurnsList((current) =>
+              current.map((turn) =>
+                turn.turnIndex === currentTurn!.turnIndex
+                  ? { ...turn, ttsAudioDataUrl: wavUrl, ttsVoiceId: voiceId }
+                  : turn
+              )
+            )
+          }
+          return
+        }
+
+        if (streamEvent.type === 'error') {
+          throw new Error(streamEvent.message)
+        }
+      })
+    } catch (streamError) {
+      if (streamError instanceof DOMException && streamError.name === 'AbortError') {
+        return
+      }
+      throw streamError
+    } finally {
+      debateAbortControllerRef.current = null
+      debatePlayerRef.current = null
+      await player.dispose()
+    }
+  }
+
+  async function continueDebateLoop() {
+    while (debateRunningRef.current && debateSessionIdRef.current) {
+      try {
+        await streamDebateTurn(`${apiBaseUrl}/api/debates/${debateSessionIdRef.current}/next/stream`)
+      } catch (turnError) {
+        if (turnError instanceof DOMException && turnError.name === 'AbortError') {
+          return
+        }
+        setDebateRunning(false)
+        setDebateError(turnError instanceof Error ? turnError.message : '다음 논쟁 턴 생성 중 오류가 발생했습니다.')
+        return
+      }
     }
   }
 
@@ -407,75 +516,31 @@ function PromptBuilderPage() {
       return
     }
 
-    if (debateSessionIdRef.current && debateRunningRef.current) {
-      await handleDebateStop()
-    }
-
     setDebateSubmitting(true)
     setDebateError('')
+    setDebateTurnsList([])
+    setDebateRunning(true)
+    setDebateStopping(false)
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/debates`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          cloneAId: Number(cloneAId),
-          cloneBId: Number(cloneBId),
-          cloneAVoiceId: Number(cloneAVoiceId),
-          cloneBVoiceId: Number(cloneBVoiceId),
-          topic: debateTopic,
-        }),
+      await streamDebateTurn(`${apiBaseUrl}/api/debates/stream`, {
+        cloneAId: Number(cloneAId),
+        cloneBId: Number(cloneBId),
+        cloneAVoiceId: Number(cloneAVoiceId),
+        cloneBVoiceId: Number(cloneBVoiceId),
+        topic: debateTopic,
       })
-
-      if (!response.ok) {
-        const message = await readErrorMessage(response, `논쟁 시작에 실패했습니다. (${response.status})`)
-        throw new Error(message)
+      if (debateRunningRef.current) {
+        void continueDebateLoop()
       }
-
-      const data: DebateResponse = await response.json()
-      setDebateSessionId(data.debateSessionId)
-      setDebateRunning(true)
-      setDebateStopping(false)
-      setDebateTurnsList([mapDebateTurn(data.turn)])
-      lastHandledTurnRef.current = null
     } catch (submitError) {
-      setDebateSessionId(null)
+      if (submitError instanceof DOMException && submitError.name === 'AbortError') {
+        return
+      }
       setDebateRunning(false)
-      setDebateTurnsList([])
       setDebateError(submitError instanceof Error ? submitError.message : '논쟁 시작 중 오류가 발생했습니다.')
     } finally {
       setDebateSubmitting(false)
-    }
-  }
-
-  async function handleDebateTurnPlaybackFinished(turnIndex: number) {
-    const sessionId = debateSessionIdRef.current
-    if (!debateRunningRef.current || !sessionId) {
-      return
-    }
-    if (lastHandledTurnRef.current === turnIndex) {
-      return
-    }
-
-    lastHandledTurnRef.current = turnIndex
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/debates/${sessionId}/next`, {
-        method: 'POST',
-      })
-
-      if (!response.ok) {
-        const message = await readErrorMessage(response, `다음 논쟁 턴 생성에 실패했습니다. (${response.status})`)
-        throw new Error(message)
-      }
-
-      const data: DebateResponse = await response.json()
-      setDebateTurnsList((current) => [...current, mapDebateTurn(data.turn)])
-    } catch (turnError) {
-      setDebateRunning(false)
-      setDebateError(turnError instanceof Error ? turnError.message : '다음 논쟁 턴 생성 중 오류가 발생했습니다.')
     }
   }
 
@@ -487,24 +552,20 @@ function PromptBuilderPage() {
   }
 
   async function handleDebateStop() {
-    const sessionId = debateSessionIdRef.current
-    if (!sessionId) {
-      return
-    }
-
     setDebateStopping(true)
+    setDebateRunning(false)
+    debateAbortControllerRef.current?.abort()
 
     try {
-      await stopDebateSession(sessionId)
+      if (debateSessionIdRef.current) {
+        await stopDebateSession(debateSessionIdRef.current)
+      }
     } catch {
-      // Ignore stop request failures and still stop local loop.
+      // Ignore stop request failures.
     } finally {
-      setDebateRunning(false)
+      debateAbortControllerRef.current = null
+      debatePlayerRef.current = null
       setDebateStopping(false)
-      setDebateSessionId(null)
-      debateSessionIdRef.current = null
-      debateRunningRef.current = false
-      lastHandledTurnRef.current = null
     }
   }
 
@@ -513,9 +574,7 @@ function PromptBuilderPage() {
       <section className="hero-panel">
         <p className="eyebrow">Prompt Builder</p>
         <h1>응답 기반 시스템 프롬프트 생성기</h1>
-        <p className="hero-copy">
-          질문에 답변하면 백엔드가 OpenAI를 호출해 성향과 대화 스타일을 반영한 시스템 프롬프트를 생성합니다.
-        </p>
+        <p className="hero-copy">질문에 답변하면 백엔드가 OpenAI를 호출해 성향과 대화 스타일을 반영한 시스템 프롬프트를 생성합니다.</p>
         <div className="hero-meta">
           <span>{loadingQuestions ? '질문 로딩 중' : `질문 ${questions.length}개`}</span>
           <span>답변 {answeredCount}개</span>
@@ -570,7 +629,6 @@ function PromptBuilderPage() {
         onDebateStop={handleDebateStop}
         onDebateSubmit={handleDebateSubmit}
         onTopicChange={setDebateTopic}
-        onTurnPlaybackFinished={handleDebateTurnPlaybackFinished}
         voices={voices}
       />
     </main>

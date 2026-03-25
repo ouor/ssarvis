@@ -40,7 +40,6 @@ type DebatePanelProps = {
   onDebateSubmit: React.FormEventHandler<HTMLFormElement>
   onDebateStop: () => void
   onTopicChange: (value: string) => void
-  onTurnPlaybackFinished: (turnIndex: number) => void
   voices: VoiceOption[]
 }
 
@@ -64,11 +63,8 @@ function DebatePanel({
   onDebateSubmit,
   onDebateStop,
   onTopicChange,
-  onTurnPlaybackFinished,
   voices,
 }: DebatePanelProps) {
-  const latestTurnIndex = debateTurnsList.at(-1)?.turnIndex
-
   return (
     <section className="debate-panel">
       <div className="panel-header">
@@ -148,9 +144,7 @@ function DebatePanel({
           <button className="secondary-button" disabled={!debateRunning || debateStopping} onClick={onDebateStop} type="button">
             {debateStopping ? '중단 중...' : '중단'}
           </button>
-          <span className="chat-status">
-            {debateSessionId ? `세션 ID ${debateSessionId}` : '세션 없음'}
-          </span>
+          <span className="chat-status">{debateSessionId ? `세션 ID ${debateSessionId}` : '세션 없음'}</span>
         </div>
       </form>
 
@@ -166,21 +160,14 @@ function DebatePanel({
               <p>{turn.content}</p>
               {turn.ttsAudioDataUrl ? (
                 <div className="tts-block">
-                  <audio
-                    autoPlay={debateRunning && turn.turnIndex === latestTurnIndex}
-                    controls
-                    onEnded={() => onTurnPlaybackFinished(turn.turnIndex)}
-                    onError={() => onTurnPlaybackFinished(turn.turnIndex)}
-                    preload="none"
-                    src={turn.ttsAudioDataUrl}
-                  />
+                  <audio controls preload="none" src={turn.ttsAudioDataUrl} />
                   {turn.ttsVoiceId ? <p className="tts-caption">Voice: {turn.ttsVoiceId}</p> : null}
                 </div>
               ) : null}
             </article>
           ))
         ) : (
-          <div className="empty-state">두 클론과 음성을 고르고 주제를 입력하면 A의 첫 발언부터 순서대로 재생됩니다.</div>
+          <div className="empty-state">두 클론과 음성을 고르고 주제를 입력하면 A의 첫 발언부터 실시간으로 재생됩니다.</div>
         )}
       </div>
     </section>

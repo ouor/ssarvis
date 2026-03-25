@@ -259,6 +259,30 @@ Body
 - TTS 요청 본문은 DashScope 제한에 맞추기 위해 UTF-8 기준 600바이트 이하로 잘라서 전송한다.
 - `conversationId`가 있으면 해당 대화에 연결된 시스템 프롬프트를 기준으로 응답을 생성한다.
 
+## POST `/api/chat/messages/stream`
+
+채팅 응답을 NDJSON 스트림으로 내려준다. 텍스트를 먼저 전달하고, 이후 PCM 오디오 청크를 순차적으로 보낸다.
+서버는 DashScope가 반환한 WAV 오디오를 다운로드하면서 PCM 본문을 잘라 프론트에 전달한다.
+동시에 완성된 전체 오디오는 ffmpeg 인코딩 후 S3 및 DB 이력에 저장된다.
+
+Content Type
+- Response: `application/x-ndjson`
+
+### Stream Event Types
+
+```json
+{"type":"message","conversationId":31,"assistantMessage":"좋아요. 우선순위부터 정리해볼게요."}
+{"type":"audio_chunk","audioFormat":"pcm_s16le","sampleRate":24000,"channels":1,"chunkBase64":"..."}
+{"type":"audio_chunk","audioFormat":"pcm_s16le","sampleRate":24000,"channels":1,"chunkBase64":"..."}
+{"type":"done","conversationId":31,"ttsVoiceId":"voice-id","hasAudio":true}
+```
+
+오류가 발생하면 중간에 아래 이벤트가 올 수 있다.
+
+```json
+{"type":"error","message":"Failed to stream TTS audio."}
+```
+
 ### Success Response
 
 Status
@@ -398,6 +422,23 @@ Body
   "cloneBVoiceId": 6,
   "topic": "원격근무가 대면근무보다 더 효율적인가?"
 }
+```
+
+## POST `/api/debates/stream`
+
+논쟁 세션을 만들고 첫 턴을 NDJSON 스트림으로 내려준다. 첫 이벤트는 항상 `CLONE_A`의 발언이며, 이후 PCM 오디오 청크와 완료 이벤트가 이어진다.
+
+## POST `/api/debates/{debateSessionId}/next/stream`
+
+기존 논쟁 세션의 다음 턴 1개를 NDJSON 스트림으로 내려준다.
+브라우저는 마지막 오디오 재생이 끝난 뒤 이 엔드포인트를 다시 호출해 논쟁을 이어간다.
+
+### Debate Stream Event Types
+
+```json
+{"type":"turn","debateSessionId":8,"topic":"원격근무가 대면근무보다 더 효율적인가?","turn":{"turnIndex":1,"speaker":"CLONE_A","cloneId":12,"content":"저는 원격근무가 더 효율적이라고 봅니다..."}}
+{"type":"audio_chunk","audioFormat":"pcm_s16le","sampleRate":24000,"channels":1,"chunkBase64":"..."}
+{"type":"done","debateSessionId":8,"turnIndex":1,"ttsVoiceId":"voice-id","hasAudio":true}
 ```
 
 ### Request Rules
@@ -543,6 +584,7 @@ Status
 - 채팅 이어가기 시에는 시스템 프롬프트를 항상 포함하고, 과거 대화는 최근 `OPENAI_CHAT_HISTORY_TURNS`턴만 OpenAI로 전송한다.
 - `S3_ENABLED=true` 이고 S3 설정이 유효하면, DashScope에서 받은 TTS 오디오는 ffmpeg로 MP3 인코딩 후 S3에 업로드된다.
 - 프론트 응답은 기존과 동일하게 Base64 오디오를 포함하고, S3 업로드는 서버 내부 저장 및 이력 관리 용도로 수행된다.
+- 스트리밍 엔드포인트는 DashScope가 반환한 WAV 오디오를 서버가 순차 다운로드하면서 PCM 청크로 잘라 NDJSON으로 전달한다.
 
 ## Persistence Side Effects
 

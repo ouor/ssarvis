@@ -7,18 +7,20 @@ import com.ssarvis.backend.openai.OpenAiChatCompletionRequest;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.stream.NdjsonStreamWriter;
 import com.ssarvis.backend.voice.RegisteredVoice;
 import com.ssarvis.backend.voice.RegisteredVoiceRepository;
 import com.ssarvis.backend.voice.VoiceService;
 import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,27 +64,15 @@ public class DebateService {
 
     @Transactional
     public DebateProgressResponse startDebate(DebateStartRequest request) {
-        validateRequest(request);
-
-        PromptGenerationLog cloneA = promptGenerationLogRepository.findById(request.cloneAId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A not found."));
-        PromptGenerationLog cloneB = promptGenerationLogRepository.findById(request.cloneBId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B not found."));
-        RegisteredVoice cloneAVoice = registeredVoiceRepository.findById(request.cloneAVoiceId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A voice not found."));
-        RegisteredVoice cloneBVoice = registeredVoiceRepository.findById(request.cloneBVoiceId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B voice not found."));
-
-        DebateSession debateSession = debateSessionRepository.save(new DebateSession(
-                cloneA,
-                cloneB,
-                cloneAVoice,
-                cloneBVoice,
-                request.topic().trim()
-        ));
-
+        DebateSession debateSession = createDebateSession(request);
         DebateTurnResponse firstTurn = createNextTurnInternal(debateSession);
         return new DebateProgressResponse(debateSession.getId(), debateSession.getTopic(), firstTurn);
+    }
+
+    @Transactional
+    public void streamStartDebate(DebateStartRequest request, OutputStream outputStream) throws IOException {
+        DebateSession debateSession = createDebateSession(request);
+        streamTurn(debateSession, outputStream);
     }
 
     @Transactional
@@ -95,13 +85,114 @@ public class DebateService {
     }
 
     @Transactional
+    public void streamNextTurn(Long debateSessionId, OutputStream outputStream) throws IOException {
+        DebateSession debateSession = debateSessionRepository.findById(debateSessionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found."));
+        streamTurn(debateSession, outputStream);
+    }
+
+    @Transactional
     public void stopDebate(Long debateSessionId) {
         if (!debateSessionRepository.existsById(debateSessionId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found.");
         }
     }
 
+    private DebateSession createDebateSession(DebateStartRequest request) {
+        validateRequest(request);
+
+        PromptGenerationLog cloneA = promptGenerationLogRepository.findById(request.cloneAId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A not found."));
+        PromptGenerationLog cloneB = promptGenerationLogRepository.findById(request.cloneBId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B not found."));
+        RegisteredVoice cloneAVoice = registeredVoiceRepository.findById(request.cloneAVoiceId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A voice not found."));
+        RegisteredVoice cloneBVoice = registeredVoiceRepository.findById(request.cloneBVoiceId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B voice not found."));
+
+        return debateSessionRepository.save(new DebateSession(
+                cloneA,
+                cloneB,
+                cloneAVoice,
+                cloneBVoice,
+                request.topic().trim()
+        ));
+    }
+
+    private void streamTurn(DebateSession debateSession, OutputStream outputStream) throws IOException {
+        NdjsonStreamWriter writer = new NdjsonStreamWriter(outputStream, objectMapper);
+        TurnContext turnContext = buildTurnContext(debateSession);
+
+        writer.write(Map.of(
+                "type", "turn",
+                "debateSessionId", debateSession.getId(),
+                "topic", debateSession.getTopic(),
+                "turn", Map.of(
+                        "turnIndex", turnContext.turnIndex(),
+                        "speaker", turnContext.speaker().name(),
+                        "cloneId", turnContext.activeClone().getId(),
+                        "content", turnContext.message()
+                )
+        ));
+
+        VoiceSynthesisResult ttsResult = null;
+        try {
+            ttsResult = voiceService.streamSynthesize(turnContext.message(), turnContext.activeVoice().getId(), base64Chunk -> writer.write(
+                    Map.of(
+                            "type", "audio_chunk",
+                            "audioFormat", "pcm_s16le",
+                            "sampleRate", 24000,
+                            "channels", 1,
+                            "chunkBase64", base64Chunk
+                    )
+            ));
+        } catch (ResponseStatusException exception) {
+            writer.writeError(exception.getReason() != null ? exception.getReason() : "Failed to stream TTS audio.");
+        } catch (Exception exception) {
+            writer.writeError("Failed to stream TTS audio.");
+        }
+
+        debateTurnRepository.save(new DebateTurn(
+                debateSession,
+                turnContext.speaker(),
+                turnContext.turnIndex(),
+                turnContext.message(),
+                ttsResult != null ? ttsResult.audioAsset() : null
+        ));
+
+        writer.write(Map.of(
+                "type", "done",
+                "debateSessionId", debateSession.getId(),
+                "turnIndex", turnContext.turnIndex(),
+                "ttsVoiceId", ttsResult != null ? ttsResult.voiceId() : "",
+                "hasAudio", ttsResult != null
+        ));
+    }
+
     private DebateTurnResponse createNextTurnInternal(DebateSession debateSession) {
+        TurnContext turnContext = buildTurnContext(debateSession);
+        VoiceSynthesisResult tts = voiceService.synthesize(turnContext.message(), turnContext.activeVoice().getId());
+
+        debateTurnRepository.save(new DebateTurn(
+                debateSession,
+                turnContext.speaker(),
+                turnContext.turnIndex(),
+                turnContext.message(),
+                tts != null ? tts.audioAsset() : null
+        ));
+
+        return new DebateTurnResponse(
+                turnContext.turnIndex(),
+                turnContext.speaker().name(),
+                turnContext.activeClone().getId(),
+                turnContext.message(),
+                tts != null ? tts.voiceId() : null,
+                tts != null ? tts.audioMimeType() : null,
+                tts != null ? tts.audioBase64() : null
+        );
+    }
+
+    private TurnContext buildTurnContext(DebateSession debateSession) {
         List<DebateTurn> existingTurns = debateTurnRepository.findByDebateSessionIdOrderByTurnIndexAsc(debateSession.getId());
         boolean isCloneATurn = existingTurns.size() % 2 == 0;
         PromptGenerationLog activeClone = isCloneATurn ? debateSession.getCloneA() : debateSession.getCloneB();
@@ -114,26 +205,7 @@ public class DebateService {
                 .toList();
 
         String message = generateDebateTurn(activeClone.getSystemPrompt(), debateSession.getTopic(), stance, transcript);
-        VoiceSynthesisResult tts = voiceService.synthesize(message, activeVoice.getId());
-        int turnIndex = existingTurns.size() + 1;
-
-        debateTurnRepository.save(new DebateTurn(
-                debateSession,
-                speaker,
-                turnIndex,
-                message,
-                tts != null ? tts.audioAsset() : null
-        ));
-
-        return new DebateTurnResponse(
-                turnIndex,
-                speaker.name(),
-                activeClone.getId(),
-                message,
-                tts != null ? tts.voiceId() : null,
-                tts != null ? tts.audioMimeType() : null,
-                tts != null ? tts.audioBase64() : null
-        );
+        return new TurnContext(activeClone, activeVoice, speaker, existingTurns.size() + 1, message);
     }
 
     private void validateRequest(DebateStartRequest request) {
@@ -167,9 +239,7 @@ public class DebateService {
                             systemPrompt,
                             topic,
                             stance,
-                            transcript.stream()
-                                    .map(entry -> "- " + entry.speaker().name() + ": " + entry.content())
-                                    .toList()
+                            transcript.stream().map(entry -> "- " + entry.speaker().name() + ": " + entry.content()).toList()
                     )
             ));
 
@@ -224,5 +294,14 @@ public class DebateService {
     }
 
     private record TranscriptEntry(DebateTurn.Speaker speaker, String content) {
+    }
+
+    private record TurnContext(
+            PromptGenerationLog activeClone,
+            RegisteredVoice activeVoice,
+            DebateTurn.Speaker speaker,
+            int turnIndex,
+            String message
+    ) {
     }
 }

@@ -3,7 +3,9 @@ package com.ssarvis.backend.voice;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -24,6 +26,7 @@ public class VoiceService {
 
     private static final String LANGUAGE_TYPE = "Auto";
     private static final int MAX_TTS_TEXT_LENGTH = 600;
+    private static final int WAV_HEADER_SIZE = 44;
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -167,6 +170,70 @@ public class VoiceService {
         }
     }
 
+    public VoiceSynthesisResult streamSynthesize(String text, Long registeredVoiceId, VoiceChunkListener chunkListener) {
+        if (!StringUtils.hasText(text) || registeredVoiceId == null) {
+            return null;
+        }
+
+        AppProperties.Dashscope dashscope = appProperties.getDashscope();
+        if (!StringUtils.hasText(dashscope.getApiKey())) {
+            return null;
+        }
+
+        RegisteredVoice voice = registeredVoiceRepository.findById(registeredVoiceId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
+
+        try {
+            String audioUrl = requestTtsAudioUrl(limitTtsTextLength(text), voice.getProviderVoiceId(), dashscope);
+            if (!StringUtils.hasText(audioUrl)) {
+                return null;
+            }
+
+            HttpRequest audioRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(audioUrl))
+                    .GET()
+                    .build();
+            HttpResponse<InputStream> audioResponse = httpClient.send(audioRequest, HttpResponse.BodyHandlers.ofInputStream());
+            if (audioResponse.statusCode() >= 400) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "DashScope streamed audio download failed with status " + audioResponse.statusCode() + "."
+                );
+            }
+
+            String audioMimeType = audioResponse.headers()
+                    .firstValue("Content-Type")
+                    .orElse("audio/wav");
+            ByteArrayOutputStream fullAudioBytes = new ByteArrayOutputStream();
+
+            try (InputStream inputStream = audioResponse.body()) {
+                if (audioMimeType.contains("wav")) {
+                    streamWavePcmChunks(inputStream, fullAudioBytes, chunkListener);
+                } else {
+                    fullAudioBytes.write(inputStream.readAllBytes());
+                }
+            }
+
+            byte[] audioBytes = fullAudioBytes.toByteArray();
+            GeneratedAudioAsset audioAsset = audioStorageService.storeDashscopeAudio(
+                    audioBytes,
+                    audioMimeType,
+                    voice.getProviderVoiceId()
+            );
+            return new VoiceSynthesisResult(
+                    voice.getProviderVoiceId(),
+                    audioMimeType,
+                    Base64.getEncoder().encodeToString(audioBytes),
+                    audioAsset
+            );
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to process streamed TTS audio.", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "DashScope TTS stream was interrupted.", exception);
+        }
+    }
+
     private String requestTtsAudioUrl(String text, String voiceId, AppProperties.Dashscope dashscope)
             throws IOException, InterruptedException {
         Map<String, Object> payload = Map.of(
@@ -195,6 +262,37 @@ public class VoiceService {
 
         JsonNode root = objectMapper.readTree(response.body());
         return root.path("output").path("audio").path("url").asText("");
+    }
+
+    private void streamWavePcmChunks(
+            InputStream inputStream,
+            ByteArrayOutputStream fullAudioBytes,
+            VoiceChunkListener chunkListener
+    ) throws IOException {
+        byte[] buffer = new byte[4096];
+        int bytesRead;
+        int totalBytes = 0;
+
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
+            fullAudioBytes.write(buffer, 0, bytesRead);
+
+            int offset = 0;
+            if (totalBytes < WAV_HEADER_SIZE) {
+                offset = Math.min(WAV_HEADER_SIZE - totalBytes, bytesRead);
+            }
+
+            if (offset < bytesRead && chunkListener != null) {
+                byte[] pcmChunk = new byte[bytesRead - offset];
+                System.arraycopy(buffer, offset, pcmChunk, 0, pcmChunk.length);
+                try {
+                    chunkListener.onAudioChunk(Base64.getEncoder().encodeToString(pcmChunk));
+                } catch (Exception exception) {
+                    throw new IOException("Failed to forward audio chunk.", exception);
+                }
+            }
+
+            totalBytes += bytesRead;
+        }
     }
 
     private String buildPreferredName(String originalFilename) {

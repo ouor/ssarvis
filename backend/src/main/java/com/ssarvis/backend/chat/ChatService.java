@@ -2,26 +2,28 @@ package com.ssarvis.backend.chat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ssarvis.backend.prompt.PromptGenerationLog;
-import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.openai.OpenAiChatCompletionRequest;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
+import com.ssarvis.backend.prompt.PromptGenerationLog;
+import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.stream.NdjsonStreamWriter;
 import com.ssarvis.backend.voice.VoiceService;
 import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
-import com.ssarvis.backend.config.AppProperties;
 
 @Service
 public class ChatService {
@@ -96,6 +98,68 @@ public class ChatService {
         );
     }
 
+    @Transactional
+    public void streamReply(ChatRequest request, OutputStream outputStream) throws IOException {
+        if (request == null || !StringUtils.hasText(request.message())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message must not be blank.");
+        }
+
+        NdjsonStreamWriter writer = new NdjsonStreamWriter(outputStream, objectMapper);
+        ChatConversation conversation = resolveConversation(request);
+        List<ChatMessage> history = conversation.getId() == null
+                ? List.of()
+                : chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId());
+
+        ChatConversation savedConversation = conversation.getId() == null
+                ? chatConversationRepository.save(conversation)
+                : conversation;
+
+        String userMessage = request.message().trim();
+        String assistantMessage = generateAssistantMessage(
+                conversation.getPromptGenerationLog().getSystemPrompt(),
+                history,
+                userMessage
+        );
+
+        chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.USER, userMessage));
+        writer.write(Map.of(
+                "type", "message",
+                "conversationId", savedConversation.getId(),
+                "assistantMessage", assistantMessage
+        ));
+
+        VoiceSynthesisResult ttsResult = null;
+        try {
+            ttsResult = voiceService.streamSynthesize(assistantMessage, request.registeredVoiceId(), base64Chunk -> writer.write(
+                    Map.of(
+                            "type", "audio_chunk",
+                            "audioFormat", "pcm_s16le",
+                            "sampleRate", 24000,
+                            "channels", 1,
+                            "chunkBase64", base64Chunk
+                    )
+            ));
+        } catch (ResponseStatusException exception) {
+            writer.writeError(exception.getReason() != null ? exception.getReason() : "Failed to stream TTS audio.");
+        } catch (Exception exception) {
+            writer.writeError("Failed to stream TTS audio.");
+        }
+
+        chatMessageRepository.save(new ChatMessage(
+                savedConversation,
+                ChatMessage.Role.ASSISTANT,
+                assistantMessage,
+                ttsResult != null ? ttsResult.audioAsset() : null
+        ));
+
+        writer.write(Map.of(
+                "type", "done",
+                "conversationId", savedConversation.getId(),
+                "ttsVoiceId", ttsResult != null ? ttsResult.voiceId() : "",
+                "hasAudio", ttsResult != null
+        ));
+    }
+
     private ChatConversation resolveConversation(ChatRequest request) {
         if (request.conversationId() != null) {
             return chatConversationRepository.findById(request.conversationId())
@@ -115,11 +179,7 @@ public class ChatService {
         return new ChatConversation(promptGenerationLog);
     }
 
-    private String generateAssistantMessage(
-            String systemPrompt,
-            List<ChatMessage> history,
-            String userMessage
-    ) {
+    private String generateAssistantMessage(String systemPrompt, List<ChatMessage> history, String userMessage) {
         String apiKey = appProperties.getOpenai().getApiKey();
         if (!StringUtils.hasText(apiKey)) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "OPENAI_API_KEY is not configured.");
