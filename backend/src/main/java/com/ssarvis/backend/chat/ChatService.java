@@ -123,7 +123,7 @@ public class ChatService {
         try {
             String payload = objectMapper.writeValueAsString(buildPayload(systemPrompt, history, userMessage));
             HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/responses"))
+                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
@@ -138,9 +138,9 @@ public class ChatService {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String assistantMessage = extractOutputText(root);
+            String assistantMessage = extractAssistantMessage(root);
             if (!StringUtils.hasText(assistantMessage)) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include output_text.");
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include assistant content.");
             }
 
             return assistantMessage.trim();
@@ -153,64 +153,48 @@ public class ChatService {
     }
 
     private OpenAiRequest buildPayload(String systemPrompt, List<ChatMessage> history, String userMessage) {
-        List<InputMessage> input = new ArrayList<>();
-        input.add(new InputMessage("developer", systemPrompt));
+        List<InputMessage> messages = new ArrayList<>();
+        messages.add(new InputMessage("system", systemPrompt));
 
-        for (ChatMessage message : history) {
+        for (ChatMessage message : limitHistoryToRecentTurns(history)) {
             String role = message.getRole() == ChatMessage.Role.USER ? "user" : "assistant";
-            input.add(new InputMessage(role, message.getContent()));
+            messages.add(new InputMessage(role, message.getContent()));
         }
 
-        input.add(new InputMessage("user", userMessage));
+        messages.add(new InputMessage("user", userMessage));
 
         return new OpenAiRequest(
                 appProperties.getOpenai().getModel(),
-                new Reasoning("low"),
-                new Text("medium"),
-                input
+                messages
         );
     }
 
-    private String extractOutputText(JsonNode root) {
-        JsonNode directOutputText = root.get("output_text");
-        if (directOutputText != null && directOutputText.isTextual() && StringUtils.hasText(directOutputText.asText())) {
-            return directOutputText.asText();
+    private List<ChatMessage> limitHistoryToRecentTurns(List<ChatMessage> history) {
+        int maxTurns = Math.max(appProperties.getOpenai().getChatHistoryTurns(), 0);
+        if (maxTurns == 0 || history.isEmpty()) {
+            return List.of();
         }
 
-        JsonNode output = root.get("output");
-        if (output == null || !output.isArray()) {
+        int maxMessages = maxTurns * 2;
+        if (history.size() <= maxMessages) {
+            return history;
+        }
+
+        return history.subList(history.size() - maxMessages, history.size());
+    }
+
+    private String extractAssistantMessage(JsonNode root) {
+        JsonNode choices = root.get("choices");
+        if (choices == null || !choices.isArray() || choices.isEmpty()) {
             return "";
         }
 
-        StringBuilder collectedText = new StringBuilder();
-        for (JsonNode item : output) {
-            if (!"message".equals(item.path("type").asText())) {
-                continue;
-            }
-
-            JsonNode content = item.get("content");
-            if (content == null || !content.isArray()) {
-                continue;
-            }
-
-            for (JsonNode contentItem : content) {
-                if (!"output_text".equals(contentItem.path("type").asText())) {
-                    continue;
-                }
-
-                String text = contentItem.path("text").asText("");
-                if (!StringUtils.hasText(text)) {
-                    continue;
-                }
-
-                if (!collectedText.isEmpty()) {
-                    collectedText.append('\n');
-                }
-                collectedText.append(text);
-            }
+        JsonNode contentNode = choices.get(0).path("message").path("content");
+        if (contentNode.isTextual()) {
+            return contentNode.asText("");
         }
 
-        return collectedText.toString();
+        return "";
     }
 
     private String abbreviate(String value, int maxLength) {
@@ -225,16 +209,8 @@ public class ChatService {
 
     private record OpenAiRequest(
             String model,
-            Reasoning reasoning,
-            Text text,
-            List<InputMessage> input
+            List<InputMessage> messages
     ) {
-    }
-
-    private record Reasoning(String effort) {
-    }
-
-    private record Text(String verbosity) {
     }
 
     private record InputMessage(String role, String content) {

@@ -161,16 +161,14 @@ public class DebateService {
         try {
             String payload = objectMapper.writeValueAsString(new OpenAiRequest(
                     appProperties.getOpenai().getModel(),
-                    new Reasoning("low"),
-                    new Text("medium"),
                     List.of(
-                            new InputMessage("developer", systemPrompt),
+                            new InputMessage("system", systemPrompt),
                             new InputMessage("user", userPrompt)
                     )
             ));
 
             HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/responses"))
+                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
@@ -185,9 +183,9 @@ public class DebateService {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String output = extractOutputText(root);
+            String output = extractAssistantMessage(root);
             if (!StringUtils.hasText(output)) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include output_text.");
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include assistant content.");
             }
             return output.trim();
         } catch (IOException exception) {
@@ -198,42 +196,18 @@ public class DebateService {
         }
     }
 
-    private String extractOutputText(JsonNode root) {
-        JsonNode directOutputText = root.get("output_text");
-        if (directOutputText != null && directOutputText.isTextual() && StringUtils.hasText(directOutputText.asText())) {
-            return directOutputText.asText();
-        }
-
-        JsonNode output = root.get("output");
-        if (output == null || !output.isArray()) {
+    private String extractAssistantMessage(JsonNode root) {
+        JsonNode choices = root.get("choices");
+        if (choices == null || !choices.isArray() || choices.isEmpty()) {
             return "";
         }
 
-        StringBuilder collected = new StringBuilder();
-        for (JsonNode item : output) {
-            if (!"message".equals(item.path("type").asText())) {
-                continue;
-            }
-            JsonNode content = item.get("content");
-            if (content == null || !content.isArray()) {
-                continue;
-            }
-            for (JsonNode contentItem : content) {
-                if (!"output_text".equals(contentItem.path("type").asText())) {
-                    continue;
-                }
-                String text = contentItem.path("text").asText("");
-                if (!StringUtils.hasText(text)) {
-                    continue;
-                }
-                if (!collected.isEmpty()) {
-                    collected.append('\n');
-                }
-                collected.append(text);
-            }
+        JsonNode contentNode = choices.get(0).path("message").path("content");
+        if (contentNode.isTextual()) {
+            return contentNode.asText("");
         }
 
-        return collected.toString();
+        return "";
     }
 
     private String abbreviate(String value, int maxLength) {
@@ -248,16 +222,8 @@ public class DebateService {
 
     private record OpenAiRequest(
             String model,
-            Reasoning reasoning,
-            Text text,
-            List<InputMessage> input
+            List<InputMessage> messages
     ) {
-    }
-
-    private record Reasoning(String effort) {
-    }
-
-    private record Text(String verbosity) {
     }
 
     private record InputMessage(String role, String content) {

@@ -37,6 +37,7 @@ public class AppProperties {
         private String apiKey;
         private String model = "gpt-5";
         private String baseUrl = "https://api.openai.com/v1";
+        private int chatHistoryTurns = 10;
 
         public String getApiKey() {
             return apiKey;
@@ -60,6 +61,14 @@ public class AppProperties {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+
+        public int getChatHistoryTurns() {
+            return chatHistoryTurns;
+        }
+
+        public void setChatHistoryTurns(int chatHistoryTurns) {
+            this.chatHistoryTurns = chatHistoryTurns;
         }
     }
 

@@ -490,6 +490,7 @@ Body
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `OPENAI_BASE_URL`
+- `OPENAI_CHAT_HISTORY_TURNS`
 - `APP_CORS_ALLOWED_ORIGINS`
 - `DASHSCOPE_API_KEY`
 - `DASHSCOPE_BASE_URL`
@@ -511,6 +512,8 @@ Body
 참고
 - `integrationTest` Gradle 태스크는 `backend/.env` 파일이 있으면 그 값을 읽어 테스트 프로세스 환경변수로 주입한다.
 - 현재 `integrationTest`는 실제 OpenAI, 실제 DashScope, 실제 MySQL을 호출한다.
+- OpenAI 호출은 모두 `POST /v1/chat/completions` 형식을 사용한다.
+- 채팅 이어가기 시에는 시스템 프롬프트를 항상 포함하고, 과거 대화는 최근 `OPENAI_CHAT_HISTORY_TURNS`턴만 OpenAI로 전송한다.
 - `S3_ENABLED=true` 이고 S3 설정이 유효하면, DashScope에서 받은 TTS 오디오는 ffmpeg로 MP3 인코딩 후 S3에 업로드된다.
 - 프론트 응답은 기존과 동일하게 Base64 오디오를 포함하고, S3 업로드는 서버 내부 저장 및 이력 관리 용도로 수행된다.
 

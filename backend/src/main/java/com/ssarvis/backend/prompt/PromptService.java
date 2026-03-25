@@ -60,7 +60,7 @@ public class PromptService {
         try {
             String payload = objectMapper.writeValueAsString(buildPayload(request.answers()));
             HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/responses"))
+                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
@@ -76,11 +76,11 @@ public class PromptService {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            String systemPrompt = extractOutputText(root);
+            String systemPrompt = extractAssistantMessage(root);
             if (!StringUtils.hasText(systemPrompt)) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_GATEWAY,
-                        "OpenAI response did not include output_text."
+                        "OpenAI response did not include assistant content."
                 );
             }
 
@@ -131,55 +131,25 @@ public class PromptService {
 
         return new OpenAiRequest(
                 appProperties.getOpenai().getModel(),
-                new Reasoning("low"),
-                new Text("medium"),
                 List.of(
-                        new InputMessage("developer", DEVELOPER_PROMPT),
+                        new InputMessage("system", DEVELOPER_PROMPT),
                         new InputMessage("user", prompt.toString())
                 )
         );
     }
 
-    private String extractOutputText(JsonNode root) {
-        JsonNode directOutputText = root.get("output_text");
-        if (directOutputText != null && directOutputText.isTextual() && StringUtils.hasText(directOutputText.asText())) {
-            return directOutputText.asText();
-        }
-
-        JsonNode output = root.get("output");
-        if (output == null || !output.isArray()) {
+    private String extractAssistantMessage(JsonNode root) {
+        JsonNode choices = root.get("choices");
+        if (choices == null || !choices.isArray() || choices.isEmpty()) {
             return "";
         }
 
-        StringBuilder collectedText = new StringBuilder();
-        for (JsonNode item : output) {
-            if (!"message".equals(item.path("type").asText())) {
-                continue;
-            }
-
-            JsonNode content = item.get("content");
-            if (content == null || !content.isArray()) {
-                continue;
-            }
-
-            for (JsonNode contentItem : content) {
-                if (!"output_text".equals(contentItem.path("type").asText())) {
-                    continue;
-                }
-
-                String text = contentItem.path("text").asText("");
-                if (!StringUtils.hasText(text)) {
-                    continue;
-                }
-
-                if (!collectedText.isEmpty()) {
-                    collectedText.append('\n');
-                }
-                collectedText.append(text);
-            }
+        JsonNode contentNode = choices.get(0).path("message").path("content");
+        if (contentNode.isTextual()) {
+            return contentNode.asText("");
         }
 
-        return collectedText.toString();
+        return "";
     }
 
     private String abbreviate(String value, int maxLength) {
@@ -194,16 +164,8 @@ public class PromptService {
 
     private record OpenAiRequest(
             String model,
-            Reasoning reasoning,
-            Text text,
-            List<InputMessage> input
+            List<InputMessage> messages
     ) {
-    }
-
-    private record Reasoning(String effort) {
-    }
-
-    private record Text(String verbosity) {
     }
 
     private record InputMessage(String role, String content) {
