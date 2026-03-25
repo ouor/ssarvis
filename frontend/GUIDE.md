@@ -8,16 +8,16 @@
 
 기준 경로
 - 프로젝트 루트: `frontend`
-- 메인 화면: [CloneStudioPage.tsx](/C:/Users/hurwy/Codes/ssarvis/frontend/src/pages/CloneStudioPage.tsx)
-- 화면 상태 오케스트레이션: [useCloneStudio.ts](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/hooks/useCloneStudio.ts)
+- 메인 화면: [CloneStudioPage.tsx](./src/pages/CloneStudioPage.tsx)
+- 화면 상태 오케스트레이션: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
 
 ## 1. 실시간 PCM 재생
 
 ### 관련 파일
 
-- 재생기: [PcmStreamPlayer.ts](/C:/Users/hurwy/Codes/ssarvis/frontend/src/utils/PcmStreamPlayer.ts)
-- 채팅 스트림 처리: [useCloneStudio.ts](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/hooks/useCloneStudio.ts)
-- 라이브 세션 UI: [LiveSessionPanel.tsx](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/components/LiveSessionPanel.tsx)
+- 재생기: [PcmStreamPlayer.ts](./src/utils/PcmStreamPlayer.ts)
+- 채팅 스트림 처리: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+- 라이브 세션 UI: [LiveSessionPanel.tsx](./src/features/clone-studio/components/LiveSessionPanel.tsx)
 
 ### 현재 동작
 
@@ -102,10 +102,10 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 
 ### 관련 파일
 
-- 음성 입력 훅: [useSpeechInput.ts](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/hooks/useSpeechInput.ts)
-- 라이브 세션 상태 연결: [useCloneStudio.ts](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/hooks/useCloneStudio.ts)
-- 입력 UI: [LiveSessionPanel.tsx](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/components/LiveSessionPanel.tsx)
-- 타입 선언: [web-speech.d.ts](/C:/Users/hurwy/Codes/ssarvis/frontend/src/types/web-speech.d.ts)
+- 음성 입력 훅: [useSpeechInput.ts](./src/features/clone-studio/hooks/useSpeechInput.ts)
+- 라이브 세션 상태 연결: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+- 입력 UI: [LiveSessionPanel.tsx](./src/features/clone-studio/components/LiveSessionPanel.tsx)
+- 타입 선언: [web-speech.d.ts](./src/types/web-speech.d.ts)
 
 ### 왜 별도 훅으로 분리했는가
 
@@ -250,8 +250,8 @@ if (rms >= SILENCE_THRESHOLD) {
 
 ### 관련 파일
 
-- 설문 모달 UI: [CreateCloneModal.tsx](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/components/modals/CreateCloneModal.tsx)
-- 설문 상태 및 제출 처리: [useCloneStudio.ts](/C:/Users/hurwy/Codes/ssarvis/frontend/src/features/clone-studio/hooks/useCloneStudio.ts)
+- 설문 모달 UI: [CreateCloneModal.tsx](./src/features/clone-studio/components/modals/CreateCloneModal.tsx)
+- 설문 상태 및 제출 처리: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
 - 질문 소스: `public/questions.json`
 
 ### 현재 구조

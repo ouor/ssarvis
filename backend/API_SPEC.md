@@ -586,7 +586,7 @@ Status
 
 ## Environment
 
-필수 또는 권장 환경 변수는 [backend/.env.example](/C:/Users/hurwy/Codes/ssarvis/backend/.env.example)에 정리되어 있다.
+필수 또는 권장 환경 변수는 [backend/.env.example](./.env.example)에 정리되어 있다.
 
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
