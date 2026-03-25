@@ -12,6 +12,13 @@ Content Type
 설문 응답을 받아 OpenAI를 통해 시스템 프롬프트를 생성한다.
 생성에 성공하면 결과와 요청 요약을 DB에 이력으로 저장한다.
 
+내부 생성 순서
+- 1단계: 설문 응답으로 사용자 모사용 `systemPrompt`를 생성한다.
+- 2단계: 생성된 `systemPrompt`를 바탕으로 `alias`를 생성한다.
+- 3단계: 같은 `systemPrompt`를 바탕으로 `shortDescription`를 생성한다.
+- `alias`가 비어 있으면 서버는 `"새 클론"`을 기본값으로 사용한다.
+- `shortDescription`이 비어 있으면 서버는 `systemPrompt` 앞부분을 축약해 사용한다.
+
 ### Request Body
 
 ```json
@@ -267,6 +274,11 @@ Body
 - TTS 입력 텍스트는 DashScope 제한에 맞추기 위해 UTF-8 기준 600바이트 이하로 분할되며, 가능하면 600바이트 이전의 마지막 `.` 기준으로 끊는다.
 - `conversationId`가 있으면 해당 대화에 연결된 시스템 프롬프트를 기준으로 응답을 생성한다.
 - 등록 음성은 현재 서버가 사용하는 `DASHSCOPE_TTS_MODEL`과 같은 모델로 등록된 경우에만 사용할 수 있다.
+- OpenAI로 보내는 채팅 컨텍스트는 아래 순서로 구성된다.
+  - `system`: 클론 시스템 프롬프트
+  - 최근 `OPENAI_CHAT_HISTORY_TURNS`턴의 히스토리
+  - `system`: 채팅 생성 지시문
+  - `user`: 이번 사용자 메시지
 
 ## POST `/api/chat/messages/stream`
 
@@ -463,6 +475,12 @@ Body
 - 첫 응답은 항상 `CLONE_A`의 발언이다.
 - 각 발언은 선택한 등록 음성으로 TTS를 생성한다.
 - 각 등록 음성은 현재 서버의 `DASHSCOPE_TTS_MODEL`과 호환되어야 한다.
+- OpenAI로 보내는 논쟁 컨텍스트는 현재 발언하는 클론 기준으로 아래 순서로 구성된다.
+  - `system`: 현재 클론의 시스템 프롬프트
+  - 최근 `OPENAI_CHAT_HISTORY_TURNS`턴의 논쟁 히스토리
+  - 히스토리에서 현재 클론의 과거 발언은 `user`, 상대 클론 발언은 `assistant` 역할로 매핑된다.
+  - 마지막 `system`: 논쟁 생성 지시문
+- 논쟁 생성 지시문에는 현재 주제와 현재 클론의 입장 정보가 포함된다.
 
 ### Success Response
 
@@ -598,7 +616,9 @@ Status
 - 현재 `integrationTest`는 실제 OpenAI, 실제 DashScope, 실제 MySQL을 호출한다.
 - `integrationTest`의 음성 등록 샘플은 외부 합성 대신 `backend/src/test/resources/sample/haru.wav` 파일을 사용한다.
 - OpenAI 호출은 모두 `POST /v1/chat/completions` 형식을 사용한다.
+- 시스템 프롬프트 생성은 한 번에 JSON을 받는 방식이 아니라 `systemPrompt -> alias -> shortDescription` 순서의 단계형 OpenAI 호출로 처리된다.
 - 채팅 이어가기 시에는 시스템 프롬프트를 항상 포함하고, 과거 대화는 최근 `OPENAI_CHAT_HISTORY_TURNS`턴만 OpenAI로 전송한다.
+- 논쟁도 시스템 프롬프트를 항상 포함하고, 최근 `OPENAI_CHAT_HISTORY_TURNS`턴만 OpenAI로 전송한다.
 - `S3_ENABLED=true` 이고 S3 설정이 유효하면, DashScope에서 받은 TTS 오디오는 ffmpeg로 MP3 인코딩 후 S3에 업로드된다.
 - 프론트 응답은 기존과 동일하게 Base64 오디오를 포함하고, S3 업로드는 서버 내부 저장 및 이력 관리 용도로 수행된다.
 - 스트리밍 엔드포인트는 DashScope realtime websocket에서 PCM 청크를 받아 NDJSON으로 전달한다.
