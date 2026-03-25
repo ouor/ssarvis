@@ -1,12 +1,17 @@
 package com.ssarvis.backend.voice;
 
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtime;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeAudioFormat;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeCallback;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeConfig;
+import com.alibaba.dashscope.audio.qwen_tts_realtime.QwenTtsRealtimeParam;
+import com.alibaba.dashscope.exception.NoApiKeyException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.JsonObject;
 import com.ssarvis.backend.config.AppProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -16,6 +21,13 @@ import java.text.Normalizer;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+import java.time.Duration;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -25,8 +37,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class VoiceService {
 
-    private static final String LANGUAGE_TYPE = "Auto";
     private static final int MAX_TTS_TEXT_LENGTH = 600;
+    private static final long REALTIME_UPDATE_TIMEOUT_SECONDS = 20;
+    private static final Duration EXTERNAL_REQUEST_TIMEOUT = Duration.ofSeconds(20);
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -78,6 +91,7 @@ public class VoiceService {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(dashscope.getBaseUrl() + "/services/audio/tts/customization"))
+                    .timeout(EXTERNAL_REQUEST_TIMEOUT)
                     .header("Authorization", "Bearer " + dashscope.getApiKey())
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8))
@@ -114,7 +128,9 @@ public class VoiceService {
     }
 
     public List<VoiceSummaryResponse> listVoices() {
+        String currentTtsModel = appProperties.getDashscope().getTtsModel();
         return registeredVoiceRepository.findAllByOrderByIdDesc().stream()
+                .filter(voice -> currentTtsModel.equals(voice.getTargetModel()))
                 .map(voice -> new VoiceSummaryResponse(
                         voice.getId(),
                         voice.getProviderVoiceId(),
@@ -139,6 +155,7 @@ public class VoiceService {
 
         RegisteredVoice voice = registeredVoiceRepository.findById(registeredVoiceId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
+        validateVoiceCompatibility(voice);
 
         try {
             CombinedAudio combinedAudio = synthesizeCombinedAudio(text, voice.getProviderVoiceId(), dashscope, null);
@@ -176,6 +193,7 @@ public class VoiceService {
 
         RegisteredVoice voice = registeredVoiceRepository.findById(registeredVoiceId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
+        validateVoiceCompatibility(voice);
 
         try {
             CombinedAudio combinedAudio = synthesizeCombinedAudio(text, voice.getProviderVoiceId(), dashscope, chunkListener);
@@ -201,36 +219,6 @@ public class VoiceService {
         }
     }
 
-    private String requestTtsAudioUrl(String text, String voiceId, AppProperties.Dashscope dashscope)
-            throws IOException, InterruptedException {
-        Map<String, Object> payload = Map.of(
-                "model", dashscope.getTtsModel(),
-                "input", Map.of(
-                        "text", text,
-                        "voice", voiceId,
-                        "language_type", LANGUAGE_TYPE
-                )
-        );
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(dashscope.getBaseUrl() + "/services/aigc/multimodal-generation/generation"))
-                .header("Authorization", "Bearer " + dashscope.getApiKey())
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload), StandardCharsets.UTF_8))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (response.statusCode() != 200) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "DashScope TTS failed with status " + response.statusCode() + ". Body: " + abbreviate(response.body(), 400)
-            );
-        }
-
-        JsonNode root = objectMapper.readTree(response.body());
-        return root.path("output").path("audio").path("url").asText("");
-    }
-
     private CombinedAudio synthesizeCombinedAudio(
             String text,
             String providerVoiceId,
@@ -241,103 +229,41 @@ public class VoiceService {
         if (segments.isEmpty()) {
             return null;
         }
+        RealtimeSynthesisCollector collector = new RealtimeSynthesisCollector(chunkListener);
+        QwenTtsRealtime realtimeClient = buildRealtimeClient(dashscope, collector);
 
-        ByteArrayOutputStream combinedPcmBytes = new ByteArrayOutputStream();
-        WaveFormat waveFormat = null;
-        String audioMimeType = "audio/wav";
+        try {
+            connectRealtimeClient(realtimeClient);
+            realtimeClient.updateSession(QwenTtsRealtimeConfig.builder()
+                    .voice(providerVoiceId)
+                    .responseFormat(QwenTtsRealtimeAudioFormat.PCM_24000HZ_MONO_16BIT)
+                    .mode("server_commit")
+                    .build());
 
-        for (String segment : segments) {
-            String audioUrl = requestTtsAudioUrl(segment, providerVoiceId, dashscope);
-            if (!StringUtils.hasText(audioUrl)) {
-                continue;
+            for (String segment : segments) {
+                realtimeClient.appendText(segment);
+            }
+            realtimeClient.finish();
+
+            collector.awaitFinished();
+            collector.throwIfFailed();
+
+            byte[] pcmBytes = collector.toPcmBytes();
+            if (pcmBytes.length == 0) {
+                return null;
             }
 
-            HttpRequest audioRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(audioUrl))
-                    .GET()
-                    .build();
-            HttpResponse<byte[]> audioResponse = httpClient.send(audioRequest, HttpResponse.BodyHandlers.ofByteArray());
-            if (audioResponse.statusCode() >= 400) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "DashScope audio download failed with status " + audioResponse.statusCode() + "."
-                );
-            }
-
-            audioMimeType = audioResponse.headers().firstValue("Content-Type").orElse("audio/wav");
-            byte[] audioBytes = audioResponse.body();
-
-            if (!audioMimeType.contains("wav")) {
-                if (segments.size() > 1) {
-                    throw new ResponseStatusException(
-                            HttpStatus.BAD_GATEWAY,
-                            "DashScope returned unsupported audio type for segmented TTS: " + audioMimeType
-                    );
-                }
-                return new CombinedAudio(audioBytes, audioMimeType);
-            }
-
-            ParsedWaveAudio parsedWaveAudio = parseWaveAudio(audioBytes);
-            if (waveFormat == null) {
-                waveFormat = parsedWaveAudio.format();
-            } else if (!waveFormat.matches(parsedWaveAudio.format())) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "DashScope returned inconsistent WAV formats across TTS segments.");
-            }
-
-            combinedPcmBytes.write(parsedWaveAudio.pcmBytes());
-            if (chunkListener != null) {
-                streamPcmBytes(parsedWaveAudio.pcmBytes(), parsedWaveAudio.format(), chunkListener);
+            WaveFormat waveFormat = new WaveFormat(collector.getSampleRate(), collector.getChannels(), 16);
+            return new CombinedAudio(wrapPcmAsWav(pcmBytes, waveFormat), "audio/wav");
+        } catch (NoApiKeyException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "DASHSCOPE_API_KEY is not configured.", exception);
+        } finally {
+            try {
+                realtimeClient.close();
+            } catch (Exception ignored) {
+                // The session may already be closed after finish().
             }
         }
-
-        if (combinedPcmBytes.size() == 0) {
-            return null;
-        }
-
-        WaveFormat finalFormat = waveFormat != null ? waveFormat : new WaveFormat(24000, 1, 16);
-        return new CombinedAudio(wrapPcmAsWav(combinedPcmBytes.toByteArray(), finalFormat), "audio/wav");
-    }
-
-    private byte[] readExactBytes(InputStream inputStream, int expectedLength) throws IOException {
-        byte[] buffer = new byte[expectedLength];
-        int offset = 0;
-
-        while (offset < expectedLength) {
-            int bytesRead = inputStream.read(buffer, offset, expectedLength - offset);
-            if (bytesRead == -1) {
-                break;
-            }
-            offset += bytesRead;
-        }
-
-        if (offset == expectedLength) {
-            return buffer;
-        }
-
-        byte[] partial = new byte[offset];
-        System.arraycopy(buffer, 0, partial, 0, offset);
-        return partial;
-    }
-
-    private void copyExactBytes(InputStream inputStream, ByteArrayOutputStream outputStream, int length) throws IOException {
-        byte[] buffer = new byte[4096];
-        int remaining = length;
-
-        while (remaining > 0) {
-            int bytesRead = inputStream.read(buffer, 0, Math.min(buffer.length, remaining));
-            if (bytesRead == -1) {
-                throw new IOException("Unexpected end of WAV chunk.");
-            }
-            outputStream.write(buffer, 0, bytesRead);
-            remaining -= bytesRead;
-        }
-    }
-
-    private int littleEndianInt(byte[] bytes, int offset) {
-        return (bytes[offset] & 0xff)
-                | ((bytes[offset + 1] & 0xff) << 8)
-                | ((bytes[offset + 2] & 0xff) << 16)
-                | ((bytes[offset + 3] & 0xff) << 24);
     }
 
     private String buildDisplayName(String alias, String originalFilename) {
@@ -381,6 +307,16 @@ public class VoiceService {
             return value;
         }
         return value.substring(0, maxLength) + "...";
+    }
+
+    private void validateVoiceCompatibility(RegisteredVoice voice) {
+        String currentTtsModel = appProperties.getDashscope().getTtsModel();
+        if (!currentTtsModel.equals(voice.getTargetModel())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "This voice was registered for an older DashScope model. Please register it again."
+            );
+        }
     }
 
     private List<String> splitTextForTts(String text) {
@@ -467,93 +403,6 @@ public class VoiceService {
         return lastValidIndex;
     }
 
-    private ParsedWaveAudio parseWaveAudio(byte[] audioBytes) throws IOException {
-        try (InputStream inputStream = new ByteArrayInputStream(audioBytes)) {
-            byte[] riffHeader = readExactBytes(inputStream, 12);
-            if (riffHeader.length < 12
-                    || !"RIFF".equals(new String(riffHeader, 0, 4, StandardCharsets.US_ASCII))
-                    || !"WAVE".equals(new String(riffHeader, 8, 4, StandardCharsets.US_ASCII))) {
-                throw new IOException("Unsupported WAV header.");
-            }
-
-            WaveFormat format = null;
-            byte[] pcmBytes = new byte[0];
-
-            while (true) {
-                byte[] chunkHeader = readExactBytes(inputStream, 8);
-                if (chunkHeader.length == 0) {
-                    break;
-                }
-                if (chunkHeader.length < 8) {
-                    throw new IOException("Unexpected end of WAV chunk header.");
-                }
-
-                String chunkId = new String(chunkHeader, 0, 4, StandardCharsets.US_ASCII);
-                int chunkSize = littleEndianInt(chunkHeader, 4);
-                byte[] chunkData = readExactBytes(inputStream, chunkSize);
-                if (chunkData.length < chunkSize) {
-                    throw new IOException("Unexpected end of WAV chunk data.");
-                }
-
-                if ("fmt ".equals(chunkId)) {
-                    format = parseWaveFormat(chunkData);
-                } else if ("data".equals(chunkId)) {
-                    pcmBytes = chunkData;
-                }
-
-                if ((chunkSize & 1) == 1) {
-                    readExactBytes(inputStream, 1);
-                }
-            }
-
-            if (format == null) {
-                format = new WaveFormat(24000, 1, 16);
-            }
-
-            return new ParsedWaveAudio(format, pcmBytes);
-        }
-    }
-
-    private WaveFormat parseWaveFormat(byte[] chunkData) throws IOException {
-        if (chunkData.length < 16) {
-            throw new IOException("Invalid WAV fmt chunk.");
-        }
-
-        int audioFormat = littleEndianShort(chunkData, 0);
-        int channels = littleEndianShort(chunkData, 2);
-        int sampleRate = littleEndianInt(chunkData, 4);
-        int bitsPerSample = littleEndianShort(chunkData, 14);
-
-        if (audioFormat != 1) {
-            throw new IOException("Only PCM WAV is supported.");
-        }
-
-        return new WaveFormat(sampleRate, channels, bitsPerSample);
-    }
-
-    private int littleEndianShort(byte[] bytes, int offset) {
-        return (bytes[offset] & 0xff) | ((bytes[offset + 1] & 0xff) << 8);
-    }
-
-    private void streamPcmBytes(byte[] pcmBytes, WaveFormat format, VoiceChunkListener chunkListener) throws IOException {
-        int offset = 0;
-        while (offset < pcmBytes.length) {
-            int length = Math.min(4096, pcmBytes.length - offset);
-            byte[] chunk = new byte[length];
-            System.arraycopy(pcmBytes, offset, chunk, 0, length);
-            try {
-                chunkListener.onAudioChunk(
-                        Base64.getEncoder().encodeToString(chunk),
-                        format.sampleRate(),
-                        format.channels()
-                );
-            } catch (Exception exception) {
-                throw new IOException("Failed to forward audio chunk.", exception);
-            }
-            offset += length;
-        }
-    }
-
     private byte[] wrapPcmAsWav(byte[] pcmBytes, WaveFormat format) {
         int headerSize = 44;
         byte[] wavBytes = new byte[headerSize + pcmBytes.length];
@@ -582,18 +431,198 @@ public class VoiceService {
         }
     }
 
-    private record WaveFormat(int sampleRate, int channels, int bitsPerSample) {
-        private boolean matches(WaveFormat other) {
-            return other != null
-                    && sampleRate == other.sampleRate
-                    && channels == other.channels
-                    && bitsPerSample == other.bitsPerSample;
+    private QwenTtsRealtime buildRealtimeClient(AppProperties.Dashscope dashscope, RealtimeSynthesisCollector collector) {
+        QwenTtsRealtimeParam param = QwenTtsRealtimeParam.builder()
+                .model(dashscope.getTtsModel())
+                .url(dashscope.getRealtimeUrl())
+                .apikey(dashscope.getApiKey())
+                .build();
+        return new QwenTtsRealtime(param, collector);
+    }
+
+    private void connectRealtimeClient(QwenTtsRealtime realtimeClient) throws NoApiKeyException {
+        CompletableFuture<Void> connectFuture = CompletableFuture.runAsync(() -> {
+            try {
+                realtimeClient.connect();
+            } catch (NoApiKeyException exception) {
+                throw new RealtimeConnectException(exception);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new RealtimeConnectionInterruptedException(exception);
+            }
+        });
+
+        try {
+            connectFuture.get(REALTIME_UPDATE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RealtimeConnectException realtimeConnectException) {
+                throw realtimeConnectException.getCause();
+            }
+            if (cause instanceof RealtimeConnectionInterruptedException realtimeConnectionInterruptedException) {
+                Thread.currentThread().interrupt();
+                throw new ResponseStatusException(
+                        HttpStatus.INTERNAL_SERVER_ERROR,
+                        "DashScope realtime TTS connection was interrupted.",
+                        realtimeConnectionInterruptedException.getCause()
+                );
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "DashScope realtime TTS connection failed.", cause);
+        } catch (TimeoutException exception) {
+            throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "DashScope realtime TTS connection timed out.", exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "DashScope realtime TTS connection was interrupted.", exception);
         }
     }
 
-    private record ParsedWaveAudio(WaveFormat format, byte[] pcmBytes) {
+    private record WaveFormat(int sampleRate, int channels, int bitsPerSample) {
     }
 
     private record CombinedAudio(byte[] audioBytes, String audioMimeType) {
+    }
+
+    private static final class RealtimeSynthesisCollector extends QwenTtsRealtimeCallback {
+        private final ByteArrayOutputStream pcmBytes = new ByteArrayOutputStream();
+        private final CountDownLatch finishedLatch = new CountDownLatch(1);
+        private final AtomicReference<RuntimeException> callbackFailure = new AtomicReference<>();
+        private final VoiceChunkListener chunkListener;
+        private volatile long lastUpdateAtMillis = System.currentTimeMillis();
+        private volatile int sampleRate = 24000;
+        private volatile int channels = 1;
+
+        private RealtimeSynthesisCollector(VoiceChunkListener chunkListener) {
+            this.chunkListener = chunkListener;
+        }
+
+        @Override
+        public void onOpen() {
+            touch();
+        }
+
+        @Override
+        public void onEvent(JsonObject message) {
+            try {
+                touch();
+                String type = message.has("type") ? message.get("type").getAsString() : "";
+                switch (type) {
+                    case "response.audio.delta" -> handleAudioDelta(message);
+                    case "session.finished" -> finishedLatch.countDown();
+                    case "error", "response.error" -> fail(extractErrorMessage(message));
+                    default -> {
+                    }
+                }
+            } catch (Exception exception) {
+                fail("Failed to process DashScope realtime event.", exception);
+            }
+        }
+
+        @Override
+        public void onClose(int code, String reason) {
+            touch();
+            if (code >= 4000 && callbackFailure.get() == null) {
+                fail("DashScope realtime connection closed unexpectedly: " + code + " " + reason);
+                return;
+            }
+            finishedLatch.countDown();
+        }
+
+        private void handleAudioDelta(JsonObject message) throws Exception {
+            if (!message.has("delta")) {
+                return;
+            }
+
+            byte[] chunk = Base64.getDecoder().decode(message.get("delta").getAsString());
+            synchronized (pcmBytes) {
+                pcmBytes.write(chunk);
+            }
+            if (chunkListener != null) {
+                chunkListener.onAudioChunk(Base64.getEncoder().encodeToString(chunk), sampleRate, channels);
+            }
+        }
+
+        private void awaitFinished() throws InterruptedException {
+            while (!finishedLatch.await(1, TimeUnit.SECONDS)) {
+                long idleMillis = System.currentTimeMillis() - lastUpdateAtMillis;
+                if (idleMillis >= TimeUnit.SECONDS.toMillis(REALTIME_UPDATE_TIMEOUT_SECONDS)) {
+                    throw new ResponseStatusException(
+                            HttpStatus.GATEWAY_TIMEOUT,
+                            "DashScope realtime TTS did not receive updates for 20 seconds."
+                    );
+                }
+            }
+        }
+
+        private void throwIfFailed() {
+            RuntimeException failure = callbackFailure.get();
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
+        private byte[] toPcmBytes() {
+            synchronized (pcmBytes) {
+                return pcmBytes.toByteArray();
+            }
+        }
+
+        private int getSampleRate() {
+            return sampleRate;
+        }
+
+        private int getChannels() {
+            return channels;
+        }
+
+        private void touch() {
+            lastUpdateAtMillis = System.currentTimeMillis();
+        }
+
+        private void fail(String message) {
+            fail(message, null);
+        }
+
+        private void fail(String message, Exception cause) {
+            callbackFailure.compareAndSet(
+                    null,
+                    new ResponseStatusException(HttpStatus.BAD_GATEWAY, message, cause)
+            );
+            finishedLatch.countDown();
+        }
+
+        private String extractErrorMessage(JsonObject message) {
+            if (message.has("error")) {
+                JsonObject error = message.getAsJsonObject("error");
+                if (error.has("message")) {
+                    return "DashScope realtime TTS failed: " + error.get("message").getAsString();
+                }
+            }
+            if (message.has("message")) {
+                return "DashScope realtime TTS failed: " + message.get("message").getAsString();
+            }
+            return "DashScope realtime TTS failed.";
+        }
+    }
+
+    private static final class RealtimeConnectException extends RuntimeException {
+        private RealtimeConnectException(NoApiKeyException cause) {
+            super(cause);
+        }
+
+        @Override
+        public NoApiKeyException getCause() {
+            return (NoApiKeyException) super.getCause();
+        }
+    }
+
+    private static final class RealtimeConnectionInterruptedException extends RuntimeException {
+        private RealtimeConnectionInterruptedException(InterruptedException cause) {
+            super(cause);
+        }
+
+        @Override
+        public InterruptedException getCause() {
+            return (InterruptedException) super.getCause();
+        }
     }
 }

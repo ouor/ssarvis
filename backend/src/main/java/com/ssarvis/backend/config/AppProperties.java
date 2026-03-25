@@ -86,8 +86,9 @@ public class AppProperties {
 
     public static class Dashscope {
         private String apiKey;
-        private String baseUrl = "https://dashscope-intl.aliyuncs.com/api/v1";
-        private String ttsModel = "qwen3-tts-vc-2026-01-22";
+        private String baseUrl = "https://dashscope.aliyuncs.com/api/v1";
+        private String realtimeUrl = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime";
+        private String ttsModel = "qwen3-tts-vc-realtime-2026-01-15";
 
         public String getApiKey() {
             return apiKey;
@@ -103,6 +104,14 @@ public class AppProperties {
 
         public void setBaseUrl(String baseUrl) {
             this.baseUrl = baseUrl;
+        }
+
+        public String getRealtimeUrl() {
+            return realtimeUrl;
+        }
+
+        public void setRealtimeUrl(String realtimeUrl) {
+            this.realtimeUrl = realtimeUrl;
         }
 
         public String getTtsModel() {

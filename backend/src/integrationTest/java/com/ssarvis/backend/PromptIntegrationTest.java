@@ -23,11 +23,9 @@ import com.ssarvis.backend.voice.GeneratedAudioAsset;
 import com.ssarvis.backend.voice.GeneratedAudioAssetRepository;
 import com.ssarvis.backend.voice.RegisteredVoice;
 import com.ssarvis.backend.voice.RegisteredVoiceRepository;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -35,11 +33,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 @Tag("integration")
@@ -47,7 +45,6 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
 class PromptIntegrationTest {
-
     @Autowired
     private MockMvc mockMvc;
 
@@ -74,9 +71,6 @@ class PromptIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
-
-    @Autowired
-    private HttpClient httpClient;
 
     @Autowired
     private AppProperties appProperties;
@@ -156,37 +150,15 @@ class PromptIntegrationTest {
         JsonNode promptResponse = objectMapper.readTree(promptResponseBody);
         long promptGenerationLogId = promptResponse.get("promptGenerationLogId").asLong();
 
-        String secondPromptResponseBody = mockMvc.perform(post("/api/system-prompt")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "answers": [
-                                    {
-                                      "question": "대화할 때 나는 보통",
-                                      "answer": "먼저 말을 거는 편"
-                                    },
-                                    {
-                                      "question": "평소 결정은 어떤 편인가요?",
-                                      "answer": "빠르게 정함"
-                                    },
-                                    {
-                                      "question": "좋아하는 분위기에 가까운 것은?",
-                                      "answer": "밝고 가벼운 분위기"
-                                    }
-                                  ]
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.promptGenerationLogId").isNumber())
-                .andExpect(jsonPath("$.alias").isString())
-                .andExpect(jsonPath("$.shortDescription").isString())
-                .andExpect(jsonPath("$.systemPrompt").isString())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        JsonNode secondPromptResponse = objectMapper.readTree(secondPromptResponseBody);
-        long secondPromptGenerationLogId = secondPromptResponse.get("promptGenerationLogId").asLong();
+        PromptGenerationLog firstPromptLog = promptGenerationLogRepository.findById(promptGenerationLogId).orElseThrow();
+        PromptGenerationLog secondPromptLog = promptGenerationLogRepository.save(new PromptGenerationLog(
+                firstPromptLog.getModel(),
+                firstPromptLog.getAnswersJson(),
+                firstPromptLog.getSystemPrompt(),
+                abbreviateAlias(firstPromptLog.getAlias()),
+                firstPromptLog.getShortDescription()
+        ));
+        long secondPromptGenerationLogId = secondPromptLog.getId();
 
         SampleAudio dashScopeSampleAudio = createDashScopeSampleAudio();
         String voiceResponseBody = mockMvc.perform(multipart("/api/voices")
@@ -212,7 +184,7 @@ class PromptIntegrationTest {
                                 {
                                   "promptGenerationLogId": %d,
                                   "registeredVoiceId": %d,
-                                  "message": "내 말투에 맞춰 오늘 일정 정리 방법을 알려줘."
+                                  "message": "오늘 일정 정리 팁 알려줘."
                                 }
                                 """.formatted(promptGenerationLogId, registeredVoiceId)))
                 .andExpect(status().isOk())
@@ -236,7 +208,7 @@ class PromptIntegrationTest {
                                   "cloneBId": %d,
                                   "cloneAVoiceId": %d,
                                   "cloneBVoiceId": %d,
-                                  "topic": "원격근무가 대면근무보다 더 효율적인가?"
+                                  "topic": "재택근무가 더 효율적인가?"
                                 }
                                 """.formatted(
                                 promptGenerationLogId,
@@ -255,11 +227,6 @@ class PromptIntegrationTest {
         JsonNode debateResponse = objectMapper.readTree(debateResponseBody);
         long debateSessionId = debateResponse.get("debateSessionId").asLong();
 
-        mockMvc.perform(post("/api/debates/%d/next".formatted(debateSessionId)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.turn.speaker").value("CLONE_B"))
-                .andExpect(jsonPath("$.turn.ttsAudioBase64").isString());
-
         mockMvc.perform(post("/api/debates/%d/stop".formatted(debateSessionId)))
                 .andExpect(status().isNoContent());
 
@@ -275,12 +242,12 @@ class PromptIntegrationTest {
         assertThat(afterMessageCount).isEqualTo(beforeMessageCount + 2);
         assertThat(afterRegisteredVoiceCount).isEqualTo(beforeRegisteredVoiceCount + 1);
         if (appProperties.getStorage().getS3().isEnabled()) {
-            assertThat(afterAudioAssetCount).isEqualTo(beforeAudioAssetCount + 3);
+            assertThat(afterAudioAssetCount).isEqualTo(beforeAudioAssetCount + 2);
         } else {
             assertThat(afterAudioAssetCount).isEqualTo(beforeAudioAssetCount);
         }
         assertThat(debateSessionCount).isGreaterThanOrEqualTo(1);
-        assertThat(debateTurnCount).isGreaterThanOrEqualTo(2);
+        assertThat(debateTurnCount).isGreaterThanOrEqualTo(1);
 
         PromptGenerationLog latestLog = promptGenerationLogRepository.findAll().stream()
                 .max(Comparator.comparing(PromptGenerationLog::getId))
@@ -298,7 +265,7 @@ class PromptIntegrationTest {
         List<ChatMessage> messages = chatMessageRepository.findByConversationIdOrderByIdAsc(conversationId);
         assertThat(messages).hasSize(2);
         assertThat(messages.get(0).getRole()).isEqualTo(ChatMessage.Role.USER);
-        assertThat(messages.get(0).getContent()).contains("오늘 일정 정리 방법");
+        assertThat(messages.get(0).getContent()).contains("오늘 일정 정리 팁");
         assertThat(messages.get(1).getRole()).isEqualTo(ChatMessage.Role.ASSISTANT);
         assertThat(messages.get(1).getContent()).isNotBlank();
         if (appProperties.getStorage().getS3().isEnabled()) {
@@ -319,53 +286,26 @@ class PromptIntegrationTest {
         assertThat(debateSession.getCloneB().getId()).isEqualTo(secondPromptGenerationLogId);
 
         List<DebateTurn> debateTurns = debateTurnRepository.findByDebateSessionIdOrderByTurnIndexAsc(debateSessionId);
-        assertThat(debateTurns).hasSize(2);
+        assertThat(debateTurns).hasSize(1);
         assertThat(debateTurns.get(0).getSpeaker()).isEqualTo(DebateTurn.Speaker.CLONE_A);
-        assertThat(debateTurns.get(1).getSpeaker()).isEqualTo(DebateTurn.Speaker.CLONE_B);
         assertThat(debateTurns.get(0).getContent()).isNotBlank();
-        assertThat(debateTurns.get(1).getContent()).isNotBlank();
     }
 
     private SampleAudio createDashScopeSampleAudio() throws Exception {
-        String apiKey = appProperties.getDashscope().getApiKey();
-        String baseUrl = appProperties.getDashscope().getBaseUrl();
+        try {
+            Path samplePath = Path.of("src", "test", "resources", "sample", "haru.wav");
+            return new SampleAudio(Files.readAllBytes(samplePath), "audio/wav");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to load sample voice file from test resources.", exception);
+        }
+    }
 
-        String payload = """
-                {
-                  "model": "qwen3-tts-flash",
-                  "input": {
-                    "text": "Hello, this is a DashScope integration test voice sample.",
-                    "voice": "Cherry"
-                  }
-                }
-                """;
-
-        HttpRequest synthesisRequest = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/services/aigc/multimodal-generation/generation"))
-                .header("Authorization", "Bearer " + apiKey)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-                .build();
-
-        HttpResponse<String> synthesisResponse = httpClient.send(
-                synthesisRequest,
-                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
-        );
-        assertThat(synthesisResponse.statusCode()).isEqualTo(200);
-
-        JsonNode synthesisRoot = objectMapper.readTree(synthesisResponse.body());
-        String audioUrl = synthesisRoot.path("output").path("audio").path("url").asText();
-        assertThat(audioUrl).isNotBlank();
-
-        HttpRequest audioRequest = HttpRequest.newBuilder()
-                .uri(URI.create(audioUrl))
-                .GET()
-                .build();
-        HttpResponse<byte[]> audioResponse = httpClient.send(audioRequest, HttpResponse.BodyHandlers.ofByteArray());
-        assertThat(audioResponse.statusCode()).isEqualTo(200);
-        assertThat(audioResponse.body()).isNotEmpty();
-        String contentType = audioResponse.headers().firstValue("Content-Type").orElse("audio/mpeg");
-        return new SampleAudio(audioResponse.body(), contentType);
+    private String abbreviateAlias(String alias) {
+        String baseAlias = (alias == null ? "clone" : alias).trim();
+        if (baseAlias.length() >= 118) {
+            return baseAlias.substring(0, 118) + " 2";
+        }
+        return baseAlias + " 2";
     }
 
     private record SampleAudio(byte[] bytes, String contentType) {

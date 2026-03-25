@@ -17,6 +17,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -27,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ChatService {
+    private static final Duration EXTERNAL_REQUEST_TIMEOUT = Duration.ofSeconds(20);
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -189,6 +191,7 @@ public class ChatService {
             String payload = objectMapper.writeValueAsString(buildPayload(systemPrompt, history, userMessage));
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
+                    .timeout(EXTERNAL_REQUEST_TIMEOUT)
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))

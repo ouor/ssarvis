@@ -263,14 +263,15 @@ Body
 - 기존 대화를 이어갈 때는 `conversationId`를 사용한다.
 - `registeredVoiceId`는 선택 값이다.
 - `registeredVoiceId`가 있으면 해당 등록 음성으로 DashScope TTS를 생성한다.
-- TTS 요청 시 서버는 `language_type`을 `Auto`로 사용한다.
-- TTS 요청 본문은 DashScope 제한에 맞추기 위해 UTF-8 기준 600바이트 이하로 잘라서 전송한다.
+- TTS는 DashScope realtime websocket을 통해 생성된다.
+- TTS 입력 텍스트는 DashScope 제한에 맞추기 위해 UTF-8 기준 600바이트 이하로 분할되며, 가능하면 600바이트 이전의 마지막 `.` 기준으로 끊는다.
 - `conversationId`가 있으면 해당 대화에 연결된 시스템 프롬프트를 기준으로 응답을 생성한다.
+- 등록 음성은 현재 서버가 사용하는 `DASHSCOPE_TTS_MODEL`과 같은 모델로 등록된 경우에만 사용할 수 있다.
 
 ## POST `/api/chat/messages/stream`
 
 채팅 응답을 NDJSON 스트림으로 내려준다. 텍스트를 먼저 전달하고, 이후 PCM 오디오 청크를 순차적으로 보낸다.
-서버는 DashScope가 반환한 WAV 오디오를 다운로드하면서 PCM 본문을 잘라 프론트에 전달한다.
+서버는 DashScope realtime websocket에서 PCM 오디오를 받아, 수신되는 대로 NDJSON `audio_chunk` 이벤트로 프론트에 전달한다.
 동시에 완성된 전체 오디오는 ffmpeg 인코딩 후 S3 및 DB 이력에 저장된다.
 
 Content Type
@@ -362,14 +363,14 @@ Body
 #### `502 Bad Gateway`
 
 OpenAI API 호출이 실패했거나, 응답 본문에서 모델 출력 텍스트를 추출할 수 없는 경우.
-또는 DashScope TTS 호출이 실패한 경우.
+또는 DashScope realtime TTS 호출이 실패한 경우.
 
 ```json
 {
   "timestamp": "2026-03-25T08:42:00Z",
   "status": 502,
   "error": "Bad Gateway",
-  "message": "DashScope TTS failed with status 400. Body: ...",
+  "message": "DashScope realtime TTS failed: ...",
   "details": [],
   "path": "/api/chat/messages"
 }
@@ -415,6 +416,10 @@ Body
 ]
 ```
 
+설명
+- 현재 서버의 `DASHSCOPE_TTS_MODEL`과 호환되는 등록 음성만 반환된다.
+- 예전 모델로 등록된 음성은 목록에서 제외될 수 있다.
+
 ## POST `/api/debates`
 
 두 클론과 주제를 받아 논쟁 세션을 시작하고, 첫 번째 발언만 생성한다.
@@ -457,6 +462,7 @@ Body
 - `topic`은 비어 있으면 안 된다.
 - 첫 응답은 항상 `CLONE_A`의 발언이다.
 - 각 발언은 선택한 등록 음성으로 TTS를 생성한다.
+- 각 등록 음성은 현재 서버의 `DASHSCOPE_TTS_MODEL`과 호환되어야 한다.
 
 ### Success Response
 
@@ -554,7 +560,7 @@ Status
   "timestamp": "2026-03-25T11:32:00Z",
   "status": 502,
   "error": "Bad Gateway",
-  "message": "DashScope TTS failed with status 400. Body: ...",
+  "message": "DashScope realtime TTS failed: ...",
   "details": [],
   "path": "/api/debates"
 }
@@ -571,6 +577,7 @@ Status
 - `APP_CORS_ALLOWED_ORIGINS`
 - `DASHSCOPE_API_KEY`
 - `DASHSCOPE_BASE_URL`
+- `DASHSCOPE_REALTIME_URL`
 - `DASHSCOPE_TTS_MODEL`
 - `FFMPEG_PATH`
 - `S3_ENABLED`
@@ -589,11 +596,13 @@ Status
 참고
 - `integrationTest` Gradle 태스크는 `backend/.env` 파일이 있으면 그 값을 읽어 테스트 프로세스 환경변수로 주입한다.
 - 현재 `integrationTest`는 실제 OpenAI, 실제 DashScope, 실제 MySQL을 호출한다.
+- `integrationTest`의 음성 등록 샘플은 외부 합성 대신 `backend/src/test/resources/sample/haru.wav` 파일을 사용한다.
 - OpenAI 호출은 모두 `POST /v1/chat/completions` 형식을 사용한다.
 - 채팅 이어가기 시에는 시스템 프롬프트를 항상 포함하고, 과거 대화는 최근 `OPENAI_CHAT_HISTORY_TURNS`턴만 OpenAI로 전송한다.
 - `S3_ENABLED=true` 이고 S3 설정이 유효하면, DashScope에서 받은 TTS 오디오는 ffmpeg로 MP3 인코딩 후 S3에 업로드된다.
 - 프론트 응답은 기존과 동일하게 Base64 오디오를 포함하고, S3 업로드는 서버 내부 저장 및 이력 관리 용도로 수행된다.
-- 스트리밍 엔드포인트는 DashScope가 반환한 WAV 오디오를 서버가 순차 다운로드하면서 PCM 청크로 잘라 NDJSON으로 전달한다.
+- 스트리밍 엔드포인트는 DashScope realtime websocket에서 PCM 청크를 받아 NDJSON으로 전달한다.
+- OpenAI, DashScope 음성 등록 HTTP 요청, DashScope realtime 연결, DashScope realtime 이벤트 대기는 모두 20초 무응답 기준으로 실패 처리된다.
 
 ## Persistence Side Effects
 

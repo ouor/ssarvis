@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
+import java.time.Duration;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class PromptService {
+    private static final Duration EXTERNAL_REQUEST_TIMEOUT = Duration.ofSeconds(20);
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -58,6 +60,7 @@ public class PromptService {
             String payload = objectMapper.writeValueAsString(buildPayload(request.answers()));
             HttpRequest httpRequest = HttpRequest.newBuilder()
                     .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
+                    .timeout(EXTERNAL_REQUEST_TIMEOUT)
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
