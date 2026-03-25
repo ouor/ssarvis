@@ -137,12 +137,12 @@ public class DebateService {
 
         VoiceSynthesisResult ttsResult = null;
         try {
-            ttsResult = voiceService.streamSynthesize(turnContext.message(), turnContext.activeVoice().getId(), base64Chunk -> writer.write(
+            ttsResult = voiceService.streamSynthesize(turnContext.message(), turnContext.activeVoice().getId(), (base64Chunk, sampleRate, channels) -> writer.write(
                     Map.of(
                             "type", "audio_chunk",
                             "audioFormat", "pcm_s16le",
-                            "sampleRate", 24000,
-                            "channels", 1,
+                            "sampleRate", sampleRate,
+                            "channels", channels,
                             "chunkBase64", base64Chunk
                     )
             ));

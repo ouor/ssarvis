@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -140,30 +141,21 @@ public class VoiceService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
 
         try {
-            String audioUrl = requestTtsAudioUrl(limitTtsTextLength(text), voice.getProviderVoiceId(), dashscope);
-            if (!StringUtils.hasText(audioUrl)) {
+            CombinedAudio combinedAudio = synthesizeCombinedAudio(text, voice.getProviderVoiceId(), dashscope, null);
+            if (combinedAudio == null) {
                 return null;
             }
-
-            HttpRequest audioRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(audioUrl))
-                    .GET()
-                    .build();
-            HttpResponse<byte[]> audioResponse = httpClient.send(audioRequest, HttpResponse.BodyHandlers.ofByteArray());
-            if (audioResponse.statusCode() >= 400) {
-                return null;
-            }
-
-            String audioMimeType = audioResponse.headers()
-                    .firstValue("Content-Type")
-                    .orElse("audio/wav");
-            String audioBase64 = Base64.getEncoder().encodeToString(audioResponse.body());
             GeneratedAudioAsset audioAsset = audioStorageService.storeDashscopeAudio(
-                    audioResponse.body(),
-                    audioMimeType,
+                    combinedAudio.audioBytes(),
+                    combinedAudio.audioMimeType(),
                     voice.getProviderVoiceId()
             );
-            return new VoiceSynthesisResult(voice.getProviderVoiceId(), audioMimeType, audioBase64, audioAsset);
+            return new VoiceSynthesisResult(
+                    voice.getProviderVoiceId(),
+                    combinedAudio.audioMimeType(),
+                    Base64.getEncoder().encodeToString(combinedAudio.audioBytes()),
+                    audioAsset
+            );
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to request DashScope TTS.", exception);
         } catch (InterruptedException exception) {
@@ -186,46 +178,19 @@ public class VoiceService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
 
         try {
-            String audioUrl = requestTtsAudioUrl(limitTtsTextLength(text), voice.getProviderVoiceId(), dashscope);
-            if (!StringUtils.hasText(audioUrl)) {
+            CombinedAudio combinedAudio = synthesizeCombinedAudio(text, voice.getProviderVoiceId(), dashscope, chunkListener);
+            if (combinedAudio == null) {
                 return null;
             }
-
-            HttpRequest audioRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(audioUrl))
-                    .GET()
-                    .build();
-            HttpResponse<InputStream> audioResponse = httpClient.send(audioRequest, HttpResponse.BodyHandlers.ofInputStream());
-            if (audioResponse.statusCode() >= 400) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "DashScope streamed audio download failed with status " + audioResponse.statusCode() + "."
-                );
-            }
-
-            String audioMimeType = audioResponse.headers()
-                    .firstValue("Content-Type")
-                    .orElse("audio/wav");
-            ByteArrayOutputStream fullAudioBytes = new ByteArrayOutputStream();
-
-            try (InputStream inputStream = audioResponse.body()) {
-                if (audioMimeType.contains("wav")) {
-                    streamWavePcmChunks(inputStream, fullAudioBytes, chunkListener);
-                } else {
-                    fullAudioBytes.write(inputStream.readAllBytes());
-                }
-            }
-
-            byte[] audioBytes = fullAudioBytes.toByteArray();
             GeneratedAudioAsset audioAsset = audioStorageService.storeDashscopeAudio(
-                    audioBytes,
-                    audioMimeType,
+                    combinedAudio.audioBytes(),
+                    combinedAudio.audioMimeType(),
                     voice.getProviderVoiceId()
             );
             return new VoiceSynthesisResult(
                     voice.getProviderVoiceId(),
-                    audioMimeType,
-                    Base64.getEncoder().encodeToString(audioBytes),
+                    combinedAudio.audioMimeType(),
+                    Base64.getEncoder().encodeToString(combinedAudio.audioBytes()),
                     audioAsset
             );
         } catch (IOException exception) {
@@ -266,84 +231,71 @@ public class VoiceService {
         return root.path("output").path("audio").path("url").asText("");
     }
 
-    private void streamWavePcmChunks(
-            InputStream inputStream,
-            ByteArrayOutputStream fullAudioBytes,
+    private CombinedAudio synthesizeCombinedAudio(
+            String text,
+            String providerVoiceId,
+            AppProperties.Dashscope dashscope,
             VoiceChunkListener chunkListener
-    ) throws IOException {
-        byte[] riffHeader = readExactBytes(inputStream, 12);
-        if (riffHeader.length < 12) {
-            fullAudioBytes.write(riffHeader);
-            return;
+    ) throws IOException, InterruptedException {
+        List<String> segments = splitTextForTts(text);
+        if (segments.isEmpty()) {
+            return null;
         }
 
-        fullAudioBytes.write(riffHeader);
-        if (!"RIFF".equals(new String(riffHeader, 0, 4, StandardCharsets.US_ASCII))
-                || !"WAVE".equals(new String(riffHeader, 8, 4, StandardCharsets.US_ASCII))) {
-            fullAudioBytes.write(inputStream.readAllBytes());
-            return;
-        }
+        ByteArrayOutputStream combinedPcmBytes = new ByteArrayOutputStream();
+        WaveFormat waveFormat = null;
+        String audioMimeType = "audio/wav";
 
-        while (true) {
-            byte[] chunkHeader = readExactBytes(inputStream, 8);
-            if (chunkHeader.length == 0) {
-                return;
-            }
-            if (chunkHeader.length < 8) {
-                fullAudioBytes.write(chunkHeader);
-                return;
+        for (String segment : segments) {
+            String audioUrl = requestTtsAudioUrl(segment, providerVoiceId, dashscope);
+            if (!StringUtils.hasText(audioUrl)) {
+                continue;
             }
 
-            fullAudioBytes.write(chunkHeader);
-            String chunkId = new String(chunkHeader, 0, 4, StandardCharsets.US_ASCII);
-            int chunkSize = littleEndianInt(chunkHeader, 4);
-
-            if ("data".equals(chunkId)) {
-                streamExactChunkData(inputStream, fullAudioBytes, chunkListener, chunkSize);
-                byte[] remaining = inputStream.readAllBytes();
-                fullAudioBytes.write(remaining);
-                return;
+            HttpRequest audioRequest = HttpRequest.newBuilder()
+                    .uri(URI.create(audioUrl))
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> audioResponse = httpClient.send(audioRequest, HttpResponse.BodyHandlers.ofByteArray());
+            if (audioResponse.statusCode() >= 400) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "DashScope audio download failed with status " + audioResponse.statusCode() + "."
+                );
             }
 
-            copyExactBytes(inputStream, fullAudioBytes, chunkSize);
-            if ((chunkSize & 1) == 1) {
-                copyExactBytes(inputStream, fullAudioBytes, 1);
-            }
-        }
-    }
+            audioMimeType = audioResponse.headers().firstValue("Content-Type").orElse("audio/wav");
+            byte[] audioBytes = audioResponse.body();
 
-    private void streamExactChunkData(
-            InputStream inputStream,
-            ByteArrayOutputStream fullAudioBytes,
-            VoiceChunkListener chunkListener,
-            int chunkSize
-    ) throws IOException {
-        byte[] buffer = new byte[4096];
-        int remaining = chunkSize;
-
-        while (remaining > 0) {
-            int bytesRead = inputStream.read(buffer, 0, Math.min(buffer.length, remaining));
-            if (bytesRead == -1) {
-                throw new IOException("Unexpected end of WAV data chunk.");
-            }
-
-            fullAudioBytes.write(buffer, 0, bytesRead);
-            if (chunkListener != null && bytesRead > 0) {
-                byte[] pcmChunk = new byte[bytesRead];
-                System.arraycopy(buffer, 0, pcmChunk, 0, bytesRead);
-                try {
-                    chunkListener.onAudioChunk(Base64.getEncoder().encodeToString(pcmChunk));
-                } catch (Exception exception) {
-                    throw new IOException("Failed to forward audio chunk.", exception);
+            if (!audioMimeType.contains("wav")) {
+                if (segments.size() > 1) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_GATEWAY,
+                            "DashScope returned unsupported audio type for segmented TTS: " + audioMimeType
+                    );
                 }
+                return new CombinedAudio(audioBytes, audioMimeType);
             }
 
-            remaining -= bytesRead;
+            ParsedWaveAudio parsedWaveAudio = parseWaveAudio(audioBytes);
+            if (waveFormat == null) {
+                waveFormat = parsedWaveAudio.format();
+            } else if (!waveFormat.matches(parsedWaveAudio.format())) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "DashScope returned inconsistent WAV formats across TTS segments.");
+            }
+
+            combinedPcmBytes.write(parsedWaveAudio.pcmBytes());
+            if (chunkListener != null) {
+                streamPcmBytes(parsedWaveAudio.pcmBytes(), parsedWaveAudio.format(), chunkListener);
+            }
         }
 
-        if ((chunkSize & 1) == 1) {
-            copyExactBytes(inputStream, fullAudioBytes, 1);
+        if (combinedPcmBytes.size() == 0) {
+            return null;
         }
+
+        WaveFormat finalFormat = waveFormat != null ? waveFormat : new WaveFormat(24000, 1, 16);
+        return new CombinedAudio(wrapPcmAsWav(combinedPcmBytes.toByteArray(), finalFormat), "audio/wav");
     }
 
     private byte[] readExactBytes(InputStream inputStream, int expectedLength) throws IOException {
@@ -421,22 +373,6 @@ public class VoiceService {
         return normalized.length() > 16 ? normalized.substring(0, 16) : normalized;
     }
 
-    private String limitTtsTextLength(String text) {
-        if (text.getBytes(StandardCharsets.UTF_8).length <= MAX_TTS_TEXT_LENGTH) {
-            return text;
-        }
-
-        StringBuilder trimmed = new StringBuilder();
-        for (int i = 0; i < text.length(); i++) {
-            String next = trimmed.toString() + text.charAt(i);
-            if (next.getBytes(StandardCharsets.UTF_8).length > MAX_TTS_TEXT_LENGTH) {
-                break;
-            }
-            trimmed.append(text.charAt(i));
-        }
-        return trimmed.toString();
-    }
-
     private String abbreviate(String value, int maxLength) {
         if (value == null) {
             return "";
@@ -445,5 +381,219 @@ public class VoiceService {
             return value;
         }
         return value.substring(0, maxLength) + "...";
+    }
+
+    private List<String> splitTextForTts(String text) {
+        String normalized = text == null ? "" : text.replaceAll("\\s+", " ").trim();
+        if (!StringUtils.hasText(normalized)) {
+            return List.of();
+        }
+
+        java.util.ArrayList<String> chunks = new java.util.ArrayList<>();
+        String remaining = normalized;
+
+        while (StringUtils.hasText(remaining)) {
+            if (utf8Length(remaining) <= MAX_TTS_TEXT_LENGTH) {
+                chunks.add(remaining.trim());
+                break;
+            }
+
+            int splitIndex = findLastPeriodWithinLimit(remaining);
+            if (splitIndex < 0) {
+                splitIndex = findLastWhitespaceWithinLimit(remaining);
+            }
+            if (splitIndex < 0) {
+                splitIndex = findMaxCharBoundaryWithinLimit(remaining);
+            }
+
+            if (splitIndex <= 0) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Failed to split long TTS text within the provider byte limit."
+                );
+            }
+
+            chunks.add(remaining.substring(0, splitIndex).trim());
+            remaining = remaining.substring(splitIndex).trim();
+        }
+
+        return chunks.stream().filter(StringUtils::hasText).toList();
+    }
+
+    private int utf8Length(String value) {
+        return value.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    private int findLastPeriodWithinLimit(String text) {
+        int lastPeriodIndex = -1;
+        int byteLength = 0;
+        for (int index = 0; index < text.length(); index++) {
+            byteLength += utf8Length(text.substring(index, index + 1));
+            if (byteLength > MAX_TTS_TEXT_LENGTH) {
+                break;
+            }
+            if (text.charAt(index) == '.') {
+                lastPeriodIndex = index + 1;
+            }
+        }
+        return lastPeriodIndex;
+    }
+
+    private int findLastWhitespaceWithinLimit(String text) {
+        int lastWhitespaceIndex = -1;
+        int byteLength = 0;
+        for (int index = 0; index < text.length(); index++) {
+            byteLength += utf8Length(text.substring(index, index + 1));
+            if (byteLength > MAX_TTS_TEXT_LENGTH) {
+                break;
+            }
+            if (Character.isWhitespace(text.charAt(index))) {
+                lastWhitespaceIndex = index + 1;
+            }
+        }
+        return lastWhitespaceIndex;
+    }
+
+    private int findMaxCharBoundaryWithinLimit(String text) {
+        int lastValidIndex = -1;
+        int byteLength = 0;
+        for (int index = 0; index < text.length(); index++) {
+            byteLength += utf8Length(text.substring(index, index + 1));
+            if (byteLength > MAX_TTS_TEXT_LENGTH) {
+                break;
+            }
+            lastValidIndex = index + 1;
+        }
+        return lastValidIndex;
+    }
+
+    private ParsedWaveAudio parseWaveAudio(byte[] audioBytes) throws IOException {
+        try (InputStream inputStream = new ByteArrayInputStream(audioBytes)) {
+            byte[] riffHeader = readExactBytes(inputStream, 12);
+            if (riffHeader.length < 12
+                    || !"RIFF".equals(new String(riffHeader, 0, 4, StandardCharsets.US_ASCII))
+                    || !"WAVE".equals(new String(riffHeader, 8, 4, StandardCharsets.US_ASCII))) {
+                throw new IOException("Unsupported WAV header.");
+            }
+
+            WaveFormat format = null;
+            byte[] pcmBytes = new byte[0];
+
+            while (true) {
+                byte[] chunkHeader = readExactBytes(inputStream, 8);
+                if (chunkHeader.length == 0) {
+                    break;
+                }
+                if (chunkHeader.length < 8) {
+                    throw new IOException("Unexpected end of WAV chunk header.");
+                }
+
+                String chunkId = new String(chunkHeader, 0, 4, StandardCharsets.US_ASCII);
+                int chunkSize = littleEndianInt(chunkHeader, 4);
+                byte[] chunkData = readExactBytes(inputStream, chunkSize);
+                if (chunkData.length < chunkSize) {
+                    throw new IOException("Unexpected end of WAV chunk data.");
+                }
+
+                if ("fmt ".equals(chunkId)) {
+                    format = parseWaveFormat(chunkData);
+                } else if ("data".equals(chunkId)) {
+                    pcmBytes = chunkData;
+                }
+
+                if ((chunkSize & 1) == 1) {
+                    readExactBytes(inputStream, 1);
+                }
+            }
+
+            if (format == null) {
+                format = new WaveFormat(24000, 1, 16);
+            }
+
+            return new ParsedWaveAudio(format, pcmBytes);
+        }
+    }
+
+    private WaveFormat parseWaveFormat(byte[] chunkData) throws IOException {
+        if (chunkData.length < 16) {
+            throw new IOException("Invalid WAV fmt chunk.");
+        }
+
+        int audioFormat = littleEndianShort(chunkData, 0);
+        int channels = littleEndianShort(chunkData, 2);
+        int sampleRate = littleEndianInt(chunkData, 4);
+        int bitsPerSample = littleEndianShort(chunkData, 14);
+
+        if (audioFormat != 1) {
+            throw new IOException("Only PCM WAV is supported.");
+        }
+
+        return new WaveFormat(sampleRate, channels, bitsPerSample);
+    }
+
+    private int littleEndianShort(byte[] bytes, int offset) {
+        return (bytes[offset] & 0xff) | ((bytes[offset + 1] & 0xff) << 8);
+    }
+
+    private void streamPcmBytes(byte[] pcmBytes, WaveFormat format, VoiceChunkListener chunkListener) throws IOException {
+        int offset = 0;
+        while (offset < pcmBytes.length) {
+            int length = Math.min(4096, pcmBytes.length - offset);
+            byte[] chunk = new byte[length];
+            System.arraycopy(pcmBytes, offset, chunk, 0, length);
+            try {
+                chunkListener.onAudioChunk(
+                        Base64.getEncoder().encodeToString(chunk),
+                        format.sampleRate(),
+                        format.channels()
+                );
+            } catch (Exception exception) {
+                throw new IOException("Failed to forward audio chunk.", exception);
+            }
+            offset += length;
+        }
+    }
+
+    private byte[] wrapPcmAsWav(byte[] pcmBytes, WaveFormat format) {
+        int headerSize = 44;
+        byte[] wavBytes = new byte[headerSize + pcmBytes.length];
+        java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(wavBytes).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+
+        writeAscii(wavBytes, 0, "RIFF");
+        buffer.putInt(4, 36 + pcmBytes.length);
+        writeAscii(wavBytes, 8, "WAVE");
+        writeAscii(wavBytes, 12, "fmt ");
+        buffer.putInt(16, 16);
+        buffer.putShort(20, (short) 1);
+        buffer.putShort(22, (short) format.channels());
+        buffer.putInt(24, format.sampleRate());
+        buffer.putInt(28, format.sampleRate() * format.channels() * (format.bitsPerSample() / 8));
+        buffer.putShort(32, (short) (format.channels() * (format.bitsPerSample() / 8)));
+        buffer.putShort(34, (short) format.bitsPerSample());
+        writeAscii(wavBytes, 36, "data");
+        buffer.putInt(40, pcmBytes.length);
+        System.arraycopy(pcmBytes, 0, wavBytes, headerSize, pcmBytes.length);
+        return wavBytes;
+    }
+
+    private void writeAscii(byte[] target, int offset, String value) {
+        for (int index = 0; index < value.length(); index++) {
+            target[offset + index] = (byte) value.charAt(index);
+        }
+    }
+
+    private record WaveFormat(int sampleRate, int channels, int bitsPerSample) {
+        private boolean matches(WaveFormat other) {
+            return other != null
+                    && sampleRate == other.sampleRate
+                    && channels == other.channels
+                    && bitsPerSample == other.bitsPerSample;
+        }
+    }
+
+    private record ParsedWaveAudio(WaveFormat format, byte[] pcmBytes) {
+    }
+
+    private record CombinedAudio(byte[] audioBytes, String audioMimeType) {
     }
 }

@@ -2,5 +2,5 @@ package com.ssarvis.backend.voice;
 
 @FunctionalInterface
 public interface VoiceChunkListener {
-    void onAudioChunk(String base64PcmChunk) throws Exception;
+    void onAudioChunk(String base64PcmChunk, int sampleRate, int channels) throws Exception;
 }
