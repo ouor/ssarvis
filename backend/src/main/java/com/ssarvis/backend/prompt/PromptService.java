@@ -2,6 +2,8 @@ package com.ssarvis.backend.prompt;
 
 import com.ssarvis.backend.auth.AuthService;
 import com.ssarvis.backend.auth.UserAccount;
+import com.ssarvis.backend.access.AssetListScope;
+import com.ssarvis.backend.access.VisibilityUpdateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.openai.OpenAiClient;
@@ -22,6 +24,7 @@ public class PromptService {
     private final OpenAiContextAssembler openAiContextAssembler;
     private final OpenAiClient openAiClient;
     private final AuthService authService;
+    private final CloneAccessPolicy cloneAccessPolicy;
 
     public PromptService(
             ObjectMapper objectMapper,
@@ -29,7 +32,8 @@ public class PromptService {
             PromptGenerationLogRepository promptGenerationLogRepository,
             OpenAiContextAssembler openAiContextAssembler,
             OpenAiClient openAiClient,
-            AuthService authService
+            AuthService authService,
+            CloneAccessPolicy cloneAccessPolicy
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
@@ -37,6 +41,7 @@ public class PromptService {
         this.openAiContextAssembler = openAiContextAssembler;
         this.openAiClient = openAiClient;
         this.authService = authService;
+        this.cloneAccessPolicy = cloneAccessPolicy;
     }
 
     public PromptGenerateResult generateSystemPrompt(Long userId, PromptGenerateRequest request) {
@@ -90,6 +95,36 @@ public class PromptService {
                 profile.shortDescription()
         );
         return promptGenerationLogRepository.save(log);
+    }
+
+    public List<CloneSummaryResponse> listClones(Long userId, AssetListScope scope) {
+        authService.getActiveUserAccount(userId);
+        List<PromptGenerationLog> logs = switch (scope) {
+            case MINE -> promptGenerationLogRepository.findAllByUserIdOrderByIdDesc(userId);
+            case PUBLIC -> promptGenerationLogRepository.findAllByIsPublicTrueOrderByIdDesc();
+        };
+
+        return logs.stream()
+                .map(log -> new CloneSummaryResponse(
+                        log.getId(),
+                        log.getCreatedAt(),
+                        log.getAlias(),
+                        log.getShortDescription(),
+                        log.isPublic(),
+                        log.getUser() != null ? log.getUser().getDisplayName() : null
+                ))
+                .toList();
+    }
+
+    public CloneVisibilityResponse updateCloneVisibility(Long userId, Long cloneId, VisibilityUpdateRequest request) {
+        if (request == null || request.isPublic() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "isPublic is required.");
+        }
+
+        PromptGenerationLog clone = cloneAccessPolicy.getManageableClone(userId, cloneId);
+        clone.updateVisibility(request.isPublic());
+        PromptGenerationLog saved = promptGenerationLogRepository.save(clone);
+        return new CloneVisibilityResponse(saved.getId(), saved.isPublic());
     }
 
     private String abbreviate(String value, int maxLength) {

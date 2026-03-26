@@ -9,6 +9,8 @@ public record VoiceSummaryResponse(
         String preferredName,
         String originalFilename,
         String audioMimeType,
-        Instant createdAt
+        Instant createdAt,
+        boolean isPublic,
+        String ownerDisplayName
 ) {
 }

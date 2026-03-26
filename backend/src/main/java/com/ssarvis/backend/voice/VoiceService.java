@@ -11,6 +11,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonObject;
 import com.ssarvis.backend.auth.AuthService;
 import com.ssarvis.backend.auth.UserAccount;
+import com.ssarvis.backend.access.AssetListScope;
+import com.ssarvis.backend.access.VisibilityUpdateRequest;
 import com.ssarvis.backend.config.AppProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -149,9 +151,45 @@ public class VoiceService {
                         voice.getPreferredName(),
                         voice.getOriginalFilename(),
                         voice.getAudioMimeType(),
-                        voice.getCreatedAt()
+                        voice.getCreatedAt(),
+                        voice.isPublic(),
+                        voice.getUser() != null ? voice.getUser().getDisplayName() : null
                 ))
                 .toList();
+    }
+
+    public List<VoiceSummaryResponse> listVoices(Long userId, AssetListScope scope) {
+        authService.getActiveUserAccount(userId);
+        String currentTtsModel = appProperties.getDashscope().getTtsModel();
+        List<RegisteredVoice> voices = switch (scope) {
+            case MINE -> registeredVoiceRepository.findAllByUserIdOrderByIdDesc(userId);
+            case PUBLIC -> registeredVoiceRepository.findAllByIsPublicTrueOrderByIdDesc();
+        };
+        return voices.stream()
+                .filter(voice -> currentTtsModel.equals(voice.getTargetModel()))
+                .map(voice -> new VoiceSummaryResponse(
+                        voice.getId(),
+                        voice.getProviderVoiceId(),
+                        voice.getDisplayName(),
+                        voice.getPreferredName(),
+                        voice.getOriginalFilename(),
+                        voice.getAudioMimeType(),
+                        voice.getCreatedAt(),
+                        voice.isPublic(),
+                        voice.getUser() != null ? voice.getUser().getDisplayName() : null
+                ))
+                .toList();
+    }
+
+    public VoiceVisibilityResponse updateVoiceVisibility(Long userId, Long registeredVoiceId, VisibilityUpdateRequest request) {
+        if (request == null || request.isPublic() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "isPublic is required.");
+        }
+
+        RegisteredVoice voice = voiceAccessPolicy.getManageableVoice(userId, registeredVoiceId);
+        voice.updateVisibility(request.isPublic());
+        RegisteredVoice saved = registeredVoiceRepository.save(voice);
+        return new VoiceVisibilityResponse(saved.getId(), saved.isPublic());
     }
 
     public VoiceSynthesisResult synthesize(String text, Long registeredVoiceId, Long userId) {

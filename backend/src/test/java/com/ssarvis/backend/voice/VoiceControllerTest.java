@@ -3,13 +3,18 @@ package com.ssarvis.backend.voice;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
+import com.ssarvis.backend.access.AssetListScope;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
+import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,6 +33,24 @@ class VoiceControllerTest {
 
     @MockBean
     private VoiceService voiceService;
+
+    @Test
+    void listVoicesReturnsPublicScope() throws Exception {
+        given(voiceService.listVoices(1L, AssetListScope.PUBLIC)).willReturn(List.of(
+                new VoiceSummaryResponse(5L, "voice-provider-1", "차분한 민지", "sample-voice-1", "sample.mp3", "audio/mpeg", Instant.parse("2026-03-26T01:00:00Z"), true, "미소")
+        ));
+
+        mockMvc.perform(get("/api/voices")
+                        .param("scope", "public")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].registeredVoiceId").value(5))
+                .andExpect(jsonPath("$[0].isPublic").value(true))
+                .andExpect(jsonPath("$[0].ownerDisplayName").value("미소"));
+    }
 
     @Test
     void registerVoiceReturnsRegisteredVoice() throws Exception {
@@ -72,5 +95,26 @@ class VoiceControllerTest {
                         ))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Voice sample file is required."));
+    }
+
+    @Test
+    void updateVoiceVisibilityReturnsUpdatedState() throws Exception {
+        given(voiceService.updateVoiceVisibility(eq(1L), eq(5L), any()))
+                .willReturn(new VoiceVisibilityResponse(5L, true));
+
+        mockMvc.perform(patch("/api/voices/5/visibility")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "isPublic": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.registeredVoiceId").value(5))
+                .andExpect(jsonPath("$.isPublic").value(true));
     }
 }

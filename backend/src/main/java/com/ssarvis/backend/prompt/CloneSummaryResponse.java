@@ -6,6 +6,8 @@ public record CloneSummaryResponse(
         Long cloneId,
         Instant createdAt,
         String alias,
-        String shortDescription
+        String shortDescription,
+        boolean isPublic,
+        String ownerDisplayName
 ) {
 }
