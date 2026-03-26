@@ -1,5 +1,7 @@
 package com.ssarvis.backend.prompt;
 
+import com.ssarvis.backend.auth.AuthService;
+import com.ssarvis.backend.auth.UserAccount;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.openai.OpenAiClient;
@@ -19,25 +21,29 @@ public class PromptService {
     private final PromptGenerationLogRepository promptGenerationLogRepository;
     private final OpenAiContextAssembler openAiContextAssembler;
     private final OpenAiClient openAiClient;
+    private final AuthService authService;
 
     public PromptService(
             ObjectMapper objectMapper,
             AppProperties appProperties,
             PromptGenerationLogRepository promptGenerationLogRepository,
             OpenAiContextAssembler openAiContextAssembler,
-            OpenAiClient openAiClient
+            OpenAiClient openAiClient,
+            AuthService authService
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
         this.promptGenerationLogRepository = promptGenerationLogRepository;
         this.openAiContextAssembler = openAiContextAssembler;
         this.openAiClient = openAiClient;
+        this.authService = authService;
     }
 
-    public PromptGenerateResult generateSystemPrompt(PromptGenerateRequest request) {
+    public PromptGenerateResult generateSystemPrompt(Long userId, PromptGenerateRequest request) {
         if (request == null || request.answers() == null || request.answers().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one answer is required.");
         }
+        UserAccount user = authService.getActiveUserAccount(userId);
 
         try {
             String systemPrompt = normalizeSystemPrompt(openAiClient.requestChatCompletion(
@@ -62,16 +68,21 @@ public class PromptService {
             }
 
             GeneratedCloneProfile profile = new GeneratedCloneProfile(alias, shortDescription, systemPrompt);
-            PromptGenerationLog log = saveGenerationLog(request.answers(), profile);
+            PromptGenerationLog log = saveGenerationLog(user, request.answers(), profile);
             return new PromptGenerateResult(log.getId(), log.getAlias(), log.getShortDescription(), log.getSystemPrompt());
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize OpenAI request.", exception);
         }
     }
 
-    private PromptGenerationLog saveGenerationLog(List<PromptGenerateRequest.AnswerItem> answers, GeneratedCloneProfile profile) throws IOException {
+    private PromptGenerationLog saveGenerationLog(
+            UserAccount user,
+            List<PromptGenerateRequest.AnswerItem> answers,
+            GeneratedCloneProfile profile
+    ) throws IOException {
         String answersJson = objectMapper.writeValueAsString(answers);
         PromptGenerationLog log = new PromptGenerationLog(
+                user,
                 appProperties.getOpenai().getModel(),
                 answersJson,
                 profile.systemPrompt(),

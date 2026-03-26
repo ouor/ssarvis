@@ -1,9 +1,12 @@
 package com.ssarvis.backend.debate;
 
+import com.ssarvis.backend.auth.AuthenticatedUser;
+import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,22 +23,34 @@ public class DebateController {
     }
 
     @PostMapping
-    public DebateProgressResponse startDebate(@Valid @RequestBody DebateStartRequest request) {
-        return debateService.startDebate(request);
+    public DebateProgressResponse startDebate(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @Valid @RequestBody DebateStartRequest request
+    ) {
+        return debateService.startDebate(user.userId(), request);
     }
 
     @PostMapping(value = "/stream", produces = MediaType.APPLICATION_NDJSON_VALUE)
-    public StreamingResponseBody startDebateStream(@Valid @RequestBody DebateStartRequest request) {
-        return outputStream -> debateService.streamStartDebate(request, outputStream);
+    public StreamingResponseBody startDebateStream(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @Valid @RequestBody DebateStartRequest request
+    ) {
+        return outputStream -> debateService.streamStartDebate(user.userId(), request, outputStream);
     }
 
     @PostMapping("/{debateSessionId}/next")
-    public DebateProgressResponse createNextTurn(@PathVariable Long debateSessionId) {
-        return debateService.createNextTurn(debateSessionId);
+    public DebateProgressResponse createNextTurn(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @PathVariable Long debateSessionId
+    ) {
+        return debateService.createNextTurn(user.userId(), debateSessionId);
     }
 
     @PostMapping(value = "/{debateSessionId}/next/stream", produces = MediaType.APPLICATION_NDJSON_VALUE)
-    public StreamingResponseBody createNextTurnStream(@PathVariable Long debateSessionId) {
-        return outputStream -> debateService.streamNextTurn(debateSessionId, outputStream);
+    public StreamingResponseBody createNextTurnStream(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @PathVariable Long debateSessionId
+    ) {
+        return outputStream -> debateService.streamNextTurn(user.userId(), debateSessionId, outputStream);
     }
 }

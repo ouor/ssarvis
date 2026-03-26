@@ -9,6 +9,8 @@ import com.alibaba.dashscope.exception.NoApiKeyException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonObject;
+import com.ssarvis.backend.auth.AuthService;
+import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.config.AppProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -46,23 +48,27 @@ public class VoiceService {
     private final AppProperties appProperties;
     private final RegisteredVoiceRepository registeredVoiceRepository;
     private final AudioStorageService audioStorageService;
+    private final AuthService authService;
 
     public VoiceService(
             HttpClient httpClient,
             ObjectMapper objectMapper,
             AppProperties appProperties,
             RegisteredVoiceRepository registeredVoiceRepository,
-            AudioStorageService audioStorageService
+            AudioStorageService audioStorageService,
+            AuthService authService
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
         this.registeredVoiceRepository = registeredVoiceRepository;
         this.audioStorageService = audioStorageService;
+        this.authService = authService;
     }
 
-    public RegisteredVoice registerVoice(MultipartFile sampleFile, String alias) {
+    public RegisteredVoice registerVoice(Long userId, MultipartFile sampleFile, String alias) {
         AppProperties.Dashscope dashscope = appProperties.getDashscope();
+        UserAccount user = authService.getActiveUserAccount(userId);
         if (!StringUtils.hasText(dashscope.getApiKey())) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "DASHSCOPE_API_KEY is not configured.");
         }
@@ -112,6 +118,7 @@ public class VoiceService {
             }
 
             return registeredVoiceRepository.save(new RegisteredVoice(
+                    user,
                     providerVoiceId,
                     dashscope.getTtsModel(),
                     preferredName,
@@ -127,9 +134,10 @@ public class VoiceService {
         }
     }
 
-    public List<VoiceSummaryResponse> listVoices() {
+    public List<VoiceSummaryResponse> listVoices(Long userId) {
+        authService.getActiveUserAccount(userId);
         String currentTtsModel = appProperties.getDashscope().getTtsModel();
-        return registeredVoiceRepository.findAllByOrderByIdDesc().stream()
+        return registeredVoiceRepository.findAllByUserIdOrderByIdDesc(userId).stream()
                 .filter(voice -> currentTtsModel.equals(voice.getTargetModel()))
                 .map(voice -> new VoiceSummaryResponse(
                         voice.getId(),
@@ -143,7 +151,7 @@ public class VoiceService {
                 .toList();
     }
 
-    public VoiceSynthesisResult synthesize(String text, Long registeredVoiceId) {
+    public VoiceSynthesisResult synthesize(String text, Long registeredVoiceId, Long userId) {
         if (!StringUtils.hasText(text) || registeredVoiceId == null) {
             return null;
         }
@@ -153,7 +161,7 @@ public class VoiceService {
             return null;
         }
 
-        RegisteredVoice voice = registeredVoiceRepository.findById(registeredVoiceId)
+        RegisteredVoice voice = registeredVoiceRepository.findByIdAndUserId(registeredVoiceId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
         validateVoiceCompatibility(voice);
 
@@ -163,6 +171,7 @@ public class VoiceService {
                 return null;
             }
             GeneratedAudioAsset audioAsset = audioStorageService.storeDashscopeAudio(
+                    voice.getUser(),
                     combinedAudio.audioBytes(),
                     combinedAudio.audioMimeType(),
                     voice.getProviderVoiceId()
@@ -181,7 +190,7 @@ public class VoiceService {
         }
     }
 
-    public VoiceSynthesisResult streamSynthesize(String text, Long registeredVoiceId, VoiceChunkListener chunkListener) {
+    public VoiceSynthesisResult streamSynthesize(String text, Long registeredVoiceId, Long userId, VoiceChunkListener chunkListener) {
         if (!StringUtils.hasText(text) || registeredVoiceId == null) {
             return null;
         }
@@ -191,7 +200,7 @@ public class VoiceService {
             return null;
         }
 
-        RegisteredVoice voice = registeredVoiceRepository.findById(registeredVoiceId)
+        RegisteredVoice voice = registeredVoiceRepository.findByIdAndUserId(registeredVoiceId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
         validateVoiceCompatibility(voice);
 
@@ -201,6 +210,7 @@ public class VoiceService {
                 return null;
             }
             GeneratedAudioAsset audioAsset = audioStorageService.storeDashscopeAudio(
+                    voice.getUser(),
                     combinedAudio.audioBytes(),
                     combinedAudio.audioMimeType(),
                     voice.getProviderVoiceId()

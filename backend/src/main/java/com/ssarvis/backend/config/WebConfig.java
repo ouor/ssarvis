@@ -40,7 +40,14 @@ public class WebConfig implements WebMvcConfigurer {
         JwtAuthenticationInterceptor jwtAuthenticationInterceptor = jwtAuthenticationInterceptorProvider.getIfAvailable();
         if (jwtAuthenticationInterceptor != null) {
             registry.addInterceptor(jwtAuthenticationInterceptor)
-                    .addPathPatterns("/api/auth/me");
+                    .addPathPatterns(
+                            "/api/auth/me",
+                            "/api/clones",
+                            "/api/voices",
+                            "/api/chat/**",
+                            "/api/debates/**",
+                            "/api/system-prompt"
+                    );
         }
     }
 }

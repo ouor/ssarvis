@@ -1,5 +1,7 @@
 package com.ssarvis.backend.debate;
 
+import com.ssarvis.backend.auth.AuthService;
+import com.ssarvis.backend.auth.UserAccount;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.openai.OpenAiClient;
@@ -32,6 +34,7 @@ public class DebateService {
     private final VoiceService voiceService;
     private final OpenAiContextAssembler openAiContextAssembler;
     private final OpenAiClient openAiClient;
+    private final AuthService authService;
 
     public DebateService(
             ObjectMapper objectMapper,
@@ -42,7 +45,8 @@ public class DebateService {
             DebateTurnRepository debateTurnRepository,
             VoiceService voiceService,
             OpenAiContextAssembler openAiContextAssembler,
-            OpenAiClient openAiClient
+            OpenAiClient openAiClient,
+            AuthService authService
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
@@ -53,50 +57,56 @@ public class DebateService {
         this.voiceService = voiceService;
         this.openAiContextAssembler = openAiContextAssembler;
         this.openAiClient = openAiClient;
+        this.authService = authService;
     }
 
     @Transactional
-    public DebateProgressResponse startDebate(DebateStartRequest request) {
-        DebateSession debateSession = createDebateSession(request);
-        DebateTurnResponse firstTurn = createNextTurnInternal(debateSession);
+    public DebateProgressResponse startDebate(Long userId, DebateStartRequest request) {
+        UserAccount user = authService.getActiveUserAccount(userId);
+        DebateSession debateSession = createDebateSession(user, request);
+        DebateTurnResponse firstTurn = createNextTurnInternal(userId, debateSession);
         return new DebateProgressResponse(debateSession.getId(), debateSession.getTopic(), firstTurn);
     }
 
     @Transactional
-    public void streamStartDebate(DebateStartRequest request, OutputStream outputStream) throws IOException {
-        DebateSession debateSession = createDebateSession(request);
-        streamTurn(debateSession, outputStream);
+    public void streamStartDebate(Long userId, DebateStartRequest request, OutputStream outputStream) throws IOException {
+        UserAccount user = authService.getActiveUserAccount(userId);
+        DebateSession debateSession = createDebateSession(user, request);
+        streamTurn(userId, debateSession, outputStream);
     }
 
     @Transactional
-    public DebateProgressResponse createNextTurn(Long debateSessionId) {
-        DebateSession debateSession = debateSessionRepository.findById(debateSessionId)
+    public DebateProgressResponse createNextTurn(Long userId, Long debateSessionId) {
+        authService.getActiveUserAccount(userId);
+        DebateSession debateSession = debateSessionRepository.findByIdAndUserId(debateSessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found."));
 
-        DebateTurnResponse turn = createNextTurnInternal(debateSession);
+        DebateTurnResponse turn = createNextTurnInternal(userId, debateSession);
         return new DebateProgressResponse(debateSession.getId(), debateSession.getTopic(), turn);
     }
 
     @Transactional
-    public void streamNextTurn(Long debateSessionId, OutputStream outputStream) throws IOException {
-        DebateSession debateSession = debateSessionRepository.findById(debateSessionId)
+    public void streamNextTurn(Long userId, Long debateSessionId, OutputStream outputStream) throws IOException {
+        authService.getActiveUserAccount(userId);
+        DebateSession debateSession = debateSessionRepository.findByIdAndUserId(debateSessionId, userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found."));
-        streamTurn(debateSession, outputStream);
+        streamTurn(userId, debateSession, outputStream);
     }
 
-    private DebateSession createDebateSession(DebateStartRequest request) {
+    private DebateSession createDebateSession(UserAccount user, DebateStartRequest request) {
         validateRequest(request);
 
-        PromptGenerationLog cloneA = promptGenerationLogRepository.findById(request.cloneAId())
+        PromptGenerationLog cloneA = promptGenerationLogRepository.findByIdAndUserId(request.cloneAId(), user.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A not found."));
-        PromptGenerationLog cloneB = promptGenerationLogRepository.findById(request.cloneBId())
+        PromptGenerationLog cloneB = promptGenerationLogRepository.findByIdAndUserId(request.cloneBId(), user.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B not found."));
-        RegisteredVoice cloneAVoice = registeredVoiceRepository.findById(request.cloneAVoiceId())
+        RegisteredVoice cloneAVoice = registeredVoiceRepository.findByIdAndUserId(request.cloneAVoiceId(), user.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A voice not found."));
-        RegisteredVoice cloneBVoice = registeredVoiceRepository.findById(request.cloneBVoiceId())
+        RegisteredVoice cloneBVoice = registeredVoiceRepository.findByIdAndUserId(request.cloneBVoiceId(), user.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B voice not found."));
 
         return debateSessionRepository.save(new DebateSession(
+                user,
                 cloneA,
                 cloneB,
                 cloneAVoice,
@@ -105,7 +115,7 @@ public class DebateService {
         ));
     }
 
-    private void streamTurn(DebateSession debateSession, OutputStream outputStream) throws IOException {
+    private void streamTurn(Long userId, DebateSession debateSession, OutputStream outputStream) throws IOException {
         NdjsonStreamWriter writer = new NdjsonStreamWriter(outputStream, objectMapper);
         TurnContext turnContext = buildTurnContext(debateSession);
 
@@ -123,7 +133,7 @@ public class DebateService {
 
         VoiceSynthesisResult ttsResult = null;
         try {
-            ttsResult = voiceService.streamSynthesize(turnContext.message(), turnContext.activeVoice().getId(), (base64Chunk, sampleRate, channels) -> writer.write(
+            ttsResult = voiceService.streamSynthesize(turnContext.message(), turnContext.activeVoice().getId(), userId, (base64Chunk, sampleRate, channels) -> writer.write(
                     Map.of(
                             "type", "audio_chunk",
                             "audioFormat", "pcm_s16le",
@@ -155,9 +165,9 @@ public class DebateService {
         ));
     }
 
-    private DebateTurnResponse createNextTurnInternal(DebateSession debateSession) {
+    private DebateTurnResponse createNextTurnInternal(Long userId, DebateSession debateSession) {
         TurnContext turnContext = buildTurnContext(debateSession);
-        VoiceSynthesisResult tts = voiceService.synthesize(turnContext.message(), turnContext.activeVoice().getId());
+        VoiceSynthesisResult tts = voiceService.synthesize(turnContext.message(), turnContext.activeVoice().getId(), userId);
 
         debateTurnRepository.save(new DebateTurn(
                 debateSession,

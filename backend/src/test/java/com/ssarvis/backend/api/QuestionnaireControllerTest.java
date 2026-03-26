@@ -1,11 +1,14 @@
 package com.ssarvis.backend.api;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ssarvis.backend.auth.AuthenticatedUser;
+import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import com.ssarvis.backend.prompt.PromptGenerateResult;
 import com.ssarvis.backend.prompt.PromptService;
 import org.junit.jupiter.api.Test;
@@ -29,7 +32,7 @@ class QuestionnaireControllerTest {
 
     @Test
     void generatePromptReturnsSystemPrompt() throws Exception {
-        given(promptService.generateSystemPrompt(any()))
+        given(promptService.generateSystemPrompt(eq(1L), any()))
                 .willReturn(new PromptGenerateResult(
                         15L,
                         "차분한 조력자",
@@ -38,6 +41,10 @@ class QuestionnaireControllerTest {
                 ));
 
         mockMvc.perform(post("/api/system-prompt")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -59,6 +66,10 @@ class QuestionnaireControllerTest {
     @Test
     void generatePromptReturnsBadRequestWhenAnswersAreEmpty() throws Exception {
         mockMvc.perform(post("/api/system-prompt")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -74,6 +85,10 @@ class QuestionnaireControllerTest {
     @Test
     void generatePromptReturnsBadRequestWhenAnswerTextIsBlank() throws Exception {
         mockMvc.perform(post("/api/system-prompt")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -91,10 +106,14 @@ class QuestionnaireControllerTest {
 
     @Test
     void generatePromptPropagatesServiceErrors() throws Exception {
-        given(promptService.generateSystemPrompt(any()))
+        given(promptService.generateSystemPrompt(eq(1L), any()))
                 .willThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY, "OpenAI request failed with status 500."));
 
         mockMvc.perform(post("/api/system-prompt")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

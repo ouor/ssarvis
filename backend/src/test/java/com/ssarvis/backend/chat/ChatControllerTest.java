@@ -1,12 +1,15 @@
 package com.ssarvis.backend.chat;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
+import com.ssarvis.backend.auth.AuthenticatedUser;
+import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,7 +31,7 @@ class ChatControllerTest {
 
     @Test
     void sendMessageReturnsAssistantMessage() throws Exception {
-        given(chatService.reply(any()))
+        given(chatService.reply(eq(1L), any()))
                 .willReturn(new ChatResult(
                         41L,
                         "안녕하세요. 어떤 부분이 궁금한지 편하게 말씀해 주세요.",
@@ -38,6 +41,10 @@ class ChatControllerTest {
                 ));
 
         mockMvc.perform(post("/api/chat/messages")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -56,6 +63,10 @@ class ChatControllerTest {
     @Test
     void sendMessageReturnsBadRequestWhenMessageIsBlank() throws Exception {
         mockMvc.perform(post("/api/chat/messages")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -70,10 +81,14 @@ class ChatControllerTest {
 
     @Test
     void sendMessagePropagatesServiceErrors() throws Exception {
-        given(chatService.reply(any()))
+        given(chatService.reply(eq(1L), any()))
                 .willThrow(new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND, "Conversation not found."));
 
         mockMvc.perform(post("/api/chat/messages")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

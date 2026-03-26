@@ -1,8 +1,11 @@
 package com.ssarvis.backend.chat;
 
+import com.ssarvis.backend.auth.AuthenticatedUser;
+import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,8 +22,11 @@ public class ChatController {
     }
 
     @PostMapping("/messages")
-    public ChatResponse sendMessage(@Valid @RequestBody ChatRequest request) {
-        ChatResult result = chatService.reply(request);
+    public ChatResponse sendMessage(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @Valid @RequestBody ChatRequest request
+    ) {
+        ChatResult result = chatService.reply(user.userId(), request);
         return new ChatResponse(
                 result.conversationId(),
                 result.assistantMessage(),
@@ -31,7 +37,10 @@ public class ChatController {
     }
 
     @PostMapping(value = "/messages/stream", produces = MediaType.APPLICATION_NDJSON_VALUE)
-    public StreamingResponseBody streamMessage(@Valid @RequestBody ChatRequest request) {
-        return outputStream -> chatService.streamReply(request, outputStream);
+    public StreamingResponseBody streamMessage(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @Valid @RequestBody ChatRequest request
+    ) {
+        return outputStream -> chatService.streamReply(user.userId(), request, outputStream);
     }
 }

@@ -1,5 +1,7 @@
 package com.ssarvis.backend.chat;
 
+import com.ssarvis.backend.auth.AuthService;
+import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
@@ -28,6 +30,7 @@ public class ChatService {
     private final VoiceService voiceService;
     private final OpenAiContextAssembler openAiContextAssembler;
     private final OpenAiClient openAiClient;
+    private final AuthService authService;
 
     public ChatService(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
@@ -37,7 +40,8 @@ public class ChatService {
             ChatMessageRepository chatMessageRepository,
             VoiceService voiceService,
             OpenAiContextAssembler openAiContextAssembler,
-            OpenAiClient openAiClient
+            OpenAiClient openAiClient,
+            AuthService authService
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
@@ -47,15 +51,17 @@ public class ChatService {
         this.voiceService = voiceService;
         this.openAiContextAssembler = openAiContextAssembler;
         this.openAiClient = openAiClient;
+        this.authService = authService;
     }
 
     @Transactional
-    public ChatResult reply(ChatRequest request) {
+    public ChatResult reply(Long userId, ChatRequest request) {
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message must not be blank.");
         }
+        UserAccount user = authService.getActiveUserAccount(userId);
 
-        ChatConversation conversation = resolveConversation(request);
+        ChatConversation conversation = resolveConversation(user, request);
         List<ChatMessage> history = conversation.getId() == null
                 ? List.of()
                 : chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId());
@@ -73,7 +79,7 @@ public class ChatService {
 
         chatMessageRepository.save(new ChatMessage(savedConversation, ChatMessage.Role.USER, userMessage));
 
-        VoiceSynthesisResult ttsResult = voiceService.synthesize(assistantMessage, request.registeredVoiceId());
+        VoiceSynthesisResult ttsResult = voiceService.synthesize(assistantMessage, request.registeredVoiceId(), userId);
         chatMessageRepository.save(new ChatMessage(
                 savedConversation,
                 ChatMessage.Role.ASSISTANT,
@@ -91,13 +97,14 @@ public class ChatService {
     }
 
     @Transactional
-    public void streamReply(ChatRequest request, OutputStream outputStream) throws IOException {
+    public void streamReply(Long userId, ChatRequest request, OutputStream outputStream) throws IOException {
         if (request == null || !StringUtils.hasText(request.message())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "message must not be blank.");
         }
+        UserAccount user = authService.getActiveUserAccount(userId);
 
         NdjsonStreamWriter writer = new NdjsonStreamWriter(outputStream, objectMapper);
-        ChatConversation conversation = resolveConversation(request);
+        ChatConversation conversation = resolveConversation(user, request);
         List<ChatMessage> history = conversation.getId() == null
                 ? List.of()
                 : chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId());
@@ -122,7 +129,7 @@ public class ChatService {
 
         VoiceSynthesisResult ttsResult = null;
         try {
-            ttsResult = voiceService.streamSynthesize(assistantMessage, request.registeredVoiceId(), (base64Chunk, sampleRate, channels) -> writer.write(
+            ttsResult = voiceService.streamSynthesize(assistantMessage, request.registeredVoiceId(), userId, (base64Chunk, sampleRate, channels) -> writer.write(
                     Map.of(
                             "type", "audio_chunk",
                             "audioFormat", "pcm_s16le",
@@ -152,9 +159,9 @@ public class ChatService {
         ));
     }
 
-    private ChatConversation resolveConversation(ChatRequest request) {
+    private ChatConversation resolveConversation(UserAccount user, ChatRequest request) {
         if (request.conversationId() != null) {
-            return chatConversationRepository.findById(request.conversationId())
+            return chatConversationRepository.findByIdAndUserId(request.conversationId(), user.getId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found."));
         }
 
@@ -165,10 +172,10 @@ public class ChatService {
             );
         }
 
-        PromptGenerationLog promptGenerationLog = promptGenerationLogRepository.findById(request.promptGenerationLogId())
+        PromptGenerationLog promptGenerationLog = promptGenerationLogRepository.findByIdAndUserId(request.promptGenerationLogId(), user.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prompt generation log not found."));
 
-        return new ChatConversation(promptGenerationLog);
+        return new ChatConversation(user, promptGenerationLog);
     }
 
     private String generateAssistantMessage(String systemPrompt, List<ChatMessage> history, String userMessage) {

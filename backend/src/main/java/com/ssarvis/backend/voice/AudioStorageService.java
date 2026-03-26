@@ -1,5 +1,6 @@
 package com.ssarvis.backend.voice;
 
+import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.config.StorageConfig;
 import java.io.IOException;
@@ -36,7 +37,12 @@ public class AudioStorageService {
         this.generatedAudioAssetRepository = generatedAudioAssetRepository;
     }
 
-    public GeneratedAudioAsset storeDashscopeAudio(byte[] sourceAudioBytes, String sourceAudioMimeType, String providerVoiceId) {
+    public GeneratedAudioAsset storeDashscopeAudio(
+            UserAccount user,
+            byte[] sourceAudioBytes,
+            String sourceAudioMimeType,
+            String providerVoiceId
+    ) {
         AppProperties.S3 s3 = appProperties.getStorage().getS3();
         if (!s3.isEnabled()) {
             return null;
@@ -58,6 +64,7 @@ public class AudioStorageService {
             s3Client.putObject(putObjectRequest, RequestBody.fromBytes(encodedAudioBytes));
 
             return generatedAudioAssetRepository.save(new GeneratedAudioAsset(
+                    user,
                     STORAGE_PROVIDER,
                     s3.getBucket(),
                     objectKey,

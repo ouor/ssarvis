@@ -53,10 +53,14 @@ public class AuthService {
     }
 
     public AuthenticatedUser getAuthenticatedUser(Long userId) {
-        UserAccount userAccount = userAccountRepository.findByIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found or inactive."));
+        UserAccount userAccount = getActiveUserAccount(userId);
 
         return new AuthenticatedUser(userAccount.getId(), userAccount.getUsername(), userAccount.getDisplayName());
+    }
+
+    public UserAccount getActiveUserAccount(Long userId) {
+        return userAccountRepository.findByIdAndDeletedAtIsNull(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found or inactive."));
     }
 
     private AuthSession toSession(UserAccount userAccount) {
