@@ -13,6 +13,7 @@ public class AppProperties {
     private final Media media = new Media();
     private final Storage storage = new Storage();
     private final Auth auth = new Auth();
+    private final Bootstrap bootstrap = new Bootstrap();
 
     public Openai getOpenai() {
         return openai;
@@ -36,6 +37,10 @@ public class AppProperties {
 
     public Auth getAuth() {
         return auth;
+    }
+
+    public Bootstrap getBootstrap() {
+        return bootstrap;
     }
 
     public static class Openai {
@@ -153,6 +158,71 @@ public class AppProperties {
 
         public Jwt getJwt() {
             return jwt;
+        }
+    }
+
+    public static class Bootstrap {
+        private final DefaultAccount defaultAccount = new DefaultAccount();
+
+        public DefaultAccount getDefaultAccount() {
+            return defaultAccount;
+        }
+    }
+
+    public static class DefaultAccount {
+        private boolean enabled;
+        private String username;
+        private String password;
+        private String displayName = "기본 계정";
+        private List<String> voiceSamplePaths = new ArrayList<>();
+        private List<String> voiceAliases = new ArrayList<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public String getDisplayName() {
+            return displayName;
+        }
+
+        public void setDisplayName(String displayName) {
+            this.displayName = displayName;
+        }
+
+        public List<String> getVoiceSamplePaths() {
+            return voiceSamplePaths;
+        }
+
+        public void setVoiceSamplePaths(List<String> voiceSamplePaths) {
+            this.voiceSamplePaths = voiceSamplePaths;
+        }
+
+        public List<String> getVoiceAliases() {
+            return voiceAliases;
+        }
+
+        public void setVoiceAliases(List<String> voiceAliases) {
+            this.voiceAliases = voiceAliases;
         }
     }
 

@@ -632,6 +632,12 @@ Body
 - `DB_URL`
 - `DB_USERNAME`
 - `DB_PASSWORD`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_ENABLED`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_USERNAME`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_PASSWORD`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_DISPLAY_NAME`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_VOICE_SAMPLE_PATHS`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_VOICE_ALIASES`
 
 참고
 - `integrationTest` Gradle 태스크는 `backend/.env` 파일이 있으면 그 값을 읽어 테스트 프로세스 환경변수로 주입한다.
@@ -646,6 +652,10 @@ Body
 - 프론트 응답은 기존과 동일하게 Base64 오디오를 포함하고, S3 업로드는 서버 내부 저장 및 이력 관리 용도로 수행된다.
 - 스트리밍 엔드포인트는 DashScope realtime websocket에서 PCM 청크를 받아 NDJSON으로 전달한다.
 - OpenAI, DashScope 음성 등록 HTTP 요청, DashScope realtime 연결, DashScope realtime 이벤트 대기는 모두 20초 무응답 기준으로 실패 처리된다.
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_ENABLED=true` 이면 서버 시작 시 지정한 기본 계정이 없을 때만 기본 계정, 기본 클론 2개, 기본 음성 2개를 자동 등록한다.
+- 이 부트스트랩은 별도 API를 노출하지 않고 애플리케이션 시작 시 내부적으로만 동작한다.
+- 기본 음성 부트스트랩은 실제 `/api/voices`와 같은 DashScope 등록 로직을 사용하므로, 샘플 파일 경로와 DashScope 설정이 유효해야 한다.
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_VOICE_SAMPLE_PATHS`는 절대경로 또는 상대경로를 받을 수 있고, 상대경로는 현재 작업 디렉터리 우선, 없으면 `backend` 기준으로 해석한다.
 
 ## Persistence Side Effects
 

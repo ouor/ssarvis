@@ -139,12 +139,24 @@ OpenAI 컨텍스트는 현재 발화하는 클론 기준으로 아래 순서로 
 - `S3_KEY_PREFIX`
 - `S3_PATH_STYLE_ACCESS`
 - `S3_PUBLIC_BASE_URL`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_ENABLED`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_USERNAME`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_PASSWORD`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_DISPLAY_NAME`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_VOICE_SAMPLE_PATHS`
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_VOICE_ALIASES`
 
 참고
 
 - `backend/.env`는 `bootRun`과 `integrationTest`에서 자동으로 읽힙니다.
 - 프론트는 기본적으로 `http://localhost:8080`의 백엔드를 대상으로 동작합니다.
 - JWT secret은 최소 32바이트 이상이어야 합니다.
+- 기본 계정 부트스트랩은 명시적으로 켰을 때만 동작합니다.
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_ENABLED=true` 이고 지정한 아이디의 활성 계정이 없으면, 서버 시작 시 기본 계정 1개와 기본 클론 2개를 만들고 기본 음성 2개 등록을 시도합니다.
+- 기본 음성 등록은 실제 DashScope 커스텀 보이스 등록을 수행하므로, `DASHSCOPE_API_KEY`와 샘플 파일 경로가 필요합니다.
+- `APP_BOOTSTRAP_DEFAULT_ACCOUNT_VOICE_SAMPLE_PATHS`는 쉼표로 구분된 경로 목록이며, 1개만 주면 같은 샘플을 두 음성 등록에 재사용합니다.
+- 샘플 파일 경로는 절대경로도 가능하고, `dev-assets/voices/voice1.wav` 같은 상대경로도 가능합니다. 상대경로는 현재 작업 디렉터리를 먼저 보고, 없으면 `backend` 기준으로 한 번 더 찾습니다.
+- 같은 username이 soft delete 상태로 이미 존재하면 자동 재생성하지 않고 부트스트랩을 건너뜁니다.
 
 ## 로컬 실행
 
@@ -158,6 +170,7 @@ OpenAI 컨텍스트는 현재 발화하는 클론 기준으로 아래 순서로 
 2. MySQL 데이터베이스 준비
 3. OpenAI / DashScope 키 입력
 4. 필요 시 S3 설정 입력
+5. 테스트 편의를 위해 기본 계정 자동 생성을 원하면 bootstrap 환경 변수도 함께 입력
 
 ### 2. 백엔드 실행
 
