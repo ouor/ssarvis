@@ -128,12 +128,14 @@ class OwnershipMappingDataJpaTest {
         assertThat(promptGenerationLogRepository.findAllByUserIdOrderByIdDesc(owner.getId()))
                 .extracting(PromptGenerationLog::getId)
                 .containsExactly(ownerClone.getId());
+        assertThat(ownerClone.isPublic()).isFalse();
         assertThat(promptGenerationLogRepository.findByIdAndUserId(ownerClone.getId(), owner.getId())).contains(ownerClone);
         assertThat(promptGenerationLogRepository.findByIdAndUserId(otherClone.getId(), owner.getId())).isEmpty();
 
         assertThat(registeredVoiceRepository.findAllByUserIdOrderByIdDesc(owner.getId()))
                 .extracting(RegisteredVoice::getId)
                 .containsExactly(ownerVoice.getId());
+        assertThat(ownerVoice.isPublic()).isFalse();
         assertThat(registeredVoiceRepository.findByIdAndUserId(ownerVoice.getId(), owner.getId())).contains(ownerVoice);
         assertThat(registeredVoiceRepository.findByIdAndUserId(otherVoice.getId(), owner.getId())).isEmpty();
 
@@ -146,5 +148,40 @@ class OwnershipMappingDataJpaTest {
         assertThat(generatedAudioAssetRepository.findAllByUserIdOrderByIdDesc(owner.getId()))
                 .extracting(GeneratedAudioAsset::getId)
                 .containsExactly(ownerAsset.getId());
+    }
+
+    @Test
+    void cloneAndVoiceVisibilityCanBeUpdated() {
+        UserAccount owner = userAccountRepository.save(new UserAccount("haru", "hashed", "하루"));
+
+        PromptGenerationLog clone = promptGenerationLogRepository.save(new PromptGenerationLog(
+                owner,
+                "gpt-5",
+                "[]",
+                "owner-system-prompt",
+                "하루 클론",
+                "하루 설명"
+        ));
+        RegisteredVoice voice = registeredVoiceRepository.save(new RegisteredVoice(
+                owner,
+                "voice-owner",
+                "qwen-model",
+                "ownerpref",
+                "하루 목소리",
+                "owner.wav",
+                "audio/wav"
+        ));
+
+        clone.updateVisibility(true);
+        voice.updateVisibility(true);
+
+        promptGenerationLogRepository.save(clone);
+        registeredVoiceRepository.save(voice);
+
+        PromptGenerationLog updatedClone = promptGenerationLogRepository.findById(clone.getId()).orElseThrow();
+        RegisteredVoice updatedVoice = registeredVoiceRepository.findById(voice.getId()).orElseThrow();
+
+        assertThat(updatedClone.isPublic()).isTrue();
+        assertThat(updatedVoice.isPublic()).isTrue();
     }
 }

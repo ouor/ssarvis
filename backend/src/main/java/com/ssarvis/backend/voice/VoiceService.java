@@ -49,6 +49,7 @@ public class VoiceService {
     private final RegisteredVoiceRepository registeredVoiceRepository;
     private final AudioStorageService audioStorageService;
     private final AuthService authService;
+    private final VoiceAccessPolicy voiceAccessPolicy;
 
     public VoiceService(
             HttpClient httpClient,
@@ -56,7 +57,8 @@ public class VoiceService {
             AppProperties appProperties,
             RegisteredVoiceRepository registeredVoiceRepository,
             AudioStorageService audioStorageService,
-            AuthService authService
+            AuthService authService,
+            VoiceAccessPolicy voiceAccessPolicy
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -64,6 +66,7 @@ public class VoiceService {
         this.registeredVoiceRepository = registeredVoiceRepository;
         this.audioStorageService = audioStorageService;
         this.authService = authService;
+        this.voiceAccessPolicy = voiceAccessPolicy;
     }
 
     public RegisteredVoice registerVoice(Long userId, MultipartFile sampleFile, String alias) {
@@ -161,8 +164,7 @@ public class VoiceService {
             return null;
         }
 
-        RegisteredVoice voice = registeredVoiceRepository.findByIdAndUserId(registeredVoiceId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
+        RegisteredVoice voice = voiceAccessPolicy.getUsableVoice(userId, registeredVoiceId);
         validateVoiceCompatibility(voice);
 
         try {
@@ -200,8 +202,7 @@ public class VoiceService {
             return null;
         }
 
-        RegisteredVoice voice = registeredVoiceRepository.findByIdAndUserId(registeredVoiceId, userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
+        RegisteredVoice voice = voiceAccessPolicy.getUsableVoice(userId, registeredVoiceId);
         validateVoiceCompatibility(voice);
 
         try {

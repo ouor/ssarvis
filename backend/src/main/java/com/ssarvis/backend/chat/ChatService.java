@@ -5,6 +5,7 @@ import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
+import com.ssarvis.backend.prompt.CloneAccessPolicy;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import com.ssarvis.backend.stream.NdjsonStreamWriter;
@@ -31,6 +32,7 @@ public class ChatService {
     private final OpenAiContextAssembler openAiContextAssembler;
     private final OpenAiClient openAiClient;
     private final AuthService authService;
+    private final CloneAccessPolicy cloneAccessPolicy;
 
     public ChatService(
             com.fasterxml.jackson.databind.ObjectMapper objectMapper,
@@ -41,7 +43,8 @@ public class ChatService {
             VoiceService voiceService,
             OpenAiContextAssembler openAiContextAssembler,
             OpenAiClient openAiClient,
-            AuthService authService
+            AuthService authService,
+            CloneAccessPolicy cloneAccessPolicy
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
@@ -52,6 +55,7 @@ public class ChatService {
         this.openAiContextAssembler = openAiContextAssembler;
         this.openAiClient = openAiClient;
         this.authService = authService;
+        this.cloneAccessPolicy = cloneAccessPolicy;
     }
 
     @Transactional
@@ -219,8 +223,7 @@ public class ChatService {
             );
         }
 
-        PromptGenerationLog promptGenerationLog = promptGenerationLogRepository.findByIdAndUserId(request.promptGenerationLogId(), user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prompt generation log not found."));
+        PromptGenerationLog promptGenerationLog = cloneAccessPolicy.getUsableClone(user.getId(), request.promptGenerationLogId());
 
         return new ChatConversation(user, promptGenerationLog);
     }

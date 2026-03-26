@@ -46,6 +46,9 @@ public class PromptGenerationLog {
     @Column(nullable = false, length = 255)
     private String shortDescription;
 
+    @Column(nullable = false)
+    private boolean isPublic;
+
     protected PromptGenerationLog() {
     }
 
@@ -67,6 +70,7 @@ public class PromptGenerationLog {
         this.systemPrompt = systemPrompt;
         this.alias = alias;
         this.shortDescription = shortDescription;
+        this.isPublic = false;
     }
 
     @PrePersist
@@ -104,5 +108,13 @@ public class PromptGenerationLog {
 
     public String getShortDescription() {
         return shortDescription;
+    }
+
+    public boolean isPublic() {
+        return isPublic;
+    }
+
+    public void updateVisibility(boolean isPublic) {
+        this.isPublic = isPublic;
     }
 }

@@ -6,11 +6,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
+import com.ssarvis.backend.prompt.CloneAccessPolicy;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import com.ssarvis.backend.stream.NdjsonStreamWriter;
 import com.ssarvis.backend.voice.RegisteredVoice;
 import com.ssarvis.backend.voice.RegisteredVoiceRepository;
+import com.ssarvis.backend.voice.VoiceAccessPolicy;
 import com.ssarvis.backend.voice.VoiceService;
 import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.io.IOException;
@@ -32,9 +34,11 @@ public class DebateService {
     private final DebateSessionRepository debateSessionRepository;
     private final DebateTurnRepository debateTurnRepository;
     private final VoiceService voiceService;
+    private final VoiceAccessPolicy voiceAccessPolicy;
     private final OpenAiContextAssembler openAiContextAssembler;
     private final OpenAiClient openAiClient;
     private final AuthService authService;
+    private final CloneAccessPolicy cloneAccessPolicy;
 
     public DebateService(
             ObjectMapper objectMapper,
@@ -44,9 +48,11 @@ public class DebateService {
             DebateSessionRepository debateSessionRepository,
             DebateTurnRepository debateTurnRepository,
             VoiceService voiceService,
+            VoiceAccessPolicy voiceAccessPolicy,
             OpenAiContextAssembler openAiContextAssembler,
             OpenAiClient openAiClient,
-            AuthService authService
+            AuthService authService,
+            CloneAccessPolicy cloneAccessPolicy
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
@@ -55,9 +61,11 @@ public class DebateService {
         this.debateSessionRepository = debateSessionRepository;
         this.debateTurnRepository = debateTurnRepository;
         this.voiceService = voiceService;
+        this.voiceAccessPolicy = voiceAccessPolicy;
         this.openAiContextAssembler = openAiContextAssembler;
         this.openAiClient = openAiClient;
         this.authService = authService;
+        this.cloneAccessPolicy = cloneAccessPolicy;
     }
 
     @Transactional
@@ -147,14 +155,10 @@ public class DebateService {
     private DebateSession createDebateSession(UserAccount user, DebateStartRequest request) {
         validateRequest(request);
 
-        PromptGenerationLog cloneA = promptGenerationLogRepository.findByIdAndUserId(request.cloneAId(), user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A not found."));
-        PromptGenerationLog cloneB = promptGenerationLogRepository.findByIdAndUserId(request.cloneBId(), user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B not found."));
-        RegisteredVoice cloneAVoice = registeredVoiceRepository.findByIdAndUserId(request.cloneAVoiceId(), user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone A voice not found."));
-        RegisteredVoice cloneBVoice = registeredVoiceRepository.findByIdAndUserId(request.cloneBVoiceId(), user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Clone B voice not found."));
+        PromptGenerationLog cloneA = resolveUsableClone(user.getId(), request.cloneAId(), "Clone A not found.");
+        PromptGenerationLog cloneB = resolveUsableClone(user.getId(), request.cloneBId(), "Clone B not found.");
+        RegisteredVoice cloneAVoice = resolveUsableVoice(user.getId(), request.cloneAVoiceId(), "Clone A voice not found.");
+        RegisteredVoice cloneBVoice = resolveUsableVoice(user.getId(), request.cloneBVoiceId(), "Clone B voice not found.");
 
         return debateSessionRepository.save(new DebateSession(
                 user,
@@ -288,6 +292,22 @@ public class DebateService {
                         appProperties.getOpenai().getChatHistoryTurns()
                 )
         );
+    }
+
+    private PromptGenerationLog resolveUsableClone(Long userId, Long cloneId, String errorMessage) {
+        try {
+            return cloneAccessPolicy.getUsableClone(userId, cloneId);
+        } catch (ResponseStatusException exception) {
+            throw new ResponseStatusException(exception.getStatusCode(), errorMessage);
+        }
+    }
+
+    private RegisteredVoice resolveUsableVoice(Long userId, Long voiceId, String errorMessage) {
+        try {
+            return voiceAccessPolicy.getUsableVoice(userId, voiceId);
+        } catch (ResponseStatusException exception) {
+            throw new ResponseStatusException(exception.getStatusCode(), errorMessage);
+        }
     }
 
     private record TurnContext(

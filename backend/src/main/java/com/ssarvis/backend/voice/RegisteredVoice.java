@@ -43,6 +43,9 @@ public class RegisteredVoice {
     @Column(nullable = false, length = 100)
     private String audioMimeType;
 
+    @Column(nullable = false)
+    private boolean isPublic;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -76,6 +79,7 @@ public class RegisteredVoice {
         this.displayName = displayName;
         this.originalFilename = originalFilename;
         this.audioMimeType = audioMimeType;
+        this.isPublic = false;
     }
 
     @PrePersist
@@ -117,5 +121,13 @@ public class RegisteredVoice {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isPublic() {
+        return isPublic;
+    }
+
+    public void updateVisibility(boolean isPublic) {
+        this.isPublic = isPublic;
     }
 }

@@ -35,6 +35,9 @@ class VoiceServiceTest {
     @Mock
     private AuthService authService;
 
+    @Mock
+    private VoiceAccessPolicy voiceAccessPolicy;
+
     private VoiceService voiceService;
 
     @BeforeEach
@@ -48,7 +51,8 @@ class VoiceServiceTest {
                 appProperties,
                 registeredVoiceRepository,
                 audioStorageService,
-                authService
+                authService,
+                voiceAccessPolicy
         );
     }
 
@@ -76,7 +80,7 @@ class VoiceServiceTest {
                 new RegisteredVoice(user, "voice-old", "older-model", "oldvoice", "예전 보이스", "old.wav", "audio/wav"),
                 12L
         );
-        given(registeredVoiceRepository.findByIdAndUserId(12L, 1L)).willReturn(Optional.of(voice));
+        given(voiceAccessPolicy.getUsableVoice(1L, 12L)).willReturn(voice);
 
         assertThatThrownBy(() -> voiceService.synthesize("테스트 문장", 12L, 1L))
                 .isInstanceOf(ResponseStatusException.class)
