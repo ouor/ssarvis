@@ -9,7 +9,7 @@ type LiveSessionPanelProps = {
   onChatInputChange: (value: string) => void
   onChatSpeechToggle: () => void
   onShowClones: () => void
-  onDebateStop: () => Promise<void>
+  onDebateExit: () => Promise<void>
 }
 
 function LiveSessionPanel({
@@ -19,7 +19,7 @@ function LiveSessionPanel({
   onChatInputChange,
   onChatSpeechToggle,
   onShowClones,
-  onDebateStop,
+  onDebateExit,
 }: LiveSessionPanelProps) {
   return (
     <section className="live-grid">
@@ -100,8 +100,8 @@ function LiveSessionPanel({
           <div className="conversation-shell">
             <div className="debate-summary">
               <span>{liveDebate.topic}</span>
-              <button className="secondary-button" disabled={liveDebate.stopping} onClick={() => void onDebateStop()} type="button">
-                {liveDebate.stopping ? '중단 중...' : '중단'}
+              <button className="secondary-button" onClick={() => void onDebateExit()} type="button">
+                종료
               </button>
             </div>
             <div className="conversation-log">

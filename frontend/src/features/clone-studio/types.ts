@@ -98,6 +98,5 @@ export type LiveDebateState = {
   debateSessionId: number | null
   turns: DebateTurn[]
   running: boolean
-  stopping: boolean
   error: string
 }

@@ -533,16 +533,6 @@ Body
 }
 ```
 
-## POST `/api/debates/{debateSessionId}/stop`
-
-논쟁 세션을 중단한다.
-브라우저가 자동으로 다음 턴을 요청하는 루프를 멈출 때 사용한다.
-
-### Success Response
-
-Status
-- `204 No Content`
-
 ### Error Responses
 
 #### `400 Bad Request`

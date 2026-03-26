@@ -84,13 +84,6 @@ public class DebateService {
         streamTurn(debateSession, outputStream);
     }
 
-    @Transactional
-    public void stopDebate(Long debateSessionId) {
-        if (!debateSessionRepository.existsById(debateSessionId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found.");
-        }
-    }
-
     private DebateSession createDebateSession(DebateStartRequest request) {
         validateRequest(request);
 

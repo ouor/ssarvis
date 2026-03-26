@@ -227,9 +227,6 @@ class PromptIntegrationTest {
         JsonNode debateResponse = objectMapper.readTree(debateResponseBody);
         long debateSessionId = debateResponse.get("debateSessionId").asLong();
 
-        mockMvc.perform(post("/api/debates/%d/stop".formatted(debateSessionId)))
-                .andExpect(status().isNoContent());
-
         long afterCount = promptGenerationLogRepository.count();
         long afterConversationCount = chatConversationRepository.count();
         long afterMessageCount = chatMessageRepository.count();

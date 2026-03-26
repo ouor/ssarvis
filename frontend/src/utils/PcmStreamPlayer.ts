@@ -1,5 +1,6 @@
 class PcmStreamPlayer {
   private readonly audioContext: AudioContext
+  private readonly sources = new Set<AudioBufferSourceNode>()
   private readonly chunks: Uint8Array[] = []
   private sampleRate: number
   private channels: number
@@ -10,6 +11,7 @@ class PcmStreamPlayer {
   private finishResolver: (() => void) | null = null
   private finishPromise: Promise<void>
   private wavUrl: string | null = null
+  private disposed = false
 
   constructor(sampleRate = 24000, channels = 1) {
     this.sampleRate = sampleRate
@@ -26,6 +28,10 @@ class PcmStreamPlayer {
   }
 
   async appendBase64Chunk(base64Chunk: string) {
+    if (this.disposed) {
+      return
+    }
+
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume()
     }
@@ -57,9 +63,11 @@ class PcmStreamPlayer {
     const source = this.audioContext.createBufferSource()
     source.buffer = audioBuffer
     source.connect(this.audioContext.destination)
+    this.sources.add(source)
 
     this.activeSources += 1
     source.onended = () => {
+      this.sources.delete(source)
       this.activeSources -= 1
       if (this.streamFinished && this.activeSources === 0) {
         this.finishResolver?.()
@@ -80,8 +88,20 @@ class PcmStreamPlayer {
   }
 
   async dispose() {
+    if (this.disposed) {
+      return
+    }
+    this.disposed = true
     this.streamFinished = true
     this.finishResolver?.()
+    for (const source of this.sources) {
+      try {
+        source.stop()
+      } catch {
+        // Ignore sources that have already ended.
+      }
+    }
+    this.sources.clear()
     await this.audioContext.close()
   }
 

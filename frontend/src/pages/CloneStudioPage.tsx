@@ -33,7 +33,7 @@ function CloneStudioPage() {
           onChatInputChange={studio.handleChatInputChange}
           onChatSpeechToggle={studio.handleChatSpeechToggle}
           onChatSubmit={studio.handleChatSubmit}
-          onDebateStop={studio.handleDebateStop}
+          onDebateExit={studio.handleDebateExit}
           onShowClones={() => studio.setActiveTab('clones')}
         />
       )}

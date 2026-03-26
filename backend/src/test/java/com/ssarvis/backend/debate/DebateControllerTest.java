@@ -1,7 +1,6 @@
 package com.ssarvis.backend.debate;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -66,13 +65,5 @@ class DebateControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.debateSessionId").value(9))
                 .andExpect(jsonPath("$.turn.speaker").value("CLONE_B"));
-    }
-
-    @Test
-    void stopDebateReturnsNoContent() throws Exception {
-        willDoNothing().given(debateService).stopDebate(9L);
-
-        mockMvc.perform(post("/api/debates/9/stop"))
-                .andExpect(status().isNoContent());
     }
 }

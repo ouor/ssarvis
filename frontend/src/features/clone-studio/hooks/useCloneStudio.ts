@@ -42,6 +42,8 @@ export function useCloneStudio() {
 
   const chatAbortControllerRef = useRef<AbortController | null>(null)
   const debateAbortControllerRef = useRef<AbortController | null>(null)
+  const chatPlayerRef = useRef<PcmStreamPlayer | null>(null)
+  const debatePlayerRef = useRef<PcmStreamPlayer | null>(null)
   const debateSessionIdRef = useRef<number | null>(null)
   const debateRunningRef = useRef(false)
   const liveChatInputRef = useRef('')
@@ -118,7 +120,7 @@ export function useCloneStudio() {
 
   useEffect(() => {
     if (activeTab !== 'live' && liveDebate?.running) {
-      void handleDebateStop()
+      void handleDebateExit()
     }
   }, [activeTab, liveDebate?.running])
 
@@ -136,17 +138,39 @@ export function useCloneStudio() {
   }, [speechInput.supported, speechInput.listening, speechInput.error])
 
   useEffect(() => {
-    return () => {
+    function stopRenderedAudio() {
+      const audioElements = document.querySelectorAll('audio')
+      for (const audioElement of audioElements) {
+        audioElement.pause()
+      }
+    }
+
+    function handlePageLeave() {
       chatAbortControllerRef.current?.abort()
       debateAbortControllerRef.current?.abort()
+      void chatPlayerRef.current?.dispose()
+      void debatePlayerRef.current?.dispose()
+      chatPlayerRef.current = null
+      debatePlayerRef.current = null
+      stopRenderedAudio()
       void speechInput.stop()
-      const debateSessionId = debateSessionIdRef.current
-      if (debateSessionId) {
-        void fetch(`${apiBaseUrl}/api/debates/${debateSessionId}/stop`, {
-          method: 'POST',
-          keepalive: true,
-        })
+    }
+
+    function handleVisibilityChange() {
+      if (document.hidden) {
+        handlePageLeave()
       }
+    }
+
+    window.addEventListener('pagehide', handlePageLeave)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('pagehide', handlePageLeave)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      handlePageLeave()
+      chatAbortControllerRef.current?.abort()
+      debateAbortControllerRef.current?.abort()
     }
   }, [])
 
@@ -346,6 +370,7 @@ export function useCloneStudio() {
     const player = new PcmStreamPlayer()
     const abortController = new AbortController()
     chatAbortControllerRef.current = abortController
+    chatPlayerRef.current = player
 
     setLiveChat((current) =>
       current
@@ -445,6 +470,9 @@ export function useCloneStudio() {
       )
     } finally {
       await player.dispose()
+      if (chatPlayerRef.current === player) {
+        chatPlayerRef.current = null
+      }
       chatAbortControllerRef.current = null
       setLiveChat((current) =>
         current
@@ -461,6 +489,7 @@ export function useCloneStudio() {
     const player = new PcmStreamPlayer()
     const abortController = new AbortController()
     debateAbortControllerRef.current = abortController
+    debatePlayerRef.current = player
 
     try {
       const response = await fetch(url, {
@@ -522,6 +551,9 @@ export function useCloneStudio() {
         }
       })
     } finally {
+      if (debatePlayerRef.current === player) {
+        debatePlayerRef.current = null
+      }
       debateAbortControllerRef.current = null
       await player.dispose()
     }
@@ -549,37 +581,17 @@ export function useCloneStudio() {
     }
   }
 
-  async function handleDebateStop() {
-    const sessionId = debateSessionIdRef.current
+  async function handleDebateExit() {
     setLiveDebate((current) =>
       current
         ? {
             ...current,
             running: false,
-            stopping: true,
           }
         : current
     )
     debateAbortControllerRef.current?.abort()
-
-    try {
-      if (sessionId) {
-        await fetch(`${apiBaseUrl}/api/debates/${sessionId}/stop`, {
-          method: 'POST',
-        })
-      }
-    } catch {
-      // Ignore stop failures.
-    } finally {
-      setLiveDebate((current) =>
-        current
-          ? {
-              ...current,
-              stopping: false,
-            }
-          : current
-      )
-    }
+    setActiveTab('clones')
   }
 
   function handleVoiceFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -664,7 +676,6 @@ export function useCloneStudio() {
       debateSessionId: null,
       turns: [],
       running: true,
-      stopping: false,
       error: '',
     }
 
@@ -751,6 +762,6 @@ export function useCloneStudio() {
     handleChatInputChange,
     handleChatSpeechToggle,
     handleStartDebate,
-    handleDebateStop,
+    handleDebateExit,
   }
 }
