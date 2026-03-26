@@ -12,6 +12,7 @@ public class AppProperties {
     private final Dashscope dashscope = new Dashscope();
     private final Media media = new Media();
     private final Storage storage = new Storage();
+    private final Auth auth = new Auth();
 
     public Openai getOpenai() {
         return openai;
@@ -31,6 +32,10 @@ public class AppProperties {
 
     public Storage getStorage() {
         return storage;
+    }
+
+    public Auth getAuth() {
+        return auth;
     }
 
     public static class Openai {
@@ -140,6 +145,35 @@ public class AppProperties {
 
         public S3 getS3() {
             return s3;
+        }
+    }
+
+    public static class Auth {
+        private final Jwt jwt = new Jwt();
+
+        public Jwt getJwt() {
+            return jwt;
+        }
+    }
+
+    public static class Jwt {
+        private String secret;
+        private long accessTokenExpirationMinutes = 120;
+
+        public String getSecret() {
+            return secret;
+        }
+
+        public void setSecret(String secret) {
+            this.secret = secret;
+        }
+
+        public long getAccessTokenExpirationMinutes() {
+            return accessTokenExpirationMinutes;
+        }
+
+        public void setAccessTokenExpirationMinutes(long accessTokenExpirationMinutes) {
+            this.accessTokenExpirationMinutes = accessTokenExpirationMinutes;
         }
     }
 
