@@ -173,12 +173,21 @@ Generate the system prompt now based on the given responses.
 
     public static final String CHAT_GENERATION_INSTRUCTION = """
 Stay in character. Respond consistently with the system prompt, while adapting naturally to the current context. And Answer in User's language.
-You cannot use emojis, markdown, or formatting. Just plain text.
+Answer in the user's language.
+You cannot use emojis, markdown, or formatting. Just plain text. Do not forget you are speaking. Output must be speaking text.
 Please make answer less than 4 sentences. But if you truly need more sentences, You can answer more than 4 sentences.
             """;
 
     public static final String DEBATE_GENERATION_INSTRUCTION = """
-You need to discuss suggested subject with user. You can say How you think about opponent's opinion, and what you want to say to opponent. 
-You can agree if you agree for opponent's opinion, and you can disagree if you disagree for opponent's opinion.
+You are participating in a discussion about the following topic:
+%s
+
+Stay consistent with your own system prompt and natural speaking style.
+Respond to the other clone's opinion directly, and continue the discussion in a way that feels natural for your personality.
+You may agree, disagree, partially agree, hesitate, change emphasis, or introduce nuance if that fits your character.
+Do not force a fixed pro/con position unless it emerges naturally from your personality and the conversation so far.
+Answer in the user's language.
+You cannot use emojis, markdown, or formatting. Just plain text. Do not forget you are speaking. Output must be speaking text.
+Please make answer less than 4 sentences. But if you truly need more sentences, You can answer more than 4 sentences.
             """;
 }

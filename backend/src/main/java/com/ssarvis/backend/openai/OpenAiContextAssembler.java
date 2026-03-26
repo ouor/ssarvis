@@ -66,7 +66,6 @@ public class OpenAiContextAssembler {
     public List<OpenAiMessage> buildDebateMessages(
             String systemPrompt,
             String topic,
-            String stance,
             String activeSpeakerName,
             List<DebateHistoryMessage> history,
             int maxTurns
@@ -79,7 +78,7 @@ public class OpenAiContextAssembler {
             messages.add(new OpenAiMessage(role, message.content()));
         }
 
-        messages.add(new OpenAiMessage("system", PromptTemplates.DEBATE_GENERATION_INSTRUCTION.formatted(topic, stance)));
+        messages.add(new OpenAiMessage("system", PromptTemplates.DEBATE_GENERATION_INSTRUCTION.formatted(topic)));
         return messages;
     }
 

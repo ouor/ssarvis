@@ -184,14 +184,13 @@ public class DebateService {
         PromptGenerationLog activeClone = isCloneATurn ? debateSession.getCloneA() : debateSession.getCloneB();
         RegisteredVoice activeVoice = isCloneATurn ? debateSession.getCloneAVoice() : debateSession.getCloneBVoice();
         DebateTurn.Speaker speaker = isCloneATurn ? DebateTurn.Speaker.CLONE_A : DebateTurn.Speaker.CLONE_B;
-        String stance = isCloneATurn ? "찬성" : "반대";
 
         String activeSpeakerName = speaker.name();
         List<OpenAiContextAssembler.DebateHistoryMessage> history = existingTurns.stream()
                 .map(turn -> new OpenAiContextAssembler.DebateHistoryMessage(turn.getSpeaker().name(), turn.getContent()))
                 .toList();
 
-        String message = generateDebateTurn(activeClone.getSystemPrompt(), debateSession.getTopic(), stance, activeSpeakerName, history);
+        String message = generateDebateTurn(activeClone.getSystemPrompt(), debateSession.getTopic(), activeSpeakerName, history);
         return new TurnContext(activeClone, activeVoice, speaker, existingTurns.size() + 1, message);
     }
 
@@ -216,7 +215,6 @@ public class DebateService {
     private String generateDebateTurn(
             String systemPrompt,
             String topic,
-            String stance,
             String activeSpeakerName,
             List<OpenAiContextAssembler.DebateHistoryMessage> history
     ) {
@@ -224,7 +222,6 @@ public class DebateService {
                 openAiContextAssembler.buildDebateMessages(
                         systemPrompt,
                         topic,
-                        stance,
                         activeSpeakerName,
                         history,
                         appProperties.getOpenai().getChatHistoryTurns()
