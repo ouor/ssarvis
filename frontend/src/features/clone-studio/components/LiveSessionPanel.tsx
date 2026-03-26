@@ -1,8 +1,9 @@
 import type { FormEvent } from 'react'
-import type { LiveChatState, LiveDebateState } from '../types'
+import type { CurrentUser, LiveChatState, LiveDebateState } from '../types'
 import { formatCloneName } from '../utils'
 
 type LiveSessionPanelProps = {
+  currentUser: CurrentUser
   liveChat: LiveChatState | null
   liveDebate: LiveDebateState | null
   onChatSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
@@ -13,6 +14,7 @@ type LiveSessionPanelProps = {
 }
 
 function LiveSessionPanel({
+  currentUser,
   liveChat,
   liveDebate,
   onChatSubmit,
@@ -133,8 +135,8 @@ function LiveSessionPanel({
 
         {!liveChat && !liveDebate ? (
           <article className="empty-card live-empty">
-            <strong>클론을 선택하면 이곳에서 모든 대화가 시작됩니다.</strong>
-            <p>첫 번째 탭에서 클론 카드를 눌러 채팅이나 논쟁 흐름을 열어보세요.</p>
+            <strong>{currentUser.displayName}님의 클론을 선택하면 이곳에서 세션이 시작됩니다.</strong>
+            <p>내 계정에 저장된 클론 카드에서 채팅이나 논쟁 흐름을 열어보세요.</p>
           </article>
         ) : null}
       </article>

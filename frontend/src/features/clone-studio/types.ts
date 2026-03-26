@@ -8,6 +8,19 @@ export type ApiErrorResponse = {
   details?: string[]
 }
 
+export type AuthResponse = {
+  userId: number
+  username: string
+  displayName: string
+  accessToken: string
+}
+
+export type CurrentUser = {
+  userId: number
+  username: string
+  displayName: string
+}
+
 export type CloneOption = {
   cloneId: number
   createdAt: string

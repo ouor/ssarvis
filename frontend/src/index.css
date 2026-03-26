@@ -42,7 +42,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -72,4 +73,181 @@ h2 {
 
 p {
   margin: 0;
+}
+
+input,
+textarea {
+  border: 1px solid rgba(117, 93, 58, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text-strong);
+}
+
+button {
+  border: none;
+}
+
+.auth-shell,
+.auth-loading-shell {
+  min-height: 100vh;
+  display: grid;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+}
+
+.auth-shell {
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+}
+
+.auth-panel,
+.auth-loading-card {
+  border: 1px solid rgba(117, 93, 58, 0.12);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 203, 138, 0.2), transparent 32%),
+    rgba(255, 255, 255, 0.84);
+  box-shadow: 0 24px 60px rgba(92, 67, 54, 0.08);
+}
+
+.auth-panel-copy {
+  padding: 42px;
+}
+
+.auth-panel-form,
+.auth-loading-card {
+  max-width: 520px;
+  width: 100%;
+  padding: 28px;
+}
+
+.auth-loading-shell {
+  justify-items: center;
+}
+
+.auth-kicker {
+  margin-bottom: 12px;
+  color: #c86657;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.auth-copy {
+  margin-top: 16px;
+  max-width: 54ch;
+  color: var(--muted);
+  font-size: 1.02rem;
+}
+
+.auth-copy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.auth-copy-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 24px;
+  background: rgba(255, 248, 240, 0.82);
+}
+
+.auth-copy-grid strong {
+  color: var(--text-strong);
+}
+
+.auth-copy-grid span {
+  color: var(--muted);
+  font-size: 0.94rem;
+}
+
+.auth-tab-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 13px 16px;
+  border-radius: 999px;
+  background: rgba(238, 227, 211, 0.8);
+  color: var(--text-strong);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-tab-active {
+  background: linear-gradient(135deg, #f27d68, #ff9f7e);
+  color: white;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-form-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.auth-form-copy p {
+  color: var(--muted);
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-field span {
+  color: var(--text-strong);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.auth-field input {
+  padding: 15px 16px;
+}
+
+.auth-error {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 232, 232, 0.9);
+  color: #a33f36;
+  white-space: pre-wrap;
+}
+
+.auth-submit {
+  padding: 15px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f27d68, #ff9f7e);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.auth-submit:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+@media (max-width: 960px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-copy-grid {
+    grid-template-columns: 1fr;
+  }
 }

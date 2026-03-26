@@ -1,14 +1,15 @@
-import type { CloneOption } from '../types'
+import type { CloneOption, CurrentUser } from '../types'
 import { formatCloneName } from '../utils'
 
 type CloneGridSectionProps = {
   clones: CloneOption[]
+  currentUser: CurrentUser
   loadError: string
   onCreateClone: () => void
   onCloneSelect: (clone: CloneOption) => void
 }
 
-function CloneGridSection({ clones, loadError, onCreateClone, onCloneSelect }: CloneGridSectionProps) {
+function CloneGridSection({ clones, currentUser, loadError, onCreateClone, onCloneSelect }: CloneGridSectionProps) {
   return (
     <section className="studio-grid">
       <button className="create-clone-card" onClick={onCreateClone} type="button">
@@ -39,8 +40,8 @@ function CloneGridSection({ clones, loadError, onCreateClone, onCloneSelect }: C
         ))}
         {clones.length === 0 ? (
           <article className="empty-card">
-            <strong>아직 만들어진 클론이 없습니다.</strong>
-            <p>첫 번째 문답을 시작해서 스튜디오를 채워보세요.</p>
+            <strong>{currentUser.displayName}님 계정에는 아직 클론이 없습니다.</strong>
+            <p>첫 번째 문답을 시작해서 내 계정 전용 클론을 만들어보세요.</p>
           </article>
         ) : null}
       </div>

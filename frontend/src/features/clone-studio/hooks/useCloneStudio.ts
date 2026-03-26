@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { apiBaseUrl, questionAssetPath, readErrorMessage, readNdjsonStream } from '../api'
+import { apiBaseUrl, apiFetch, questionAssetPath, readErrorMessage, readNdjsonStream } from '../api'
 import type {
   CloneOption,
+  CurrentUser,
   LiveChatState,
   LiveDebateState,
   ModalState,
@@ -14,7 +15,7 @@ import type {
 import PcmStreamPlayer from '../../../utils/PcmStreamPlayer'
 import { useSpeechInput } from './useSpeechInput'
 
-export function useCloneStudio() {
+export function useCloneStudio(currentUser: CurrentUser) {
   const [activeTab, setActiveTab] = useState<'clones' | 'live'>('clones')
   const [modalState, setModalState] = useState<ModalState>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -78,6 +79,24 @@ export function useCloneStudio() {
     [clones, debateOpponentId]
   )
 
+  function stopRenderedAudio() {
+    const audioElements = document.querySelectorAll('audio')
+    for (const audioElement of audioElements) {
+      audioElement.pause()
+    }
+  }
+
+  async function clearActiveSession() {
+    chatAbortControllerRef.current?.abort()
+    debateAbortControllerRef.current?.abort()
+    await chatPlayerRef.current?.dispose()
+    await debatePlayerRef.current?.dispose()
+    chatPlayerRef.current = null
+    debatePlayerRef.current = null
+    stopRenderedAudio()
+    await speechInput.stop()
+  }
+
   useEffect(() => {
     const controller = new AbortController()
 
@@ -103,11 +122,43 @@ export function useCloneStudio() {
     }
 
     void loadQuestions()
-    void loadClones()
-    void loadVoices()
 
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadUserOwnedResources() {
+      setActiveTab('clones')
+      setModalState(null)
+      setAnswers({})
+      setCreateCloneError('')
+      setCloneLoadError('')
+      setClones([])
+      setVoiceLoadError('')
+      setVoices([])
+      setSelectedVoiceId('')
+      setVoiceAlias('')
+      setVoiceFile(null)
+      setVoiceRegisterError('')
+      setDebateTopic('')
+      setDebateOpponentId('')
+      setDebateVoiceAId('')
+      setDebateVoiceBId('')
+      setDebateSetupError('')
+      setLiveChat(null)
+      setLiveDebate(null)
+      await clearActiveSession()
+      await Promise.all([loadClones(controller.signal), loadVoices(controller.signal)])
+    }
+
+    void loadUserOwnedResources()
+
+    return () => {
+      controller.abort()
+    }
+  }, [currentUser.userId])
 
   useEffect(() => {
     debateSessionIdRef.current = liveDebate?.debateSessionId ?? null
@@ -138,22 +189,8 @@ export function useCloneStudio() {
   }, [speechInput.supported, speechInput.listening, speechInput.error])
 
   useEffect(() => {
-    function stopRenderedAudio() {
-      const audioElements = document.querySelectorAll('audio')
-      for (const audioElement of audioElements) {
-        audioElement.pause()
-      }
-    }
-
     function handlePageLeave() {
-      chatAbortControllerRef.current?.abort()
-      debateAbortControllerRef.current?.abort()
-      void chatPlayerRef.current?.dispose()
-      void debatePlayerRef.current?.dispose()
-      chatPlayerRef.current = null
-      debatePlayerRef.current = null
-      stopRenderedAudio()
-      void speechInput.stop()
+      void clearActiveSession()
     }
 
     window.addEventListener('pagehide', handlePageLeave)
@@ -164,30 +201,42 @@ export function useCloneStudio() {
     }
   }, [])
 
-  async function loadClones() {
+  async function loadClones(signal?: AbortSignal) {
     try {
       setCloneLoadError('')
-      const response = await fetch(`${apiBaseUrl}/api/clones`)
+      const response = await apiFetch(`${apiBaseUrl}/api/clones`, { signal })
       if (!response.ok) {
         throw new Error(await readErrorMessage(response, `클론 목록을 불러오지 못했습니다. (${response.status})`))
       }
       const data: CloneOption[] = await response.json()
+      if (signal?.aborted) {
+        return
+      }
       setClones(data)
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
       setCloneLoadError(error instanceof Error ? error.message : '클론 목록을 불러오는 중 오류가 발생했습니다.')
     }
   }
 
-  async function loadVoices() {
+  async function loadVoices(signal?: AbortSignal) {
     try {
       setVoiceLoadError('')
-      const response = await fetch(`${apiBaseUrl}/api/voices`)
+      const response = await apiFetch(`${apiBaseUrl}/api/voices`, { signal })
       if (!response.ok) {
         throw new Error(await readErrorMessage(response, `목소리 목록을 불러오지 못했습니다. (${response.status})`))
       }
       const data: VoiceOption[] = await response.json()
+      if (signal?.aborted) {
+        return
+      }
       setVoices(data)
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
       setVoiceLoadError(error instanceof Error ? error.message : '목소리 목록을 불러오는 중 오류가 발생했습니다.')
     }
   }
@@ -267,7 +316,7 @@ export function useCloneStudio() {
     setCreateCloneError('')
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/system-prompt`, {
+      const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -317,7 +366,7 @@ export function useCloneStudio() {
         formData.append('alias', voiceAlias.trim())
       }
 
-      const response = await fetch(`${apiBaseUrl}/api/voices`, {
+      const response = await apiFetch(`${apiBaseUrl}/api/voices`, {
         method: 'POST',
         body: formData,
       })
@@ -382,7 +431,7 @@ export function useCloneStudio() {
         ...(liveChat.voiceId ? { registeredVoiceId: liveChat.voiceId } : {}),
       }
 
-      const response = await fetch(`${apiBaseUrl}/api/chat/messages/stream`, {
+      const response = await apiFetch(`${apiBaseUrl}/api/chat/messages/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -482,7 +531,7 @@ export function useCloneStudio() {
     debatePlayerRef.current = player
 
     try {
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: 'POST',
         headers: body ? { 'Content-Type': 'application/json' } : undefined,
         body: body ? JSON.stringify(body) : undefined,

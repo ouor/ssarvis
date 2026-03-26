@@ -1,3 +1,4 @@
+import type { CurrentUser } from '../features/clone-studio/types'
 import CloneGridSection from '../features/clone-studio/components/CloneGridSection'
 import LiveSessionPanel from '../features/clone-studio/components/LiveSessionPanel'
 import StudioHero from '../features/clone-studio/components/StudioHero'
@@ -11,23 +12,45 @@ import '../features/clone-studio/styles/layout.css'
 import '../features/clone-studio/styles/panels.css'
 import '../features/clone-studio/styles/modals.css'
 
-function CloneStudioPage() {
-  const studio = useCloneStudio()
+type CloneStudioPageProps = {
+  currentUser: CurrentUser
+  onLogout: () => void
+}
+
+function CloneStudioPage({ currentUser, onLogout }: CloneStudioPageProps) {
+  const studio = useCloneStudio(currentUser)
 
   return (
     <main className="studio-shell">
-      <StudioHero activeTab={studio.activeTab} cloneCount={studio.clones.length} voiceCount={studio.voices.length} />
+      <section className="studio-account-bar">
+        <div>
+          <p className="studio-kicker">Signed In</p>
+          <strong>{currentUser.displayName}</strong>
+          <span>@{currentUser.username}</span>
+        </div>
+        <button className="secondary-button" onClick={onLogout} type="button">
+          로그아웃
+        </button>
+      </section>
+      <StudioHero
+        activeTab={studio.activeTab}
+        cloneCount={studio.clones.length}
+        currentUser={currentUser}
+        voiceCount={studio.voices.length}
+      />
       <StudioTabs activeTab={studio.activeTab} onTabChange={studio.setActiveTab} />
 
       {studio.activeTab === 'clones' ? (
         <CloneGridSection
           clones={studio.clones}
+          currentUser={currentUser}
           loadError={studio.cloneLoadError}
           onCloneSelect={studio.openCloneActions}
           onCreateClone={studio.openCreateCloneModal}
         />
       ) : (
         <LiveSessionPanel
+          currentUser={currentUser}
           liveChat={studio.liveChat}
           liveDebate={studio.liveDebate}
           onChatInputChange={studio.handleChatInputChange}

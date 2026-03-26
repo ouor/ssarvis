@@ -2,6 +2,41 @@ import type { ApiErrorResponse, StreamEvent } from './types'
 
 export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
 export const questionAssetPath = `${import.meta.env.BASE_URL}questions.json`
+export const authExpiredEventName = 'ssarvis:auth-expired'
+const accessTokenStorageKey = 'ssarvis.access-token'
+
+export function getStoredAccessToken() {
+  return window.localStorage.getItem(accessTokenStorageKey) ?? ''
+}
+
+export function storeAccessToken(accessToken: string) {
+  window.localStorage.setItem(accessTokenStorageKey, accessToken)
+}
+
+export function clearStoredAccessToken() {
+  window.localStorage.removeItem(accessTokenStorageKey)
+}
+
+export async function apiFetch(input: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers)
+  const accessToken = getStoredAccessToken()
+
+  if (accessToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+
+  const response = await fetch(input, {
+    ...init,
+    headers,
+  })
+
+  if (response.status === 401 && accessToken) {
+    clearStoredAccessToken()
+    window.dispatchEvent(new CustomEvent(authExpiredEventName))
+  }
+
+  return response
+}
 
 export async function readErrorMessage(response: Response, fallbackMessage: string) {
   const contentType = response.headers.get('Content-Type') ?? ''
