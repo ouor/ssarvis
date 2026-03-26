@@ -22,6 +22,7 @@
 - API 유틸: [api.ts](./src/features/clone-studio/api.ts)
 - 메인 화면: [CloneStudioPage.tsx](./src/pages/CloneStudioPage.tsx)
 - 사용자 기준 상태 로딩: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+- 저장된 채팅/논쟁 기록 열기: [LiveSessionPanel.tsx](./src/features/clone-studio/components/LiveSessionPanel.tsx)
 
 ### 현재 구조
 
@@ -35,6 +36,7 @@
   - 로그아웃/회원 탈퇴 후 로그인 화면 복귀
 - `useCloneStudio`
   - 현재 로그인 회원 기준으로 클론/음성 목록 재로딩
+  - 현재 로그인 회원 기준으로 채팅/논쟁 기록 목록 재로딩
   - 사용자 전환 시 라이브 세션/모달/임시 입력 상태 정리
 
 ### 현재 동작
@@ -45,6 +47,7 @@
 4. 이후 보호 API는 `apiFetch(...)`를 통해 항상 `Authorization: Bearer ...`를 자동 부착
 5. 어떤 보호 API에서든 `401`이 오면 `authExpiredEventName` 이벤트를 발행하고, 앱 루트가 이를 받아 자동 로그아웃
 6. 사용자 정보가 바뀌면 `useCloneStudio(currentUser)`가 기존 세션을 정리하고 해당 사용자 소유 데이터만 다시 불러옴
+7. Live 탭 왼쪽 기록 목록에서 이전 채팅/논쟁을 다시 열 수 있음
 
 실제 세션 복구 흐름 예시
 
@@ -66,6 +69,7 @@ setCurrentUser(me)
 - 보호 API 호출은 직접 `fetch`보다 `apiFetch(...)`를 우선 사용한다.
 - 회원 탈퇴는 서버 세션을 지우는 개념이 아니라 soft delete + 로컬 토큰 제거 흐름이다.
 - 사용자 전환 시 이전 사용자의 채팅/논쟁 상태가 남지 않도록 `useCloneStudio`의 `currentUser.userId` 의존 효과를 유지한다.
+- 기록 상세를 열 때도 직접 `fetch`보다 `apiFetch(...)`와 훅 내부 로딩 함수를 통해 일관되게 처리한다.
 
 ## 2. 실시간 PCM 재생
 
@@ -440,6 +444,24 @@ const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
 - 등록 중인 음성 파일과 별칭
 - 활성 `AbortController`
 - 활성 `PcmStreamPlayer`
+- 채팅/논쟁 기록 목록
+
+### 저장된 기록 다시 열기
+
+현재 Live 탭은 새 세션만 처리하지 않고, 서버에 저장된 이전 기록도 함께 보여준다.
+
+- `GET /api/chat/conversations`
+- `GET /api/chat/conversations/{id}`
+- `GET /api/debates`
+- `GET /api/debates/{id}`
+
+채팅 기록을 열면:
+- 기존 메시지를 그대로 렌더링
+- `conversationId`를 유지한 채 다시 메시지를 보낼 수 있음
+
+논쟁 기록을 열면:
+- 저장된 턴을 읽기 전용으로 다시 표시
+- 현재는 자동 루프를 다시 붙이지 않고 기록 열람 중심으로 동작
 
 이 동작 덕분에 다른 사용자가 같은 브라우저에서 로그인해도 이전 사용자의 라이브 세션이 섞이지 않는다.
 

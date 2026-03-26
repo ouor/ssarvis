@@ -159,6 +159,53 @@ public class ChatService {
         ));
     }
 
+    @Transactional(readOnly = true)
+    public List<ChatConversationSummaryResponse> listConversations(Long userId) {
+        authService.getActiveUserAccount(userId);
+        return chatConversationRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(conversation -> {
+                    List<ChatMessage> messages = chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId());
+                    String latestMessagePreview = messages.isEmpty()
+                            ? ""
+                            : abbreviate(messages.get(messages.size() - 1).getContent(), 80);
+                    return new ChatConversationSummaryResponse(
+                            conversation.getId(),
+                            conversation.getPromptGenerationLog().getId(),
+                            conversation.getPromptGenerationLog().getAlias(),
+                            conversation.getCreatedAt(),
+                            latestMessagePreview,
+                            messages.size()
+                    );
+                })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ChatConversationDetailResponse getConversation(Long userId, Long conversationId) {
+        authService.getActiveUserAccount(userId);
+        ChatConversation conversation = chatConversationRepository.findByIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found."));
+
+        List<ChatHistoryMessageResponse> messages = chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId()).stream()
+                .map(message -> new ChatHistoryMessageResponse(
+                        message.getRole().name().toLowerCase(),
+                        message.getContent(),
+                        message.getCreatedAt(),
+                        message.getAudioAsset() != null ? message.getAudioAsset().getObjectUrl() : null,
+                        message.getAudioAsset() != null ? message.getAudioAsset().getProviderVoiceId() : null
+                ))
+                .toList();
+
+        return new ChatConversationDetailResponse(
+                conversation.getId(),
+                conversation.getPromptGenerationLog().getId(),
+                conversation.getPromptGenerationLog().getAlias(),
+                conversation.getPromptGenerationLog().getShortDescription(),
+                conversation.getCreatedAt(),
+                messages
+        );
+    }
+
     private ChatConversation resolveConversation(UserAccount user, ChatRequest request) {
         if (request.conversationId() != null) {
             return chatConversationRepository.findByIdAndUserId(request.conversationId(), user.getId())
@@ -187,5 +234,12 @@ public class ChatService {
                         appProperties.getOpenai().getChatHistoryTurns()
                 )
         );
+    }
+
+    private String abbreviate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value == null ? "" : value;
+        }
+        return value.substring(0, maxLength) + "...";
     }
 }

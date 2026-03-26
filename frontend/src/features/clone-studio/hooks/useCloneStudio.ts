@@ -3,7 +3,11 @@ import type { ChangeEvent, FormEvent } from 'react'
 import { apiBaseUrl, apiFetch, questionAssetPath, readErrorMessage, readNdjsonStream } from '../api'
 import type {
   CloneOption,
+  ChatConversationDetail,
+  ChatConversationSummary,
   CurrentUser,
+  DebateSessionDetail,
+  DebateSessionSummary,
   LiveChatState,
   LiveDebateState,
   ModalState,
@@ -28,6 +32,10 @@ export function useCloneStudio(currentUser: CurrentUser) {
   const [cloneLoadError, setCloneLoadError] = useState('')
   const [voices, setVoices] = useState<VoiceOption[]>([])
   const [voiceLoadError, setVoiceLoadError] = useState('')
+  const [chatHistory, setChatHistory] = useState<ChatConversationSummary[]>([])
+  const [chatHistoryLoadError, setChatHistoryLoadError] = useState('')
+  const [debateHistory, setDebateHistory] = useState<DebateSessionSummary[]>([])
+  const [debateHistoryLoadError, setDebateHistoryLoadError] = useState('')
   const [selectedVoiceId, setSelectedVoiceId] = useState('')
   const [voiceAlias, setVoiceAlias] = useState('')
   const [voiceFile, setVoiceFile] = useState<File | null>(null)
@@ -138,6 +146,10 @@ export function useCloneStudio(currentUser: CurrentUser) {
       setClones([])
       setVoiceLoadError('')
       setVoices([])
+      setChatHistoryLoadError('')
+      setChatHistory([])
+      setDebateHistoryLoadError('')
+      setDebateHistory([])
       setSelectedVoiceId('')
       setVoiceAlias('')
       setVoiceFile(null)
@@ -150,7 +162,12 @@ export function useCloneStudio(currentUser: CurrentUser) {
       setLiveChat(null)
       setLiveDebate(null)
       await clearActiveSession()
-      await Promise.all([loadClones(controller.signal), loadVoices(controller.signal)])
+      await Promise.all([
+        loadClones(controller.signal),
+        loadVoices(controller.signal),
+        loadChatHistory(controller.signal),
+        loadDebateHistory(controller.signal),
+      ])
     }
 
     void loadUserOwnedResources()
@@ -238,6 +255,46 @@ export function useCloneStudio(currentUser: CurrentUser) {
         return
       }
       setVoiceLoadError(error instanceof Error ? error.message : '목소리 목록을 불러오는 중 오류가 발생했습니다.')
+    }
+  }
+
+  async function loadChatHistory(signal?: AbortSignal) {
+    try {
+      setChatHistoryLoadError('')
+      const response = await apiFetch(`${apiBaseUrl}/api/chat/conversations`, { signal })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, `채팅 기록을 불러오지 못했습니다. (${response.status})`))
+      }
+      const data: ChatConversationSummary[] = await response.json()
+      if (signal?.aborted) {
+        return
+      }
+      setChatHistory(data)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
+      setChatHistoryLoadError(error instanceof Error ? error.message : '채팅 기록을 불러오는 중 오류가 발생했습니다.')
+    }
+  }
+
+  async function loadDebateHistory(signal?: AbortSignal) {
+    try {
+      setDebateHistoryLoadError('')
+      const response = await apiFetch(`${apiBaseUrl}/api/debates`, { signal })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, `논쟁 기록을 불러오지 못했습니다. (${response.status})`))
+      }
+      const data: DebateSessionSummary[] = await response.json()
+      if (signal?.aborted) {
+        return
+      }
+      setDebateHistory(data)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
+      setDebateHistoryLoadError(error instanceof Error ? error.message : '논쟁 기록을 불러오는 중 오류가 발생했습니다.')
     }
   }
 
@@ -513,6 +570,7 @@ export function useCloneStudio(currentUser: CurrentUser) {
         chatPlayerRef.current = null
       }
       chatAbortControllerRef.current = null
+      void loadChatHistory()
       setLiveChat((current) =>
         current
           ? {
@@ -633,6 +691,104 @@ export function useCloneStudio(currentUser: CurrentUser) {
     setActiveTab('clones')
   }
 
+  async function openChatHistorySession(conversationId: number) {
+    try {
+      setChatHistoryLoadError('')
+      await speechInput.stop()
+      await clearActiveSession()
+
+      const response = await apiFetch(`${apiBaseUrl}/api/chat/conversations/${conversationId}`)
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, `채팅 기록을 불러오지 못했습니다. (${response.status})`))
+      }
+
+      const detail: ChatConversationDetail = await response.json()
+      const clone =
+        clones.find((item) => item.cloneId === detail.cloneId) ?? {
+          cloneId: detail.cloneId,
+          createdAt: detail.createdAt,
+          alias: detail.cloneAlias,
+          shortDescription: detail.cloneShortDescription,
+        }
+
+      setLiveDebate(null)
+      setLiveChat({
+        clone,
+        voiceId: null,
+        conversationId: detail.conversationId,
+        messages: detail.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          createdAt: message.createdAt,
+          ttsAudioDataUrl: message.ttsAudioUrl ?? undefined,
+          ttsVoiceId: message.ttsVoiceId ?? undefined,
+        })),
+        input: '',
+        submitting: false,
+        error: '',
+        speechSupported: speechInput.supported,
+        speechListening: false,
+        speechError: '',
+      })
+      setActiveTab('live')
+    } catch (error) {
+      setChatHistoryLoadError(error instanceof Error ? error.message : '채팅 기록을 불러오지 못했습니다.')
+    }
+  }
+
+  async function openDebateHistorySession(debateSessionId: number) {
+    try {
+      setDebateHistoryLoadError('')
+      await speechInput.stop()
+      await clearActiveSession()
+
+      const response = await apiFetch(`${apiBaseUrl}/api/debates/${debateSessionId}`)
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, `논쟁 기록을 불러오지 못했습니다. (${response.status})`))
+      }
+
+      const detail: DebateSessionDetail = await response.json()
+      const cloneA =
+        clones.find((item) => item.cloneId === detail.cloneAId) ?? {
+          cloneId: detail.cloneAId,
+          createdAt: detail.createdAt,
+          alias: detail.cloneAAlias,
+          shortDescription: detail.cloneAShortDescription,
+        }
+      const cloneB =
+        clones.find((item) => item.cloneId === detail.cloneBId) ?? {
+          cloneId: detail.cloneBId,
+          createdAt: detail.createdAt,
+          alias: detail.cloneBAlias,
+          shortDescription: detail.cloneBShortDescription,
+        }
+
+      setLiveChat(null)
+      setLiveDebate({
+        cloneA,
+        cloneB,
+        cloneAVoiceId: detail.cloneAVoiceId,
+        cloneBVoiceId: detail.cloneBVoiceId,
+        topic: detail.topic,
+        debateSessionId: detail.debateSessionId,
+        turns: detail.turns.map((turn) => ({
+          turnIndex: turn.turnIndex,
+          speaker: turn.speaker,
+          cloneId: turn.cloneId,
+          content: turn.content,
+          createdAt: turn.createdAt,
+          ttsAudioDataUrl: turn.ttsAudioUrl ?? undefined,
+          ttsVoiceId: turn.ttsVoiceId ?? undefined,
+        })),
+        running: false,
+        error: '',
+      })
+      setActiveTab('live')
+    } catch (error) {
+      setDebateHistoryLoadError(error instanceof Error ? error.message : '논쟁 기록을 불러오지 못했습니다.')
+    }
+  }
+
   function handleVoiceFileChange(event: ChangeEvent<HTMLInputElement>) {
     setVoiceFile(event.target.files?.[0] ?? null)
   }
@@ -732,6 +888,7 @@ export function useCloneStudio(currentUser: CurrentUser) {
         cloneBVoiceId: Number(debateVoiceBId),
         topic: debateTopic.trim(),
       })
+      void loadDebateHistory()
       if (debateRunningRef.current) {
         void continueDebateLoop()
       }
@@ -766,6 +923,10 @@ export function useCloneStudio(currentUser: CurrentUser) {
     cloneLoadError,
     voices,
     voiceLoadError,
+    chatHistory,
+    chatHistoryLoadError,
+    debateHistory,
+    debateHistoryLoadError,
     selectedVoiceId,
     setSelectedVoiceId,
     voiceAlias,
@@ -800,6 +961,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
     handleChatSubmit,
     handleChatInputChange,
     handleChatSpeechToggle,
+    openChatHistorySession,
+    openDebateHistorySession,
     handleStartDebate,
     handleDebateExit,
   }

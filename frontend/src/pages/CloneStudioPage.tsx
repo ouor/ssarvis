@@ -57,10 +57,16 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
         />
       ) : (
         <LiveSessionPanel
+          chatHistory={studio.chatHistory}
+          chatHistoryLoadError={studio.chatHistoryLoadError}
           currentUser={currentUser}
+          debateHistory={studio.debateHistory}
+          debateHistoryLoadError={studio.debateHistoryLoadError}
           liveChat={studio.liveChat}
           liveDebate={studio.liveDebate}
           onChatInputChange={studio.handleChatInputChange}
+          onOpenChatHistory={studio.openChatHistorySession}
+          onOpenDebateHistory={studio.openDebateHistorySession}
           onChatSpeechToggle={studio.handleChatSpeechToggle}
           onChatSubmit={studio.handleChatSubmit}
           onDebateExit={studio.handleDebateExit}

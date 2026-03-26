@@ -3,6 +3,7 @@ package com.ssarvis.backend.chat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ssarvis.backend.api.GlobalExceptionHandler;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
+import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,6 +31,48 @@ class ChatControllerTest {
 
     @MockBean
     private ChatService chatService;
+
+    @Test
+    void listConversationsReturnsUserOwnedHistory() throws Exception {
+        given(chatService.listConversations(1L)).willReturn(List.of(
+                new ChatConversationSummaryResponse(41L, 7L, "하루", Instant.parse("2026-03-26T01:00:00Z"), "마지막 메시지", 2)
+        ));
+
+        mockMvc.perform(get("/api/chat/conversations")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].conversationId").value(41))
+                .andExpect(jsonPath("$[0].cloneAlias").value("하루"))
+                .andExpect(jsonPath("$[0].messageCount").value(2));
+    }
+
+    @Test
+    void getConversationReturnsHistoryMessages() throws Exception {
+        given(chatService.getConversation(1L, 41L)).willReturn(new ChatConversationDetailResponse(
+                41L,
+                7L,
+                "하루",
+                "차분한 클론",
+                Instant.parse("2026-03-26T01:00:00Z"),
+                List.of(
+                        new ChatHistoryMessageResponse("user", "안녕", Instant.parse("2026-03-26T01:00:01Z"), null, null),
+                        new ChatHistoryMessageResponse("assistant", "반가워요", Instant.parse("2026-03-26T01:00:02Z"), "https://cdn.example/audio.mp3", "voice-demo")
+                )
+        ));
+
+        mockMvc.perform(get("/api/chat/conversations/41")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversationId").value(41))
+                .andExpect(jsonPath("$.messages[1].content").value("반가워요"))
+                .andExpect(jsonPath("$.messages[1].ttsAudioUrl").value("https://cdn.example/audio.mp3"));
+    }
 
     @Test
     void sendMessageReturnsAssistantMessage() throws Exception {

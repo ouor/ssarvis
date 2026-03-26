@@ -41,6 +41,7 @@ export type VoiceOption = {
 export type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
+  createdAt?: string
   ttsAudioDataUrl?: string
   ttsVoiceId?: string
 }
@@ -50,8 +51,67 @@ export type DebateTurn = {
   speaker: string
   cloneId: number
   content: string
+  createdAt?: string
   ttsAudioDataUrl?: string
   ttsVoiceId?: string
+}
+
+export type ChatConversationSummary = {
+  conversationId: number
+  cloneId: number
+  cloneAlias: string
+  createdAt: string
+  latestMessagePreview: string
+  messageCount: number
+}
+
+export type ChatConversationDetail = {
+  conversationId: number
+  cloneId: number
+  cloneAlias: string
+  cloneShortDescription: string
+  createdAt: string
+  messages: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    createdAt: string
+    ttsAudioUrl?: string | null
+    ttsVoiceId?: string | null
+  }>
+}
+
+export type DebateSessionSummary = {
+  debateSessionId: number
+  cloneAId: number
+  cloneAAlias: string
+  cloneBId: number
+  cloneBAlias: string
+  topic: string
+  createdAt: string
+  turnCount: number
+}
+
+export type DebateSessionDetail = {
+  debateSessionId: number
+  cloneAId: number
+  cloneAAlias: string
+  cloneAShortDescription: string
+  cloneAVoiceId: number
+  cloneBId: number
+  cloneBAlias: string
+  cloneBShortDescription: string
+  cloneBVoiceId: number
+  topic: string
+  createdAt: string
+  turns: Array<{
+    turnIndex: number
+    speaker: string
+    cloneId: number
+    content: string
+    createdAt: string
+    ttsAudioUrl?: string | null
+    ttsVoiceId?: string | null
+  }>
 }
 
 export type PromptGenerateResponse = {

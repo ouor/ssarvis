@@ -3,6 +3,7 @@ package com.ssarvis.backend.debate;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ssarvis.backend.api.GlobalExceptionHandler;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
+import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -27,6 +30,54 @@ class DebateControllerTest {
 
     @MockBean
     private DebateService debateService;
+
+    @Test
+    void listDebatesReturnsUserOwnedHistory() throws Exception {
+        given(debateService.listDebates(1L)).willReturn(List.of(
+                new DebateSessionSummaryResponse(9L, 1L, "하루", 2L, "미소", "원격근무가 더 효율적인가?", Instant.parse("2026-03-26T01:00:00Z"), 4)
+        ));
+
+        mockMvc.perform(get("/api/debates")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].debateSessionId").value(9))
+                .andExpect(jsonPath("$[0].cloneAAlias").value("하루"))
+                .andExpect(jsonPath("$[0].turnCount").value(4));
+    }
+
+    @Test
+    void getDebateReturnsTurnHistory() throws Exception {
+        given(debateService.getDebate(1L, 9L)).willReturn(new DebateSessionDetailResponse(
+                9L,
+                1L,
+                "하루",
+                "차분한 클론",
+                10L,
+                2L,
+                "미소",
+                "창의적인 클론",
+                11L,
+                "원격근무가 더 효율적인가?",
+                Instant.parse("2026-03-26T01:00:00Z"),
+                List.of(
+                        new DebateHistoryTurnResponse(1, "CLONE_A", 1L, "첫 발언", Instant.parse("2026-03-26T01:00:01Z"), null, null),
+                        new DebateHistoryTurnResponse(2, "CLONE_B", 2L, "두 번째 발언", Instant.parse("2026-03-26T01:00:02Z"), "https://cdn.example/debate.mp3", "voice-b")
+                )
+        ));
+
+        mockMvc.perform(get("/api/debates/9")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").value(9))
+                .andExpect(jsonPath("$.turns[1].content").value("두 번째 발언"))
+                .andExpect(jsonPath("$.turns[1].ttsAudioUrl").value("https://cdn.example/debate.mp3"));
+    }
 
     @Test
     void startDebateReturnsFirstTurn() throws Exception {

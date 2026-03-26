@@ -1,14 +1,20 @@
 import type { FormEvent } from 'react'
-import type { CurrentUser, LiveChatState, LiveDebateState } from '../types'
+import type { ChatConversationSummary, CurrentUser, DebateSessionSummary, LiveChatState, LiveDebateState } from '../types'
 import { formatCloneName } from '../utils'
 
 type LiveSessionPanelProps = {
   currentUser: CurrentUser
   liveChat: LiveChatState | null
   liveDebate: LiveDebateState | null
+  chatHistory: ChatConversationSummary[]
+  chatHistoryLoadError: string
+  debateHistory: DebateSessionSummary[]
+  debateHistoryLoadError: string
   onChatSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
   onChatInputChange: (value: string) => void
   onChatSpeechToggle: () => void
+  onOpenChatHistory: (conversationId: number) => Promise<void>
+  onOpenDebateHistory: (debateSessionId: number) => Promise<void>
   onShowClones: () => void
   onDebateExit: () => Promise<void>
 }
@@ -17,14 +23,82 @@ function LiveSessionPanel({
   currentUser,
   liveChat,
   liveDebate,
+  chatHistory,
+  chatHistoryLoadError,
+  debateHistory,
+  debateHistoryLoadError,
   onChatSubmit,
   onChatInputChange,
   onChatSpeechToggle,
+  onOpenChatHistory,
+  onOpenDebateHistory,
   onShowClones,
   onDebateExit,
 }: LiveSessionPanelProps) {
   return (
     <section className="live-grid">
+      <aside className="history-sidebar">
+        <article className="history-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="panel-kicker">Chat History</p>
+              <h2>이전 채팅</h2>
+            </div>
+          </div>
+          <div className="history-list">
+            {chatHistoryLoadError ? <p className="inline-error">{chatHistoryLoadError}</p> : null}
+            {chatHistory.map((conversation) => (
+              <button
+                key={conversation.conversationId}
+                className={`history-item${liveChat?.conversationId === conversation.conversationId ? ' history-item-active' : ''}`}
+                onClick={() => void onOpenChatHistory(conversation.conversationId)}
+                type="button"
+              >
+                <strong>{conversation.cloneAlias}</strong>
+                <span>{new Date(conversation.createdAt).toLocaleString('ko-KR')}</span>
+                <p>{conversation.latestMessagePreview || '메시지가 아직 없습니다.'}</p>
+              </button>
+            ))}
+            {chatHistory.length === 0 && !chatHistoryLoadError ? (
+              <article className="empty-card empty-inline">
+                <strong>저장된 채팅이 없습니다.</strong>
+                <p>새 채팅을 시작하면 이곳에 다시 열 수 있는 기록이 생깁니다.</p>
+              </article>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="history-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="panel-kicker">Debate History</p>
+              <h2>이전 논쟁</h2>
+            </div>
+          </div>
+          <div className="history-list">
+            {debateHistoryLoadError ? <p className="inline-error">{debateHistoryLoadError}</p> : null}
+            {debateHistory.map((debate) => (
+              <button
+                key={debate.debateSessionId}
+                className={`history-item${liveDebate?.debateSessionId === debate.debateSessionId ? ' history-item-active' : ''}`}
+                onClick={() => void onOpenDebateHistory(debate.debateSessionId)}
+                type="button"
+              >
+                <strong>{debate.cloneAAlias} vs {debate.cloneBAlias}</strong>
+                <span>{new Date(debate.createdAt).toLocaleString('ko-KR')}</span>
+                <p>{debate.topic}</p>
+              </button>
+            ))}
+            {debateHistory.length === 0 && !debateHistoryLoadError ? (
+              <article className="empty-card empty-inline">
+                <strong>저장된 논쟁이 없습니다.</strong>
+                <p>논쟁을 시작하면 이곳에서 지난 턴을 다시 볼 수 있습니다.</p>
+              </article>
+            ) : null}
+          </div>
+        </article>
+      </aside>
+
       <article className="live-panel">
         <div className="panel-heading">
           <div>
@@ -136,7 +210,7 @@ function LiveSessionPanel({
         {!liveChat && !liveDebate ? (
           <article className="empty-card live-empty">
             <strong>{currentUser.displayName}님의 클론을 선택하면 이곳에서 세션이 시작됩니다.</strong>
-            <p>내 계정에 저장된 클론 카드에서 채팅이나 논쟁 흐름을 열어보세요.</p>
+            <p>내 계정의 클론으로 새 세션을 시작하거나, 왼쪽 기록 목록에서 이전 채팅과 논쟁을 다시 열어보세요.</p>
           </article>
         ) : null}
       </article>

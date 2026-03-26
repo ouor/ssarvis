@@ -49,6 +49,7 @@
 .clone-card,
 .empty-card,
 .live-panel,
+.history-panel,
 .question-card,
 .voice-upload-card,
 .voice-card,
@@ -129,6 +130,54 @@
 
 .live-panel {
   padding: 28px;
+}
+
+.history-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.history-panel {
+  padding: 22px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.history-item {
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid rgba(124, 96, 73, 0.12);
+  border-radius: 22px;
+  background: rgba(255, 252, 249, 0.88);
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-item strong,
+.history-item span,
+.history-item p {
+  display: block;
+}
+
+.history-item span {
+  margin-top: 6px;
+  color: var(--muted-strong);
+  font-size: 0.83rem;
+}
+
+.history-item p {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.history-item-active {
+  border-color: rgba(242, 125, 104, 0.34);
+  background: linear-gradient(160deg, rgba(255, 236, 228, 0.94), rgba(255, 255, 255, 0.92));
 }
 
 .panel-heading {

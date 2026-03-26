@@ -142,9 +142,17 @@
   gap: 24px;
 }
 
+.live-grid {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
 @media (max-width: 1120px) {
   .studio-hero,
-  .studio-grid {
+  .studio-grid,
+  .live-grid {
     grid-template-columns: 1fr;
   }
 }

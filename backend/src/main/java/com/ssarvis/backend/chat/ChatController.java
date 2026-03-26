@@ -3,6 +3,9 @@ package com.ssarvis.backend.chat;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -19,6 +22,21 @@ public class ChatController {
 
     public ChatController(ChatService chatService) {
         this.chatService = chatService;
+    }
+
+    @GetMapping("/conversations")
+    public List<ChatConversationSummaryResponse> listConversations(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user
+    ) {
+        return chatService.listConversations(user.userId());
+    }
+
+    @GetMapping("/conversations/{conversationId}")
+    public ChatConversationDetailResponse getConversation(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @PathVariable Long conversationId
+    ) {
+        return chatService.getConversation(user.userId(), conversationId);
     }
 
     @PostMapping("/messages")

@@ -473,6 +473,67 @@ Content Type
 프론트 참고
 - 현재 프론트는 `message`를 먼저 화면에 추가하고, `done` 시점에 누적 PCM을 WAV로 합쳐 마지막 어시스턴트 메시지에 `<audio>` URL을 연결한다.
 
+## GET `/api/chat/conversations`
+
+현재 로그인한 회원의 채팅 기록 목록을 최신순으로 조회한다.
+
+### Success Response
+
+Status
+- `200 OK`
+
+Body
+
+```json
+[
+  {
+    "conversationId": 31,
+    "cloneId": 12,
+    "cloneAlias": "차분한 조력자",
+    "createdAt": "2026-03-26T03:00:00Z",
+    "latestMessagePreview": "조금 더 짧고 체크리스트 형태로 바꿔줘.",
+    "messageCount": 6
+  }
+]
+```
+
+## GET `/api/chat/conversations/{conversationId}`
+
+현재 로그인한 회원의 특정 채팅 기록 전체를 조회한다.
+
+### Success Response
+
+Status
+- `200 OK`
+
+Body
+
+```json
+{
+  "conversationId": 31,
+  "cloneId": 12,
+  "cloneAlias": "차분한 조력자",
+  "cloneShortDescription": "차분하고 구조적인 설명을 선호하는 클론",
+  "createdAt": "2026-03-26T03:00:00Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "오늘 일정 정리해줘.",
+      "createdAt": "2026-03-26T03:00:01Z",
+      "ttsAudioUrl": null,
+      "ttsVoiceId": null
+    },
+    {
+      "role": "assistant",
+      "content": "좋아요. 우선순위 기준으로 정리해볼게요.",
+      "createdAt": "2026-03-26T03:00:02Z",
+      "ttsAudioUrl": "https://cdn.example.com/audio/chat-31.mp3",
+      "ttsVoiceId": "voice-id"
+    }
+  ]
+}
+```
+
 ## POST `/api/debates`
 
 현재 로그인한 회원의 두 클론과 주제를 받아 논쟁 세션을 시작하고, 첫 번째 발언만 생성한다.
@@ -583,6 +644,70 @@ Body
 {"type":"turn","debateSessionId":8,"topic":"원격근무가 대면근무보다 더 효율적인가?","turn":{"turnIndex":1,"speaker":"CLONE_A","cloneId":12,"content":"저는 원격근무가 더 효율적이라고 봅니다..."}}
 {"type":"audio_chunk","audioFormat":"pcm_s16le","sampleRate":24000,"channels":1,"chunkBase64":"..."}
 {"type":"done","debateSessionId":8,"turnIndex":1,"ttsVoiceId":"voice-id","hasAudio":true}
+```
+
+## GET `/api/debates`
+
+현재 로그인한 회원의 논쟁 기록 목록을 최신순으로 조회한다.
+
+### Success Response
+
+Status
+- `200 OK`
+
+Body
+
+```json
+[
+  {
+    "debateSessionId": 8,
+    "cloneAId": 12,
+    "cloneAAlias": "차분한 조력자",
+    "cloneBId": 13,
+    "cloneBAlias": "냉철한 반론가",
+    "topic": "원격근무가 대면근무보다 더 효율적인가?",
+    "createdAt": "2026-03-26T03:30:00Z",
+    "turnCount": 4
+  }
+]
+```
+
+## GET `/api/debates/{debateSessionId}`
+
+현재 로그인한 회원의 특정 논쟁 기록 전체를 조회한다.
+
+### Success Response
+
+Status
+- `200 OK`
+
+Body
+
+```json
+{
+  "debateSessionId": 8,
+  "cloneAId": 12,
+  "cloneAAlias": "차분한 조력자",
+  "cloneAShortDescription": "차분하고 구조적인 설명을 선호하는 클론",
+  "cloneAVoiceId": 5,
+  "cloneBId": 13,
+  "cloneBAlias": "냉철한 반론가",
+  "cloneBShortDescription": "비판적으로 따져 묻는 클론",
+  "cloneBVoiceId": 6,
+  "topic": "원격근무가 대면근무보다 더 효율적인가?",
+  "createdAt": "2026-03-26T03:30:00Z",
+  "turns": [
+    {
+      "turnIndex": 1,
+      "speaker": "CLONE_A",
+      "cloneId": 12,
+      "content": "저는 원격근무가 더 효율적이라고 봅니다.",
+      "createdAt": "2026-03-26T03:30:01Z",
+      "ttsAudioUrl": null,
+      "ttsVoiceId": null
+    }
+  ]
+}
 ```
 
 ### Common Error Responses For Protected APIs

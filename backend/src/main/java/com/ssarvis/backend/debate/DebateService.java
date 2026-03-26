@@ -93,6 +93,57 @@ public class DebateService {
         streamTurn(userId, debateSession, outputStream);
     }
 
+    @Transactional(readOnly = true)
+    public List<DebateSessionSummaryResponse> listDebates(Long userId) {
+        authService.getActiveUserAccount(userId);
+        return debateSessionRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(session -> new DebateSessionSummaryResponse(
+                        session.getId(),
+                        session.getCloneA().getId(),
+                        session.getCloneA().getAlias(),
+                        session.getCloneB().getId(),
+                        session.getCloneB().getAlias(),
+                        session.getTopic(),
+                        session.getCreatedAt(),
+                        debateTurnRepository.findByDebateSessionIdOrderByTurnIndexAsc(session.getId()).size()
+                ))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public DebateSessionDetailResponse getDebate(Long userId, Long debateSessionId) {
+        authService.getActiveUserAccount(userId);
+        DebateSession session = debateSessionRepository.findByIdAndUserId(debateSessionId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Debate session not found."));
+
+        List<DebateHistoryTurnResponse> turns = debateTurnRepository.findByDebateSessionIdOrderByTurnIndexAsc(session.getId()).stream()
+                .map(turn -> new DebateHistoryTurnResponse(
+                        turn.getTurnIndex(),
+                        turn.getSpeaker().name(),
+                        turn.getSpeaker() == DebateTurn.Speaker.CLONE_A ? session.getCloneA().getId() : session.getCloneB().getId(),
+                        turn.getContent(),
+                        turn.getCreatedAt(),
+                        turn.getAudioAsset() != null ? turn.getAudioAsset().getObjectUrl() : null,
+                        turn.getAudioAsset() != null ? turn.getAudioAsset().getProviderVoiceId() : null
+                ))
+                .toList();
+
+        return new DebateSessionDetailResponse(
+                session.getId(),
+                session.getCloneA().getId(),
+                session.getCloneA().getAlias(),
+                session.getCloneA().getShortDescription(),
+                session.getCloneAVoice().getId(),
+                session.getCloneB().getId(),
+                session.getCloneB().getAlias(),
+                session.getCloneB().getShortDescription(),
+                session.getCloneBVoice().getId(),
+                session.getTopic(),
+                session.getCreatedAt(),
+                turns
+        );
+    }
+
     private DebateSession createDebateSession(UserAccount user, DebateStartRequest request) {
         validateRequest(request);
 
