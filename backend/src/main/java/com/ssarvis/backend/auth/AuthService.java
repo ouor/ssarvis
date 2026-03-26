@@ -58,6 +58,12 @@ public class AuthService {
         return new AuthenticatedUser(userAccount.getId(), userAccount.getUsername(), userAccount.getDisplayName());
     }
 
+    public void deactivate(Long userId) {
+        UserAccount userAccount = getActiveUserAccount(userId);
+        userAccount.softDelete();
+        userAccountRepository.save(userAccount);
+    }
+
     public UserAccount getActiveUserAccount(Long userId) {
         return userAccountRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found or inactive."));

@@ -19,7 +19,7 @@ Authorization: Bearer <access-token>
 ```
 
 보호 대상 API
-- `/api/auth/me`
+- `/api/auth/me` (`GET`, `DELETE`)
 - `/api/system-prompt`
 - `/api/clones`
 - `/api/voices`
@@ -30,6 +30,8 @@ Authorization: Bearer <access-token>
 - 보호 대상 API는 `Authorization` 헤더가 필요하다.
 - access token이 없거나 잘못되었거나 만료되면 `401 Unauthorized`를 반환한다.
 - soft delete 된 회원은 보호 대상 API를 사용할 수 없다.
+- 회원 탈퇴는 hard delete가 아니라 `users.deleted_at`을 채우는 soft delete로 처리된다.
+- soft delete 된 회원의 클론, 음성, 대화, 논쟁, 오디오 자산은 삭제되지 않고 그대로 남는다.
 - 로그인한 회원은 자신의 클론, 음성, 대화, 논쟁, 오디오 자산에만 접근할 수 있다.
 - 다른 회원의 리소스를 참조하면 서버는 일반적으로 `404 Not Found`로 응답한다.
 
@@ -174,6 +176,29 @@ Body
 - `Authorization` 헤더가 없거나
 - access token이 잘못되었거나
 - access token의 회원이 soft delete 상태인 경우
+
+## DELETE `/api/auth/me`
+
+현재 로그인한 회원을 soft delete 처리한다.
+
+설명
+- 회원 레코드는 삭제되지 않고 `deleted_at`만 기록된다.
+- 탈퇴 직후 현재 access token으로도 더 이상 보호 대상 API에 접근할 수 없다.
+- 클론, 음성, 대화, 논쟁, 오디오 자산 같은 기존 소유 데이터는 삭제되지 않는다.
+- soft delete 된 회원은 같은 아이디로 다시 로그인할 수 없다.
+
+### Success Response
+
+Status
+- `204 No Content`
+
+### Error Responses
+
+#### `401 Unauthorized`
+
+- `Authorization` 헤더가 없거나
+- access token이 잘못되었거나
+- 이미 soft delete 된 회원 토큰인 경우
 
 ## POST `/api/system-prompt`
 

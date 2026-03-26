@@ -2,6 +2,9 @@ package com.ssarvis.backend.auth;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -100,5 +103,25 @@ class AuthControllerTest {
     void logoutReturnsNoContent() throws Exception {
         mockMvc.perform(post("/api/auth/logout"))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void deactivateReturnsNoContent() throws Exception {
+        mockMvc.perform(delete("/api/auth/me")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(8L, "nara", "나라")
+                        ))
+                .andExpect(status().isNoContent());
+
+        verify(authService).deactivate(8L);
+    }
+
+    @Test
+    void logoutDoesNotRequireAuthenticatedUser() throws Exception {
+        mockMvc.perform(post("/api/auth/logout"))
+                .andExpect(status().isNoContent());
+
+        verifyNoInteractions(authService);
     }
 }

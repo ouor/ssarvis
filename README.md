@@ -5,6 +5,11 @@ SSARVIS는 설문 응답을 바탕으로 사용자를 모사하는 클론 시스
 
 ## 주요 기능
 
+- 회원 인증 및 소유권 분리
+  - JWT access token 기반 로그인/회원가입
+  - 클론, 음성, 대화, 논쟁, 오디오 자산은 회원 소유로 분리
+  - soft delete 된 회원은 다시 로그인하거나 보호 API에 접근할 수 없음
+
 - 설문 응답으로 클론 생성
   - OpenAI를 사용해 사용자 모사용 `systemPrompt` 생성
   - 생성된 `systemPrompt`로 `alias`, `shortDescription`를 단계적으로 생성
@@ -101,6 +106,8 @@ OpenAI 컨텍스트는 현재 발화하는 클론 기준으로 아래 순서로 
 - `OPENAI_MODEL`
 - `OPENAI_BASE_URL`
 - `OPENAI_CHAT_HISTORY_TURNS`
+- `APP_AUTH_JWT_SECRET`
+- `APP_AUTH_JWT_ACCESS_TOKEN_EXPIRATION_MINUTES`
 - `DASHSCOPE_API_KEY`
 - `DASHSCOPE_BASE_URL`
 - `DASHSCOPE_REALTIME_URL`
@@ -188,6 +195,13 @@ cd frontend
 npm run build
 ```
 
+프론트 단위 테스트
+
+```powershell
+cd frontend
+npm run test
+```
+
 통합 테스트 특징
 
 - 실제 OpenAI 호출
@@ -204,19 +218,19 @@ npm run build
 ## 주요 저장 테이블
 
 - `prompt_generation_logs`
-  - 생성된 클론의 `alias`, `shortDescription`, `system_prompt`, 설문 응답 저장
+  - 소유 회원과 생성된 클론의 `alias`, `shortDescription`, `system_prompt`, 설문 응답 저장
 - `registered_voices`
-  - 등록 음성 정보 저장
+  - 소유 회원의 등록 음성 정보 저장
 - `chat_conversations`
-  - 채팅 세션 저장
+  - 소유 회원의 채팅 세션 저장
 - `chat_messages`
   - 사용자/클론 메시지 저장
 - `debate_sessions`
-  - 논쟁 세션 저장
+  - 소유 회원의 논쟁 세션 저장
 - `debate_turns`
   - 논쟁 발언 저장
 - `generated_audio_assets`
-  - 인코딩 및 업로드된 오디오 메타데이터 저장
+  - 소유 회원의 인코딩 및 업로드된 오디오 메타데이터 저장
 
 ## 프론트 화면 구조
 
@@ -234,6 +248,7 @@ npm run build
 - Web Speech API는 브라우저 구현 차이가 커서 Chrome 계열에서 가장 안정적입니다.
 - 음성 인식은 silence 감지 기반으로 자동 종료되므로, 주변 소음이 크면 종료 시점이 달라질 수 있습니다.
 - 오래전에 다른 DashScope 모델로 등록한 음성은 현재 TTS 모델과 호환되지 않을 수 있으며, 이 경우 다시 등록해야 합니다.
+- 회원 탈퇴는 soft delete 방식이므로, 계정은 비활성화되지만 기존 생성 데이터는 운영/감사 목적으로 DB에 남습니다.
 
 ## 라이선스
 

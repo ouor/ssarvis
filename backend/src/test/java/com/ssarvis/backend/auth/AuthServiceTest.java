@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.util.Optional;
@@ -123,6 +124,32 @@ class AuthServiceTest {
                     assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
                     assertThat(exception.getReason()).isEqualTo("User not found or inactive.");
                 });
+    }
+
+    @Test
+    void deactivateSoftDeletesActiveUser() {
+        UserAccount userAccount = reflectId(new UserAccount("nara", passwordEncoder.encode("pass1234"), "나라"), 4L);
+        given(userAccountRepository.findByIdAndDeletedAtIsNull(4L)).willReturn(Optional.of(userAccount));
+
+        authService.deactivate(4L);
+
+        assertThat(userAccount.isDeleted()).isTrue();
+        verify(userAccountRepository).save(userAccount);
+    }
+
+    @Test
+    void deactivateRejectsInactiveUser() {
+        given(userAccountRepository.findByIdAndDeletedAtIsNull(10L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.deactivate(10L))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(error -> {
+                    ResponseStatusException exception = (ResponseStatusException) error;
+                    assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+                    assertThat(exception.getReason()).isEqualTo("User not found or inactive.");
+                });
+
+        verify(userAccountRepository, never()).save(any());
     }
 
     private UserAccount reflectId(UserAccount userAccount, Long id) {

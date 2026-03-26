@@ -1,6 +1,7 @@
 package com.ssarvis.backend.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -63,5 +64,56 @@ class AuthFlowIntegrationTest {
         UserAccount userAccount = userAccountRepository.findByUsernameAndDeletedAtIsNull("haru").orElseThrow();
         assertThat(userAccount.getPasswordHash()).isNotEqualTo("secret123");
         assertThat(userAccount.isDeleted()).isFalse();
+    }
+
+    @Test
+    void deactivateBlocksFutureAccessAndLogin() throws Exception {
+        String signUpResponseBody = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "nara",
+                                  "password": "secret123",
+                                  "displayName": "나라"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String accessToken = objectMapper.readTree(signUpResponseBody).get("accessToken").asText();
+
+        mockMvc.perform(delete("/api/auth/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("User not found or inactive."));
+
+        mockMvc.perform(get("/api/clones")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("User not found or inactive."));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "nara",
+                                  "password": "secret123"
+                                }
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid username or password."));
+
+        UserAccount deletedUser = userAccountRepository.findAll().stream()
+                .filter(userAccount -> userAccount.getUsername().equals("nara"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(deletedUser.isDeleted()).isTrue();
+        assertThat(deletedUser.getDeletedAt()).isNotNull();
     }
 }
