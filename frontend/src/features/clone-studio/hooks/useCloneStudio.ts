@@ -156,21 +156,11 @@ export function useCloneStudio() {
       void speechInput.stop()
     }
 
-    function handleVisibilityChange() {
-      if (document.hidden) {
-        handlePageLeave()
-      }
-    }
-
     window.addEventListener('pagehide', handlePageLeave)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       window.removeEventListener('pagehide', handlePageLeave)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
       handlePageLeave()
-      chatAbortControllerRef.current?.abort()
-      debateAbortControllerRef.current?.abort()
     }
   }, [])
 
