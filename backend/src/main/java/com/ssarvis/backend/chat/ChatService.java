@@ -1,9 +1,7 @@
 package com.ssarvis.backend.chat;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
-import com.ssarvis.backend.openai.OpenAiChatCompletionRequest;
+import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
@@ -12,12 +10,6 @@ import com.ssarvis.backend.voice.VoiceService;
 import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -28,28 +20,25 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ChatService {
-    private static final Duration EXTERNAL_REQUEST_TIMEOUT = Duration.ofSeconds(20);
-
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
     private final AppProperties appProperties;
     private final PromptGenerationLogRepository promptGenerationLogRepository;
     private final ChatConversationRepository chatConversationRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final VoiceService voiceService;
     private final OpenAiContextAssembler openAiContextAssembler;
+    private final OpenAiClient openAiClient;
 
     public ChatService(
-            HttpClient httpClient,
-            ObjectMapper objectMapper,
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper,
             AppProperties appProperties,
             PromptGenerationLogRepository promptGenerationLogRepository,
             ChatConversationRepository chatConversationRepository,
             ChatMessageRepository chatMessageRepository,
             VoiceService voiceService,
-            OpenAiContextAssembler openAiContextAssembler
+            OpenAiContextAssembler openAiContextAssembler,
+            OpenAiClient openAiClient
     ) {
-        this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
         this.promptGenerationLogRepository = promptGenerationLogRepository;
@@ -57,6 +46,7 @@ public class ChatService {
         this.chatMessageRepository = chatMessageRepository;
         this.voiceService = voiceService;
         this.openAiContextAssembler = openAiContextAssembler;
+        this.openAiClient = openAiClient;
     }
 
     @Transactional
@@ -182,47 +172,7 @@ public class ChatService {
     }
 
     private String generateAssistantMessage(String systemPrompt, List<ChatMessage> history, String userMessage) {
-        String apiKey = appProperties.getOpenai().getApiKey();
-        if (!StringUtils.hasText(apiKey)) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "OPENAI_API_KEY is not configured.");
-        }
-
-        try {
-            String payload = objectMapper.writeValueAsString(buildPayload(systemPrompt, history, userMessage));
-            HttpRequest httpRequest = HttpRequest.newBuilder()
-                    .uri(URI.create(appProperties.getOpenai().getBaseUrl() + "/chat/completions"))
-                    .timeout(EXTERNAL_REQUEST_TIMEOUT)
-                    .header("Authorization", "Bearer " + apiKey)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8))
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() >= 400) {
-                throw new ResponseStatusException(
-                        HttpStatus.BAD_GATEWAY,
-                        "OpenAI request failed with status " + response.statusCode() + ". Body: " + abbreviate(response.body(), 400)
-                );
-            }
-
-            JsonNode root = objectMapper.readTree(response.body());
-            String assistantMessage = extractAssistantMessage(root);
-            if (!StringUtils.hasText(assistantMessage)) {
-                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OpenAI response did not include assistant content.");
-            }
-
-            return assistantMessage.trim();
-        } catch (IOException exception) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to serialize OpenAI request.", exception);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "OpenAI request was interrupted.", exception);
-        }
-    }
-
-    private OpenAiChatCompletionRequest buildPayload(String systemPrompt, List<ChatMessage> history, String userMessage) {
-        return new OpenAiChatCompletionRequest(
-                appProperties.getOpenai().getModel(),
+        return openAiClient.requestChatCompletion(
                 openAiContextAssembler.buildChatMessages(
                         systemPrompt,
                         history,
@@ -230,29 +180,5 @@ public class ChatService {
                         appProperties.getOpenai().getChatHistoryTurns()
                 )
         );
-    }
-
-    private String extractAssistantMessage(JsonNode root) {
-        JsonNode choices = root.get("choices");
-        if (choices == null || !choices.isArray() || choices.isEmpty()) {
-            return "";
-        }
-
-        JsonNode contentNode = choices.get(0).path("message").path("content");
-        if (contentNode.isTextual()) {
-            return contentNode.asText("");
-        }
-
-        return "";
-    }
-
-    private String abbreviate(String value, int maxLength) {
-        if (value == null) {
-            return "";
-        }
-        if (value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength) + "...";
     }
 }
