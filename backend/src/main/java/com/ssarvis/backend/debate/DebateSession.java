@@ -1,5 +1,6 @@
 package com.ssarvis.backend.debate;
 
+import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.voice.RegisteredVoice;
 import jakarta.persistence.Column;
@@ -21,6 +22,10 @@ public class DebateSession {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private UserAccount user;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "clone_a_id", nullable = false)
@@ -57,6 +62,18 @@ public class DebateSession {
             RegisteredVoice cloneBVoice,
             String topic
     ) {
+        this(null, cloneA, cloneB, cloneAVoice, cloneBVoice, topic);
+    }
+
+    public DebateSession(
+            UserAccount user,
+            PromptGenerationLog cloneA,
+            PromptGenerationLog cloneB,
+            RegisteredVoice cloneAVoice,
+            RegisteredVoice cloneBVoice,
+            String topic
+    ) {
+        this.user = user;
         this.cloneA = cloneA;
         this.cloneB = cloneB;
         this.cloneAVoice = cloneAVoice;
@@ -72,6 +89,10 @@ public class DebateSession {
 
     public Long getId() {
         return id;
+    }
+
+    public UserAccount getUser() {
+        return user;
     }
 
     public PromptGenerationLog getCloneA() {

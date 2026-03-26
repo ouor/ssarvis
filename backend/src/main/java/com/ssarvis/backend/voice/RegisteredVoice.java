@@ -1,10 +1,14 @@
 package com.ssarvis.backend.voice;
 
+import com.ssarvis.backend.auth.UserAccount;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -16,6 +20,10 @@ public class RegisteredVoice {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private UserAccount user;
 
     @Column(nullable = false, length = 200)
     private String providerVoiceId;
@@ -49,6 +57,19 @@ public class RegisteredVoice {
             String originalFilename,
             String audioMimeType
     ) {
+        this(null, providerVoiceId, targetModel, preferredName, displayName, originalFilename, audioMimeType);
+    }
+
+    public RegisteredVoice(
+            UserAccount user,
+            String providerVoiceId,
+            String targetModel,
+            String preferredName,
+            String displayName,
+            String originalFilename,
+            String audioMimeType
+    ) {
+        this.user = user;
         this.providerVoiceId = providerVoiceId;
         this.targetModel = targetModel;
         this.preferredName = preferredName;
@@ -64,6 +85,10 @@ public class RegisteredVoice {
 
     public Long getId() {
         return id;
+    }
+
+    public UserAccount getUser() {
+        return user;
     }
 
     public String getProviderVoiceId() {

@@ -1,11 +1,15 @@
 package com.ssarvis.backend.prompt;
 
+import com.ssarvis.backend.auth.UserAccount;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -17,6 +21,10 @@ public class PromptGenerationLog {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private UserAccount user;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -42,6 +50,18 @@ public class PromptGenerationLog {
     }
 
     public PromptGenerationLog(String model, String answersJson, String systemPrompt, String alias, String shortDescription) {
+        this(null, model, answersJson, systemPrompt, alias, shortDescription);
+    }
+
+    public PromptGenerationLog(
+            UserAccount user,
+            String model,
+            String answersJson,
+            String systemPrompt,
+            String alias,
+            String shortDescription
+    ) {
+        this.user = user;
         this.model = model;
         this.answersJson = answersJson;
         this.systemPrompt = systemPrompt;
@@ -56,6 +76,10 @@ public class PromptGenerationLog {
 
     public Long getId() {
         return id;
+    }
+
+    public UserAccount getUser() {
+        return user;
     }
 
     public Instant getCreatedAt() {

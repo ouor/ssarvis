@@ -1,5 +1,6 @@
 package com.ssarvis.backend.chat;
 
+import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -21,6 +22,10 @@ public class ChatConversation {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private UserAccount user;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "prompt_generation_log_id", nullable = false)
     private PromptGenerationLog promptGenerationLog;
@@ -32,6 +37,11 @@ public class ChatConversation {
     }
 
     public ChatConversation(PromptGenerationLog promptGenerationLog) {
+        this(null, promptGenerationLog);
+    }
+
+    public ChatConversation(UserAccount user, PromptGenerationLog promptGenerationLog) {
+        this.user = user;
         this.promptGenerationLog = promptGenerationLog;
     }
 
@@ -42,6 +52,10 @@ public class ChatConversation {
 
     public Long getId() {
         return id;
+    }
+
+    public UserAccount getUser() {
+        return user;
     }
 
     public PromptGenerationLog getPromptGenerationLog() {
