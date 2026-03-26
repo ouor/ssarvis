@@ -14,10 +14,12 @@ import '../features/clone-studio/styles/modals.css'
 
 type CloneStudioPageProps = {
   currentUser: CurrentUser
+  deactivating: boolean
+  onDeactivate: () => Promise<void>
   onLogout: () => void
 }
 
-function CloneStudioPage({ currentUser, onLogout }: CloneStudioPageProps) {
+function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: CloneStudioPageProps) {
   const studio = useCloneStudio(currentUser)
 
   return (
@@ -28,9 +30,14 @@ function CloneStudioPage({ currentUser, onLogout }: CloneStudioPageProps) {
           <strong>{currentUser.displayName}</strong>
           <span>@{currentUser.username}</span>
         </div>
-        <button className="secondary-button" onClick={onLogout} type="button">
-          로그아웃
-        </button>
+        <div className="studio-account-actions">
+          <button className="secondary-button" disabled={deactivating} onClick={onLogout} type="button">
+            로그아웃
+          </button>
+          <button className="secondary-button" disabled={deactivating} onClick={() => void onDeactivate()} type="button">
+            {deactivating ? '탈퇴 처리 중...' : '회원 탈퇴'}
+          </button>
+        </div>
       </section>
       <StudioHero
         activeTab={studio.activeTab}

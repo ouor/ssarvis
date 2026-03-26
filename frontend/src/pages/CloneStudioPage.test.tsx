@@ -72,6 +72,8 @@ describe('CloneStudioPage user-scoped data flow', () => {
     const { rerender } = render(
       <CloneStudioPage
         currentUser={{ userId: 1, username: 'user1', displayName: '사용자1' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
         onLogout={() => {}}
       />,
     )
@@ -84,6 +86,8 @@ describe('CloneStudioPage user-scoped data flow', () => {
     rerender(
       <CloneStudioPage
         currentUser={{ userId: 2, username: 'user2', displayName: '사용자2' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
         onLogout={() => {}}
       />,
     )

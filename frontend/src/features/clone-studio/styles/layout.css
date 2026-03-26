@@ -17,9 +17,16 @@
   box-shadow: 0 16px 32px rgba(92, 67, 54, 0.06);
 }
 
-.studio-account-bar div {
+.studio-account-bar > div {
   display: flex;
   align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.studio-account-actions {
+  display: flex;
+  align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }

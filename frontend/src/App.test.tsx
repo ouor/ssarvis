@@ -7,9 +7,13 @@ import { authExpiredEventName } from './features/clone-studio/api'
 vi.mock('./pages/CloneStudioPage', () => ({
   default: ({
     currentUser,
+    deactivating,
+    onDeactivate,
     onLogout,
   }: {
     currentUser: { displayName: string; username: string }
+    deactivating: boolean
+    onDeactivate: () => Promise<void>
     onLogout: () => void
   }) => (
     <section>
@@ -18,6 +22,9 @@ vi.mock('./pages/CloneStudioPage', () => ({
       <p>@{currentUser.username}</p>
       <button onClick={onLogout} type="button">
         로그아웃
+      </button>
+      <button disabled={deactivating} onClick={() => void onDeactivate()} type="button">
+        {deactivating ? '탈퇴 처리 중...' : '회원 탈퇴'}
       </button>
     </section>
   ),
@@ -109,5 +116,39 @@ describe('App auth flow', () => {
 
     expect(await screen.findByText('세션이 만료되어 다시 로그인해야 합니다.', { selector: 'p.auth-error' })).toBeInTheDocument()
     expect(screen.getByText('로그인', { selector: 'button.auth-submit' })).toBeInTheDocument()
+  })
+
+  it('soft deletes the current account and logs out automatically', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('ssarvis.access-token', 'saved-token')
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const fetchSpy = vi.spyOn(window, 'fetch')
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          userId: 25,
+          username: 'sora',
+          displayName: 'Sora',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    fetchSpy.mockResolvedValueOnce(new Response(null, { status: 204 }))
+
+    render(<App />)
+
+    expect(await screen.findByText('studio')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '회원 탈퇴' }))
+
+    expect(await screen.findByText('회원 탈퇴가 완료되었습니다. 다시 로그인할 수 없습니다.', { selector: 'p.auth-error' })).toBeInTheDocument()
+    expect(screen.getByText('로그인', { selector: 'button.auth-submit' })).toBeInTheDocument()
+    expect(window.localStorage.getItem('ssarvis.access-token')).toBeNull()
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(2)
+    })
   })
 })

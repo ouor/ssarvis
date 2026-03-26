@@ -12,6 +12,7 @@ function App() {
   const [displayName, setDisplayName] = useState('')
   const [authLoading, setAuthLoading] = useState(true)
   const [authSubmitting, setAuthSubmitting] = useState(false)
+  const [accountActionSubmitting, setAccountActionSubmitting] = useState(false)
   const [authError, setAuthError] = useState('')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
 
@@ -102,9 +103,42 @@ function App() {
   function handleLogout() {
     clearStoredAccessToken()
     setCurrentUser(null)
+    setUsername('')
+    setDisplayName('')
     setPassword('')
     setAuthMode('login')
     setAuthError('')
+  }
+
+  async function handleDeactivate() {
+    if (!window.confirm('정말 탈퇴하시겠어요? 계정은 비활성화되고 현재 로그인은 즉시 종료됩니다.')) {
+      return
+    }
+
+    setAccountActionSubmitting(true)
+    setAuthError('')
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/auth/me`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '회원 탈퇴 처리에 실패했습니다.'))
+      }
+
+      clearStoredAccessToken()
+      setCurrentUser(null)
+      setUsername('')
+      setDisplayName('')
+      setPassword('')
+      setAuthMode('login')
+      setAuthError('회원 탈퇴가 완료되었습니다. 다시 로그인할 수 없습니다.')
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : '회원 탈퇴 처리 중 오류가 발생했습니다.')
+    } finally {
+      setAccountActionSubmitting(false)
+    }
   }
 
   if (authLoading) {
@@ -137,7 +171,14 @@ function App() {
     )
   }
 
-  return <CloneStudioPage currentUser={currentUser} onLogout={handleLogout} />
+  return (
+    <CloneStudioPage
+      currentUser={currentUser}
+      deactivating={accountActionSubmitting}
+      onDeactivate={handleDeactivate}
+      onLogout={handleLogout}
+    />
+  )
 }
 
 export default App
