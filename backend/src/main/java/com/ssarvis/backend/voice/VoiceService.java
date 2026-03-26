@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.time.Duration;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -139,6 +140,7 @@ public class VoiceService {
         }
     }
 
+    @Transactional(readOnly = true)
     public List<VoiceSummaryResponse> listVoices(Long userId) {
         authService.getActiveUserAccount(userId);
         String currentTtsModel = appProperties.getDashscope().getTtsModel();
@@ -158,6 +160,7 @@ public class VoiceService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<VoiceSummaryResponse> listVoices(Long userId, AssetListScope scope) {
         authService.getActiveUserAccount(userId);
         String currentTtsModel = appProperties.getDashscope().getTtsModel();

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -34,6 +35,8 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -341,13 +344,172 @@ class PromptIntegrationTest {
                 .andExpect(jsonPath("$.message").value("User not found or inactive."));
     }
 
+    @Test
+    void publicAssetsCanBeUsedByAnotherUserAndPrivateToggleBlocksOnlyNewUse() throws Exception {
+        AuthResponse ownerAuth = signUp("public-owner-" + System.currentTimeMillis(), "secret123", "공개소유자");
+        AuthResponse viewerAuth = signUp("public-viewer-" + System.currentTimeMillis(), "secret123", "공개사용자");
+        String ownerAuthorization = bearer(ownerAuth.accessToken());
+        String viewerAuthorization = bearer(viewerAuth.accessToken());
+
+        long publicCloneAId = createClone(ownerAuthorization);
+        PromptGenerationLog firstClone = promptGenerationLogRepository.findById(publicCloneAId).orElseThrow();
+        UserAccount owner = userAccountRepository.findById(ownerAuth.userId()).orElseThrow();
+        PromptGenerationLog secondClone = promptGenerationLogRepository.save(new PromptGenerationLog(
+                owner,
+                firstClone.getModel(),
+                firstClone.getAnswersJson(),
+                firstClone.getSystemPrompt(),
+                abbreviateAlias(firstClone.getAlias()),
+                firstClone.getShortDescription()
+        ));
+        long publicCloneBId = secondClone.getId();
+        long publicVoiceId = registerVoice(ownerAuthorization);
+
+        updateCloneVisibility(ownerAuthorization, publicCloneAId, true);
+        updateCloneVisibility(ownerAuthorization, publicCloneBId, true);
+        updateVoiceVisibility(ownerAuthorization, publicVoiceId, true);
+
+        String publicClonesBody = mockMvc.perform(get("/api/clones")
+                        .param("scope", "public")
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].isPublic").value(true))
+                .andExpect(jsonPath("$[0].ownerDisplayName").value("공개소유자"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Set<Long> publicCloneIds = objectMapper.readTree(publicClonesBody).findValuesAsText("cloneId").stream()
+                .map(Long::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(publicCloneIds).contains(publicCloneAId, publicCloneBId);
+
+        String publicVoicesBody = mockMvc.perform(get("/api/voices")
+                        .param("scope", "public")
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].isPublic").value(true))
+                .andExpect(jsonPath("$[0].ownerDisplayName").value("공개소유자"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Set<Long> publicVoiceIds = objectMapper.readTree(publicVoicesBody).findValuesAsText("registeredVoiceId").stream()
+                .map(Long::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(publicVoiceIds).contains(publicVoiceId);
+
+        String chatResponseBody = mockMvc.perform(post("/api/chat/messages")
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "promptGenerationLogId": %d,
+                                  "registeredVoiceId": %d,
+                                  "message": "공개 자산으로도 대화가 되나요?"
+                                }
+                                """.formatted(publicCloneAId, publicVoiceId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversationId").isNumber())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long conversationId = objectMapper.readTree(chatResponseBody).get("conversationId").asLong();
+        ChatConversation conversation = chatConversationRepository.findById(conversationId).orElseThrow();
+        assertThat(conversation.getUser().getId()).isEqualTo(viewerAuth.userId());
+        assertThat(conversation.getPromptGenerationLog().getId()).isEqualTo(publicCloneAId);
+
+        String debateResponseBody = mockMvc.perform(post("/api/debates")
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cloneAId": %d,
+                                  "cloneBId": %d,
+                                  "cloneAVoiceId": %d,
+                                  "cloneBVoiceId": %d,
+                                  "topic": "공개 자산으로 논쟁을 만들 수 있는가?"
+                                }
+                                """.formatted(publicCloneAId, publicCloneBId, publicVoiceId, publicVoiceId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").isNumber())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long debateSessionId = objectMapper.readTree(debateResponseBody).get("debateSessionId").asLong();
+        DebateSession debateSession = debateSessionRepository.findById(debateSessionId).orElseThrow();
+        assertThat(debateSession.getUser().getId()).isEqualTo(viewerAuth.userId());
+        assertThat(debateSession.getCloneA().getId()).isEqualTo(publicCloneAId);
+        assertThat(debateSession.getCloneB().getId()).isEqualTo(publicCloneBId);
+
+        updateCloneVisibility(ownerAuthorization, publicCloneAId, false);
+        updateCloneVisibility(ownerAuthorization, publicCloneBId, false);
+        updateVoiceVisibility(ownerAuthorization, publicVoiceId, false);
+
+        mockMvc.perform(get("/api/chat/conversations/%d".formatted(conversationId))
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversationId").value(conversationId))
+                .andExpect(jsonPath("$.cloneId").value(publicCloneAId));
+
+        mockMvc.perform(get("/api/debates/%d".formatted(debateSessionId))
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").value(debateSessionId))
+                .andExpect(jsonPath("$.cloneAId").value(publicCloneAId))
+                .andExpect(jsonPath("$.cloneBId").value(publicCloneBId));
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "promptGenerationLogId": %d,
+                                  "registeredVoiceId": %d,
+                                  "message": "다시 시도해볼게요."
+                                }
+                                """.formatted(publicCloneAId, publicVoiceId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Prompt generation log not found."));
+
+        mockMvc.perform(post("/api/debates")
+                        .header(HttpHeaders.AUTHORIZATION, viewerAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cloneAId": %d,
+                                  "cloneBId": %d,
+                                  "cloneAVoiceId": %d,
+                                  "cloneBVoiceId": %d,
+                                  "topic": "이제는 새로 시작되면 안 된다"
+                                }
+                                """.formatted(publicCloneAId, publicCloneBId, publicVoiceId, publicVoiceId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Clone A not found."));
+    }
+
     private SampleAudio createDashScopeSampleAudio() throws Exception {
         try {
-            Path samplePath = Path.of("src", "test", "resources", "sample", "haru.wav");
+            Path samplePath = resolveSampleAudioPath();
             return new SampleAudio(Files.readAllBytes(samplePath), "audio/wav");
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to load sample voice file from test resources.", exception);
         }
+    }
+
+    private Path resolveSampleAudioPath() {
+        List<Path> candidates = List.of(
+                Path.of("src", "test", "resources", "sample", "haru.wav"),
+                Path.of("dev-assets", "voices", "haru.wav"),
+                Path.of("backend", "dev-assets", "voices", "haru.wav")
+        );
+
+        return candidates.stream()
+                .filter(Files::exists)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Sample voice file not found in known locations."));
     }
 
     private String abbreviateAlias(String alias) {
@@ -379,6 +541,76 @@ class PromptIntegrationTest {
 
     private String bearer(String accessToken) {
         return "Bearer " + accessToken;
+    }
+
+    private long createClone(String authorizationHeader) throws Exception {
+        String promptResponseBody = mockMvc.perform(post("/api/system-prompt")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "answers": [
+                                    {
+                                      "question": "대화할 때 나는 보통",
+                                      "answer": "상대가 걸어오면 잘 받는 편"
+                                    },
+                                    {
+                                      "question": "평소 결정은 어떤 편인가요?",
+                                      "answer": "충분히 고민하고 정함"
+                                    },
+                                    {
+                                      "question": "좋아하는 분위기에 가까운 것은?",
+                                      "answer": "조용하고 차분한 분위기"
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.promptGenerationLogId").isNumber())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readTree(promptResponseBody).get("promptGenerationLogId").asLong();
+    }
+
+    private long registerVoice(String authorizationHeader) throws Exception {
+        SampleAudio dashScopeSampleAudio = createDashScopeSampleAudio();
+        String voiceResponseBody = mockMvc.perform(multipart("/api/voices")
+                        .file(new MockMultipartFile(
+                                "sample",
+                                "dashscope-sample",
+                                dashScopeSampleAudio.contentType(),
+                                dashScopeSampleAudio.bytes()
+                        ))
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.registeredVoiceId").isNumber())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readTree(voiceResponseBody).get("registeredVoiceId").asLong();
+    }
+
+    private void updateCloneVisibility(String authorizationHeader, long cloneId, boolean isPublic) throws Exception {
+        mockMvc.perform(patch("/api/clones/{cloneId}/visibility", cloneId)
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("isPublic", isPublic))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cloneId").value(cloneId))
+                .andExpect(jsonPath("$.isPublic").value(isPublic));
+    }
+
+    private void updateVoiceVisibility(String authorizationHeader, long registeredVoiceId, boolean isPublic) throws Exception {
+        mockMvc.perform(patch("/api/voices/{registeredVoiceId}/visibility", registeredVoiceId)
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("isPublic", isPublic))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.registeredVoiceId").value(registeredVoiceId))
+                .andExpect(jsonPath("$.isPublic").value(isPublic));
     }
 
     private record SampleAudio(byte[] bytes, String contentType) {

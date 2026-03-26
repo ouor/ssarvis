@@ -13,6 +13,7 @@ import java.text.Normalizer;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -97,6 +98,7 @@ public class PromptService {
         return promptGenerationLogRepository.save(log);
     }
 
+    @Transactional(readOnly = true)
     public List<CloneSummaryResponse> listClones(Long userId, AssetListScope scope) {
         authService.getActiveUserAccount(userId);
         List<PromptGenerationLog> logs = switch (scope) {

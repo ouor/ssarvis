@@ -27,7 +27,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
                 .allowedOrigins(appProperties.getCors().getAllowedOrigins().toArray(String[]::new))
-                .allowedMethods("GET", "POST", "DELETE", "OPTIONS");
+                .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS");
     }
 
     @Override
@@ -43,7 +43,9 @@ public class WebConfig implements WebMvcConfigurer {
                     .addPathPatterns(
                             "/api/auth/me",
                             "/api/clones",
+                            "/api/clones/**",
                             "/api/voices",
+                            "/api/voices/**",
                             "/api/chat/**",
                             "/api/debates/**",
                             "/api/system-prompt"
