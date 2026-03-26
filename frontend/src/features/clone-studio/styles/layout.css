@@ -142,6 +142,25 @@
   gap: 24px;
 }
 
+.clone-section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.clone-list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
 .live-grid {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);

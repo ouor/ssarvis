@@ -3,6 +3,7 @@ import {
   apiFetch,
   authExpiredEventName,
   clearStoredAccessToken,
+  formatAssetAccessError,
   getStoredAccessToken,
   storeAccessToken,
 } from './api'
@@ -53,5 +54,11 @@ describe('clone-studio api helpers', () => {
     expect(expiredListener).toHaveBeenCalledTimes(1)
 
     window.removeEventListener(authExpiredEventName, expiredListener)
+  })
+
+  it('converts asset access failures into a friendly retry message', () => {
+    expect(formatAssetAccessError('Forbidden', '선택한 클론 또는 목소리로 대화를 시작할 수 없습니다.')).toBe(
+      '선택한 클론 또는 목소리로 대화를 시작할 수 없습니다.\n다른 사용자가 자산을 비공개로 전환했거나 현재 계정으로 접근할 수 없습니다.',
+    )
   })
 })

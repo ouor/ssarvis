@@ -210,7 +210,7 @@ function LiveSessionPanel({
         {!liveChat && !liveDebate ? (
           <article className="empty-card live-empty">
             <strong>{currentUser.displayName}님의 클론을 선택하면 이곳에서 세션이 시작됩니다.</strong>
-            <p>내 계정의 클론으로 새 세션을 시작하거나, 왼쪽 기록 목록에서 이전 채팅과 논쟁을 다시 열어보세요.</p>
+            <p>내 계정의 클론이나 공개 클론으로 새 세션을 시작하거나, 왼쪽 기록 목록에서 이전 채팅과 논쟁을 다시 열어보세요.</p>
           </article>
         ) : null}
       </article>

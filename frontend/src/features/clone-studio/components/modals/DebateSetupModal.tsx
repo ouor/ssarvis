@@ -1,12 +1,12 @@
 import AppModal from '../../../../components/AppModal'
 import type { CloneOption, VoiceOption } from '../../types'
-import { formatCloneName, formatVoiceLabel } from '../../utils'
+import { formatCloneName, formatVoiceLabel, formatVisibilityLabel } from '../../utils'
 
 type DebateSetupModalProps = {
   clone: CloneOption
-  clones: CloneOption[]
+  availableClones: CloneOption[]
   cloneLoadError: string
-  voices: VoiceOption[]
+  availableVoices: VoiceOption[]
   voiceLoadError: string
   debateOpponentId: string
   debateVoiceAId: string
@@ -25,9 +25,9 @@ type DebateSetupModalProps = {
 
 function DebateSetupModal({
   clone,
-  clones,
+  availableClones,
   cloneLoadError,
-  voices,
+  availableVoices,
   voiceLoadError,
   debateOpponentId,
   debateVoiceAId,
@@ -43,6 +43,9 @@ function DebateSetupModal({
   onTopicChange,
   onStartDebate,
 }: DebateSetupModalProps) {
+  const cloneVoiceLabel = `${formatCloneName(clone)}의 목소리`
+  const opponentVoiceLabel = debateOpponent ? `${formatCloneName(debateOpponent)}의 목소리` : '두 번째 목소리'
+
   return (
     <AppModal
       onBack={onBack}
@@ -51,40 +54,41 @@ function DebateSetupModal({
       title={`${formatCloneName(clone)} 논쟁 설정`}
     >
       <div className="modal-stack">
+        <p className="modal-note">공개 클론과 공개 음성도 선택할 수 있습니다. 작성자 이름과 공개 여부를 확인한 뒤 조합을 정해 주세요.</p>
         {cloneLoadError ? <p className="inline-error">{cloneLoadError}</p> : null}
         <label className="field-stack">
           <span>상대 클론</span>
           <select onChange={(event) => onOpponentChange(event.target.value)} value={debateOpponentId}>
             <option value="">다른 클론 선택</option>
-            {clones
+            {availableClones
               .filter((item) => item.cloneId !== clone.cloneId)
               .map((item) => (
                 <option key={item.cloneId} value={item.cloneId}>
-                  {formatCloneName(item)} · {item.shortDescription}
+                  {formatCloneName(item)} · {formatVisibilityLabel(item.isPublic)} · {item.ownerDisplayName ?? '소유자 없음'}
                 </option>
               ))}
           </select>
         </label>
 
         <label className="field-stack">
-          <span>{`${formatCloneName(clone)}의 목소리`}</span>
+          <span>{cloneVoiceLabel}</span>
           <select onChange={(event) => onVoiceAChange(event.target.value)} value={debateVoiceAId}>
             <option value="">목소리 선택</option>
-            {voices.map((voice) => (
+            {availableVoices.map((voice) => (
               <option key={voice.registeredVoiceId} value={voice.registeredVoiceId}>
-                {formatVoiceLabel(voice)}
+                {formatVoiceLabel(voice)} · {formatVisibilityLabel(voice.isPublic)} · {voice.ownerDisplayName ?? '소유자 없음'}
               </option>
             ))}
           </select>
         </label>
 
         <label className="field-stack">
-          <span>{debateOpponent ? `${formatCloneName(debateOpponent)}의 목소리` : '두 번째 목소리'}</span>
+          <span>{opponentVoiceLabel}</span>
           <select onChange={(event) => onVoiceBChange(event.target.value)} value={debateVoiceBId}>
             <option value="">목소리 선택</option>
-            {voices.map((voice) => (
+            {availableVoices.map((voice) => (
               <option key={voice.registeredVoiceId} value={voice.registeredVoiceId}>
-                {formatVoiceLabel(voice)}
+                {formatVoiceLabel(voice)} · {formatVisibilityLabel(voice.isPublic)} · {voice.ownerDisplayName ?? '소유자 없음'}
               </option>
             ))}
           </select>

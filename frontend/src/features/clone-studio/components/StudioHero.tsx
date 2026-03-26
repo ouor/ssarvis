@@ -14,7 +14,7 @@ function StudioHero({ cloneCount, voiceCount, activeTab, currentUser }: StudioHe
         <p className="studio-kicker">Kindred Flow</p>
         <h1>클론을 만들고, 말투를 입히고, 대화와 논쟁을 바로 시작해보세요.</h1>
         <p className="studio-hero-copy">
-          {currentUser.displayName}님의 클론과 목소리만 불러와서, 나만의 대화와 논쟁 흐름을 이어갈 수 있습니다.
+          {currentUser.displayName}님의 자산은 물론, 다른 사용자가 공개한 클론과 목소리까지 불러와 대화와 논쟁 흐름을 이어갈 수 있습니다.
         </p>
       </div>
       <div className="studio-highlight">

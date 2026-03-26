@@ -26,6 +26,8 @@ export type CloneOption = {
   createdAt: string
   alias: string
   shortDescription: string
+  isPublic: boolean
+  ownerDisplayName?: string | null
 }
 
 export type VoiceOption = {
@@ -36,6 +38,8 @@ export type VoiceOption = {
   originalFilename: string
   audioMimeType: string
   createdAt?: string
+  isPublic: boolean
+  ownerDisplayName?: string | null
 }
 
 export type ChatMessage = {

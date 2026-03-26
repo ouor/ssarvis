@@ -73,6 +73,13 @@
   gap: 18px;
 }
 
+.modal-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
 .questionnaire-scroll {
   display: flex;
   flex-direction: column;
@@ -150,6 +157,17 @@
 .voice-list {
   display: grid;
   gap: 12px;
+}
+
+.voice-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.voice-group-title {
+  color: var(--text-strong);
+  font-size: 1rem;
 }
 
 .voice-card {

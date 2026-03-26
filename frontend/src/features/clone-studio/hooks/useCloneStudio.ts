@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { apiBaseUrl, apiFetch, questionAssetPath, readErrorMessage, readNdjsonStream } from '../api'
+import { apiBaseUrl, apiFetch, formatAssetAccessError, questionAssetPath, readErrorMessage, readNdjsonStream } from '../api'
 import type {
   CloneOption,
   ChatConversationDetail,
@@ -28,10 +28,14 @@ export function useCloneStudio(currentUser: CurrentUser) {
   const [questionError, setQuestionError] = useState('')
   const [creatingClone, setCreatingClone] = useState(false)
   const [createCloneError, setCreateCloneError] = useState('')
-  const [clones, setClones] = useState<CloneOption[]>([])
+  const [mineClones, setMineClones] = useState<CloneOption[]>([])
+  const [publicClones, setPublicClones] = useState<CloneOption[]>([])
   const [cloneLoadError, setCloneLoadError] = useState('')
-  const [voices, setVoices] = useState<VoiceOption[]>([])
+  const [mineVoices, setMineVoices] = useState<VoiceOption[]>([])
+  const [publicVoices, setPublicVoices] = useState<VoiceOption[]>([])
   const [voiceLoadError, setVoiceLoadError] = useState('')
+  const [cloneVisibilityUpdatingId, setCloneVisibilityUpdatingId] = useState<number | null>(null)
+  const [voiceVisibilityUpdatingId, setVoiceVisibilityUpdatingId] = useState<number | null>(null)
   const [chatHistory, setChatHistory] = useState<ChatConversationSummary[]>([])
   const [chatHistoryLoadError, setChatHistoryLoadError] = useState('')
   const [debateHistory, setDebateHistory] = useState<DebateSessionSummary[]>([])
@@ -82,10 +86,22 @@ export function useCloneStudio(currentUser: CurrentUser) {
   )
 
   const canCreateClone = questions.length > 0 && answeredCount === questions.length
+  const clones = useMemo(() => {
+    const publicCloneIds = new Set(mineClones.map((clone) => clone.cloneId))
+    return [...mineClones, ...publicClones.filter((clone) => !publicCloneIds.has(clone.cloneId))]
+  }, [mineClones, publicClones])
+  const voices = useMemo(() => {
+    const mineVoiceIds = new Set(mineVoices.map((voice) => voice.registeredVoiceId))
+    return [...mineVoices, ...publicVoices.filter((voice) => !mineVoiceIds.has(voice.registeredVoiceId))]
+  }, [mineVoices, publicVoices])
   const debateOpponent = useMemo(
     () => clones.find((clone) => clone.cloneId === Number(debateOpponentId)) ?? null,
     [clones, debateOpponentId]
   )
+
+  function createAccessAwareMessage(message: string, fallbackMessage: string) {
+    return formatAssetAccessError(message, fallbackMessage)
+  }
 
   function stopRenderedAudio() {
     const audioElements = document.querySelectorAll('audio')
@@ -143,9 +159,11 @@ export function useCloneStudio(currentUser: CurrentUser) {
       setAnswers({})
       setCreateCloneError('')
       setCloneLoadError('')
-      setClones([])
+      setMineClones([])
+      setPublicClones([])
       setVoiceLoadError('')
-      setVoices([])
+      setMineVoices([])
+      setPublicVoices([])
       setChatHistoryLoadError('')
       setChatHistory([])
       setDebateHistoryLoadError('')
@@ -221,15 +239,22 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadClones(signal?: AbortSignal) {
     try {
       setCloneLoadError('')
-      const response = await apiFetch(`${apiBaseUrl}/api/clones`, { signal })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `클론 목록을 불러오지 못했습니다. (${response.status})`))
+      const [mineResponse, publicResponse] = await Promise.all([
+        apiFetch(`${apiBaseUrl}/api/clones?scope=mine`, { signal }),
+        apiFetch(`${apiBaseUrl}/api/clones?scope=public`, { signal }),
+      ])
+      if (!mineResponse.ok) {
+        throw new Error(await readErrorMessage(mineResponse, `내 클론 목록을 불러오지 못했습니다. (${mineResponse.status})`))
       }
-      const data: CloneOption[] = await response.json()
+      if (!publicResponse.ok) {
+        throw new Error(await readErrorMessage(publicResponse, `공개 클론 목록을 불러오지 못했습니다. (${publicResponse.status})`))
+      }
+      const [mineData, publicData]: [CloneOption[], CloneOption[]] = await Promise.all([mineResponse.json(), publicResponse.json()])
       if (signal?.aborted) {
         return
       }
-      setClones(data)
+      setMineClones(mineData)
+      setPublicClones(publicData)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return
@@ -241,15 +266,22 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadVoices(signal?: AbortSignal) {
     try {
       setVoiceLoadError('')
-      const response = await apiFetch(`${apiBaseUrl}/api/voices`, { signal })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `목소리 목록을 불러오지 못했습니다. (${response.status})`))
+      const [mineResponse, publicResponse] = await Promise.all([
+        apiFetch(`${apiBaseUrl}/api/voices?scope=mine`, { signal }),
+        apiFetch(`${apiBaseUrl}/api/voices?scope=public`, { signal }),
+      ])
+      if (!mineResponse.ok) {
+        throw new Error(await readErrorMessage(mineResponse, `내 목소리 목록을 불러오지 못했습니다. (${mineResponse.status})`))
       }
-      const data: VoiceOption[] = await response.json()
+      if (!publicResponse.ok) {
+        throw new Error(await readErrorMessage(publicResponse, `공개 목소리 목록을 불러오지 못했습니다. (${publicResponse.status})`))
+      }
+      const [mineData, publicData]: [VoiceOption[], VoiceOption[]] = await Promise.all([mineResponse.json(), publicResponse.json()])
       if (signal?.aborted) {
         return
       }
-      setVoices(data)
+      setMineVoices(mineData)
+      setPublicVoices(publicData)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         return
@@ -354,6 +386,27 @@ export function useCloneStudio(currentUser: CurrentUser) {
     }
   }
 
+  function syncCloneOption(updatedClone: CloneOption) {
+    setModalState((current) => {
+      if (!current || current.type === 'create-clone' || current.clone.cloneId !== updatedClone.cloneId) {
+        return current
+      }
+      return { ...current, clone: updatedClone }
+    })
+    setLiveChat((current) =>
+      current && current.clone.cloneId === updatedClone.cloneId ? { ...current, clone: updatedClone } : current
+    )
+    setLiveDebate((current) =>
+      current
+        ? {
+            ...current,
+            cloneA: current.cloneA.cloneId === updatedClone.cloneId ? updatedClone : current.cloneA,
+            cloneB: current.cloneB.cloneId === updatedClone.cloneId ? updatedClone : current.cloneB,
+          }
+        : current
+    )
+  }
+
   function handleQuestionAnswer(questionIndex: number, answer: string) {
     setAnswers((current) => ({
       ...current,
@@ -394,9 +447,11 @@ export function useCloneStudio(currentUser: CurrentUser) {
         createdAt: new Date().toISOString(),
         alias: data.alias,
         shortDescription: data.shortDescription,
+        isPublic: false,
+        ownerDisplayName: currentUser.displayName,
       }
 
-      setClones((current) => [nextClone, ...current.filter((clone) => clone.cloneId !== nextClone.cloneId)])
+      setMineClones((current) => [nextClone, ...current.filter((clone) => clone.cloneId !== nextClone.cloneId)])
       closeModal()
     } catch (error) {
       setCreateCloneError(error instanceof Error ? error.message : '클론 생성 중 오류가 발생했습니다.')
@@ -441,9 +496,11 @@ export function useCloneStudio(currentUser: CurrentUser) {
         originalFilename: data.originalFilename,
         audioMimeType: data.audioMimeType,
         createdAt: new Date().toISOString(),
+        isPublic: false,
+        ownerDisplayName: currentUser.displayName,
       }
 
-      setVoices((current) => [nextVoice, ...current.filter((voice) => voice.registeredVoiceId !== nextVoice.registeredVoiceId)])
+      setMineVoices((current) => [nextVoice, ...current.filter((voice) => voice.registeredVoiceId !== nextVoice.registeredVoiceId)])
       setSelectedVoiceId(String(nextVoice.registeredVoiceId))
       setDebateVoiceAId(String(nextVoice.registeredVoiceId))
       setDebateVoiceBId(String(nextVoice.registeredVoiceId))
@@ -496,7 +553,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
       })
 
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `대화 시작에 실패했습니다. (${response.status})`))
+        const rawMessage = await readErrorMessage(response, `대화 시작에 실패했습니다. (${response.status})`)
+        throw new Error(createAccessAwareMessage(rawMessage, '선택한 클론 또는 목소리로 대화를 시작할 수 없습니다.'))
       }
 
       let pendingVoiceId: string | undefined
@@ -597,7 +655,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
       })
 
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `논쟁 스트림 생성에 실패했습니다. (${response.status})`))
+        const rawMessage = await readErrorMessage(response, `논쟁 스트림 생성에 실패했습니다. (${response.status})`)
+        throw new Error(createAccessAwareMessage(rawMessage, '선택한 클론 또는 목소리로 논쟁을 시작할 수 없습니다.'))
       }
 
       let currentTurnIndex: number | null = null
@@ -691,6 +750,62 @@ export function useCloneStudio(currentUser: CurrentUser) {
     setActiveTab('clones')
   }
 
+  async function toggleCloneVisibility(clone: CloneOption) {
+    setCloneVisibilityUpdatingId(clone.cloneId)
+    setCloneLoadError('')
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/clones/${clone.cloneId}/visibility`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic: !clone.isPublic }),
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, `클론 공개 상태를 변경하지 못했습니다. (${response.status})`))
+      }
+
+      const nextIsPublic = !clone.isPublic
+      const updatedClone = { ...clone, isPublic: nextIsPublic }
+      setMineClones((current) =>
+        current.map((item) => (item.cloneId === clone.cloneId ? { ...item, isPublic: nextIsPublic } : item))
+      )
+      if (!nextIsPublic) {
+        setPublicClones((current) => current.filter((item) => item.cloneId !== clone.cloneId))
+      }
+      syncCloneOption(updatedClone)
+    } catch (error) {
+      setCloneLoadError(error instanceof Error ? error.message : '클론 공개 상태를 변경하지 못했습니다.')
+    } finally {
+      setCloneVisibilityUpdatingId(null)
+    }
+  }
+
+  async function toggleVoiceVisibility(voice: VoiceOption) {
+    setVoiceVisibilityUpdatingId(voice.registeredVoiceId)
+    setVoiceLoadError('')
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/voices/${voice.registeredVoiceId}/visibility`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublic: !voice.isPublic }),
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, `목소리 공개 상태를 변경하지 못했습니다. (${response.status})`))
+      }
+
+      const nextIsPublic = !voice.isPublic
+      setMineVoices((current) =>
+        current.map((item) => (item.registeredVoiceId === voice.registeredVoiceId ? { ...item, isPublic: nextIsPublic } : item))
+      )
+      if (!nextIsPublic) {
+        setPublicVoices((current) => current.filter((item) => item.registeredVoiceId !== voice.registeredVoiceId))
+      }
+    } catch (error) {
+      setVoiceLoadError(error instanceof Error ? error.message : '목소리 공개 상태를 변경하지 못했습니다.')
+    } finally {
+      setVoiceVisibilityUpdatingId(null)
+    }
+  }
+
   async function openChatHistorySession(conversationId: number) {
     try {
       setChatHistoryLoadError('')
@@ -699,7 +814,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
 
       const response = await apiFetch(`${apiBaseUrl}/api/chat/conversations/${conversationId}`)
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `채팅 기록을 불러오지 못했습니다. (${response.status})`))
+        const rawMessage = await readErrorMessage(response, `채팅 기록을 불러오지 못했습니다. (${response.status})`)
+        throw new Error(createAccessAwareMessage(rawMessage, '선택한 채팅 기록을 다시 불러올 수 없습니다.'))
       }
 
       const detail: ChatConversationDetail = await response.json()
@@ -709,6 +825,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
           createdAt: detail.createdAt,
           alias: detail.cloneAlias,
           shortDescription: detail.cloneShortDescription,
+          isPublic: false,
+          ownerDisplayName: currentUser.displayName,
         }
 
       setLiveDebate(null)
@@ -744,7 +862,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
 
       const response = await apiFetch(`${apiBaseUrl}/api/debates/${debateSessionId}`)
       if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `논쟁 기록을 불러오지 못했습니다. (${response.status})`))
+        const rawMessage = await readErrorMessage(response, `논쟁 기록을 불러오지 못했습니다. (${response.status})`)
+        throw new Error(createAccessAwareMessage(rawMessage, '선택한 논쟁 기록을 다시 불러올 수 없습니다.'))
       }
 
       const detail: DebateSessionDetail = await response.json()
@@ -754,6 +873,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
           createdAt: detail.createdAt,
           alias: detail.cloneAAlias,
           shortDescription: detail.cloneAShortDescription,
+          isPublic: false,
+          ownerDisplayName: currentUser.displayName,
         }
       const cloneB =
         clones.find((item) => item.cloneId === detail.cloneBId) ?? {
@@ -761,6 +882,8 @@ export function useCloneStudio(currentUser: CurrentUser) {
           createdAt: detail.createdAt,
           alias: detail.cloneBAlias,
           shortDescription: detail.cloneBShortDescription,
+          isPublic: false,
+          ownerDisplayName: currentUser.displayName,
         }
 
       setLiveChat(null)
@@ -920,9 +1043,15 @@ export function useCloneStudio(currentUser: CurrentUser) {
     creatingClone,
     createCloneError,
     clones,
+    mineClones,
+    publicClones,
     cloneLoadError,
     voices,
+    mineVoices,
+    publicVoices,
     voiceLoadError,
+    cloneVisibilityUpdatingId,
+    voiceVisibilityUpdatingId,
     chatHistory,
     chatHistoryLoadError,
     debateHistory,
@@ -955,8 +1084,10 @@ export function useCloneStudio(currentUser: CurrentUser) {
     goBackToCloneActions,
     handleQuestionAnswer,
     handleCloneCreate,
+    toggleCloneVisibility,
     handleVoiceRegister,
     handleVoiceFileChange,
+    toggleVoiceVisibility,
     handleStartChat,
     handleChatSubmit,
     handleChatInputChange,

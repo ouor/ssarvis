@@ -132,6 +132,35 @@
   padding: 28px;
 }
 
+.asset-meta-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.asset-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(231, 244, 240, 0.92);
+  color: #355f57;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.asset-badge-public {
+  background: rgba(255, 232, 201, 0.96);
+  color: #8b5b14;
+}
+
+.asset-owner {
+  color: var(--muted-strong);
+  font-size: 0.86rem;
+}
+
 .history-sidebar {
   display: flex;
   flex-direction: column;

@@ -3,6 +3,7 @@
 이 문서는 현재 프론트엔드 구현을 빠르게 이해하고 유지보수할 수 있도록 핵심 흐름과 주의점을 정리한 가이드다.
 
 - 인증 및 사용자 전용 데이터 로딩
+- 공개 자산(`내 것 / 공개`) 사용 흐름
 - 실시간 PCM 재생
 - 음성 입력(Web Speech API)
 - 설문 표시 및 처리
@@ -36,6 +37,7 @@
   - 로그아웃/회원 탈퇴 후 로그인 화면 복귀
 - `useCloneStudio`
   - 현재 로그인 회원 기준으로 클론/음성 목록 재로딩
+  - `mine` / `public` 자산을 분리 로딩하고 선택용 목록으로 다시 조합
   - 현재 로그인 회원 기준으로 채팅/논쟁 기록 목록 재로딩
   - 사용자 전환 시 라이브 세션/모달/임시 입력 상태 정리
 
@@ -46,7 +48,7 @@
 3. 실패하면 토큰을 제거하고 인증 화면으로 돌아감
 4. 이후 보호 API는 `apiFetch(...)`를 통해 항상 `Authorization: Bearer ...`를 자동 부착
 5. 어떤 보호 API에서든 `401`이 오면 `authExpiredEventName` 이벤트를 발행하고, 앱 루트가 이를 받아 자동 로그아웃
-6. 사용자 정보가 바뀌면 `useCloneStudio(currentUser)`가 기존 세션을 정리하고 해당 사용자 소유 데이터만 다시 불러옴
+6. 사용자 정보가 바뀌면 `useCloneStudio(currentUser)`가 기존 세션을 정리하고 해당 사용자 기준의 내 자산과 공개 자산을 다시 불러옴
 7. Live 탭 왼쪽 기록 목록에서 이전 채팅/논쟁을 다시 열 수 있음
 
 실제 세션 복구 흐름 예시
@@ -159,6 +161,44 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 - 긴 음성이 끝까지 재생되지 않으면 `done` 이벤트 수신 시점과 `finish()` 대기 로직을 확인한다.
 - `<audio>` 재생이 `blob: ... ERR_FILE_NOT_FOUND`를 내면 URL revoke 타이밍 문제일 가능성이 높다.
 - 페이지를 실제로 떠날 때는 `pagehide`에서 스트림 abort, player dispose, 렌더된 `<audio>` pause까지 함께 정리한다.
+
+## 2-1. 공개 자산(`내 것 / 공개`) 사용 흐름
+
+### 관련 파일
+
+- 상태 조합 및 visibility 토글: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+- 클론 목록 UI: [CloneGridSection.tsx](./src/features/clone-studio/components/CloneGridSection.tsx)
+- 클론 액션 모달: [CloneActionsModal.tsx](./src/features/clone-studio/components/modals/CloneActionsModal.tsx)
+- 음성 선택 모달: [VoicePickerModal.tsx](./src/features/clone-studio/components/modals/VoicePickerModal.tsx)
+- 논쟁 설정 모달: [DebateSetupModal.tsx](./src/features/clone-studio/components/modals/DebateSetupModal.tsx)
+
+### 현재 구조
+
+클론과 음성은 각각 두 목록으로 관리한다.
+
+- `mineClones` / `publicClones`
+- `mineVoices` / `publicVoices`
+
+선택용으로는 훅 내부에서 중복 제거 후 `clones`, `voices`를 다시 만든다.  
+덕분에 화면은 `내 것 / 공개`로 나눠 보여주고, 채팅/논쟁 설정에서는 “현재 사용 가능한 전체 자산”을 일관되게 참조할 수 있다.
+
+### 현재 동작
+
+1. `loadClones()`는 `/api/clones?scope=mine`, `/api/clones?scope=public`를 함께 호출
+2. `loadVoices()`는 `/api/voices?scope=mine`, `/api/voices?scope=public`를 함께 호출
+3. 클론 화면은 `내 클론`, `공개 클론` 섹션으로 분리 렌더링
+4. 음성 선택 모달은 `내 음성`, `공개 음성` 그룹으로 분리 렌더링
+5. 공개 자산 카드/옵션에는 `공개` 배지와 `작성자 displayName` 표시
+6. 공개/비공개 전환 버튼은 소유자 자산에만 노출
+7. 공개 자산을 사용해 시작한 채팅/논쟁도 결과 기록 자체는 현재 로그인 사용자 소유로 저장
+
+### 수정 시 주의점
+
+- 공개 자산은 “사용 가능”이지 “관리 가능”이 아니다. 소유자가 아닌 자산에는 visibility 버튼이 보이면 안 된다.
+- visibility 토글 후에는 목록뿐 아니라 현재 열려 있는 모달의 `selectedClone`도 같이 갱신해야 버튼 문구와 배지가 즉시 맞는다.
+- 선택용 `clones`, `voices`는 `mine + public` 합본이라, UI 문구와 소유권 판단은 반드시 원본 분리 목록(`mineClones`, `mineVoices`)을 기준으로 해야 한다.
+- 논쟁 설정 select 옵션은 공개 여부와 작성자를 함께 보여줘야 같은 이름의 자산을 구분하기 쉽다.
+- 공개 자산 사용 중 `403/404`가 오면 “자산이 비공개로 바뀌었거나 접근 권한이 없다”는 식의 친화적 메시지로 바꾸는 편이 UX가 좋다.
 
 ## 3. 음성 입력(Web Speech API)
 
@@ -503,11 +543,17 @@ const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
 - 다른 사용자 데이터가 잠깐 보인다
   - `useCloneStudio(currentUser)`의 `currentUser.userId` 의존 효과가 유지되는지 확인
   - 사용자 전환 시 `clearActiveSession()`과 목록 재로딩이 모두 호출되는지 확인
+- 공개 클론/공개 음성이 선택 목록에 안 보인다
+  - `/api/clones?scope=public`, `/api/voices?scope=public` 응답과 `mine/public` 병합 로직 확인
+  - DTO에 `isPublic`, `ownerDisplayName`이 내려오는지 확인
 
 - PCM이 깨져 들린다
   - 서버 `sampleRate/channels`와 `PcmStreamPlayer.configure(...)` 전달값 확인
 - 논쟁 종료 후에도 소리가 계속 난다
   - `handleDebateExit()` abort, `pagehide` 정리, `PcmStreamPlayer.dispose()` 호출 여부 확인
+- 공개 자산으로 시작하려는데 바로 실패한다
+  - 자산이 방금 비공개로 전환됐는지 확인
+  - 프론트에서 `formatAssetAccessError(...)`를 거쳐 친화적 메시지로 바꿔 보여주는지 확인
 - 음성 인식이 바로 꺼진다
   - `useSpeechInput`의 `onend` 재시작과 silence threshold 확인
 - 설문 제출 버튼이 안 켜진다

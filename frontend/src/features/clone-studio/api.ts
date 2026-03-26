@@ -64,6 +64,25 @@ export async function readErrorMessage(response: Response, fallbackMessage: stri
   }
 }
 
+export function formatAssetAccessError(message: string, fallbackMessage: string) {
+  const trimmed = message.trim()
+  const lowered = trimmed.toLowerCase()
+  const looksLikeAccessIssue =
+    lowered.includes('(403)') ||
+    lowered.includes('(404)') ||
+    lowered.includes('forbidden') ||
+    lowered.includes('not found') ||
+    trimmed.includes('권한') ||
+    trimmed.includes('접근') ||
+    trimmed.includes('비공개')
+
+  if (!looksLikeAccessIssue) {
+    return trimmed || fallbackMessage
+  }
+
+  return `${fallbackMessage}\n다른 사용자가 자산을 비공개로 전환했거나 현재 계정으로 접근할 수 없습니다.`
+}
+
 export async function readNdjsonStream(response: Response, onEvent: (event: StreamEvent) => Promise<void> | void) {
   if (!response.body) {
     throw new Error('스트림 응답 본문이 비어 있습니다.')
