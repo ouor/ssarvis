@@ -1,17 +1,73 @@
 # Frontend Guide
 
-이 문서는 현재 프론트엔드 구현 중 아래 3가지 기능을 빠르게 이해하고 유지보수할 수 있도록 정리한 가이드다.
+이 문서는 현재 프론트엔드 구현을 빠르게 이해하고 유지보수할 수 있도록 핵심 흐름과 주의점을 정리한 가이드다.
 
+- 인증 및 사용자 전용 데이터 로딩
 - 실시간 PCM 재생
 - 음성 입력(Web Speech API)
 - 설문 표시 및 처리
 
 기준 경로
 - 프로젝트 루트: `frontend`
+- 앱 루트: [App.tsx](./src/App.tsx)
 - 메인 화면: [CloneStudioPage.tsx](./src/pages/CloneStudioPage.tsx)
 - 화면 상태 오케스트레이션: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
 
-## 1. 실시간 PCM 재생
+## 1. 인증 및 사용자 전용 데이터 로딩
+
+### 관련 파일
+
+- 앱 루트: [App.tsx](./src/App.tsx)
+- 인증 화면: [AuthPage.tsx](./src/features/auth/AuthPage.tsx)
+- API 유틸: [api.ts](./src/features/clone-studio/api.ts)
+- 메인 화면: [CloneStudioPage.tsx](./src/pages/CloneStudioPage.tsx)
+- 사용자 기준 상태 로딩: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+
+### 현재 구조
+
+인증 상태는 `App.tsx`가 소유하고, 클론/음성/채팅/논쟁 상태는 `CloneStudioPage -> useCloneStudio`가 소유한다.
+
+역할 분리
+- `App.tsx`
+  - 로그인/회원가입 제출
+  - 저장된 JWT로 `/api/auth/me` 호출
+  - 인증 만료 이벤트 처리
+  - 로그아웃/회원 탈퇴 후 로그인 화면 복귀
+- `useCloneStudio`
+  - 현재 로그인 회원 기준으로 클론/음성 목록 재로딩
+  - 사용자 전환 시 라이브 세션/모달/임시 입력 상태 정리
+
+### 현재 동작
+
+1. 앱 시작 시 `App.tsx`가 로컬 스토리지의 access token으로 `/api/auth/me` 호출
+2. 성공하면 `currentUser`를 채우고 `CloneStudioPage`를 렌더링
+3. 실패하면 토큰을 제거하고 인증 화면으로 돌아감
+4. 이후 보호 API는 `apiFetch(...)`를 통해 항상 `Authorization: Bearer ...`를 자동 부착
+5. 어떤 보호 API에서든 `401`이 오면 `authExpiredEventName` 이벤트를 발행하고, 앱 루트가 이를 받아 자동 로그아웃
+6. 사용자 정보가 바뀌면 `useCloneStudio(currentUser)`가 기존 세션을 정리하고 해당 사용자 소유 데이터만 다시 불러옴
+
+실제 세션 복구 흐름 예시
+
+```ts
+const response = await apiFetch(`${apiBaseUrl}/api/auth/me`)
+if (!response.ok) {
+  clearStoredAccessToken()
+  setCurrentUser(null)
+  return
+}
+
+const me: CurrentUser = await response.json()
+setCurrentUser(me)
+```
+
+### 수정 시 주의점
+
+- 인증 상태와 클론 스튜디오 상태를 한 훅에 합치지 않는다. 지금 구조는 “계정 레벨”과 “작업 화면 레벨”이 분리돼 있어서 회귀를 줄인다.
+- 보호 API 호출은 직접 `fetch`보다 `apiFetch(...)`를 우선 사용한다.
+- 회원 탈퇴는 서버 세션을 지우는 개념이 아니라 soft delete + 로컬 토큰 제거 흐름이다.
+- 사용자 전환 시 이전 사용자의 채팅/논쟁 상태가 남지 않도록 `useCloneStudio`의 `currentUser.userId` 의존 효과를 유지한다.
+
+## 2. 실시간 PCM 재생
 
 ### 관련 파일
 
@@ -73,7 +129,8 @@ await readNdjsonStream(response, async (streamEvent) => {
 - 서버가 보내는 포맷은 `pcm_s16le` 기준이다.
 - `sampleRate`, `channels`는 서버 이벤트 값을 그대로 신뢰한다.
 - 청크 경계에서 1바이트가 남을 수 있어 `trailingByte`로 이어붙인다.
-- `dispose()`는 오디오 컨텍스트만 닫고, 현재 WAV URL은 즉시 revoke하지 않는다.
+- `dispose()`는 살아 있는 `AudioBufferSourceNode`를 직접 `stop()`하고 `AudioContext`를 닫는다.
+- `buildWavUrl()`은 누적 PCM으로 새 blob URL을 만들지만, `dispose()`가 그 URL을 즉시 revoke하지는 않는다.
 
 실제 PCM -> `AudioBuffer` 변환 예시
 
@@ -97,8 +154,9 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 - 재생 품질 문제가 생기면 먼저 서버가 보내는 `sampleRate`, `channels`, `audioFormat`을 확인한다.
 - 긴 음성이 끝까지 재생되지 않으면 `done` 이벤트 수신 시점과 `finish()` 대기 로직을 확인한다.
 - `<audio>` 재생이 `blob: ... ERR_FILE_NOT_FOUND`를 내면 URL revoke 타이밍 문제일 가능성이 높다.
+- 페이지를 실제로 떠날 때는 `pagehide`에서 스트림 abort, player dispose, 렌더된 `<audio>` pause까지 함께 정리한다.
 
-## 2. 음성 입력(Web Speech API)
+## 3. 음성 입력(Web Speech API)
 
 ### 관련 파일
 
@@ -246,7 +304,7 @@ if (rms >= SILENCE_THRESHOLD) {
 - 마이크 스트림을 멈출 때는 `MediaStreamTrack.stop()`과 `AudioContext.close()`를 함께 정리한다.
 - 브라우저 지원 여부는 `window.SpeechRecognition ?? window.webkitSpeechRecognition` 기준으로 본다.
 
-## 3. 설문 표시 및 처리
+## 4. 설문 표시 및 처리
 
 ### 관련 파일
 
@@ -351,7 +409,7 @@ if (rms >= SILENCE_THRESHOLD) {
 실제 제출 예시
 
 ```ts
-const response = await fetch(`${apiBaseUrl}/api/system-prompt`, {
+const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -369,17 +427,65 @@ const response = await fetch(`${apiBaseUrl}/api/system-prompt`, {
 - 질문 타입을 자유입력형으로 바꾸려면 `CreateCloneModal`과 `answers` 구조를 함께 바꿔야 한다.
 - 현재는 단일 선택만 지원하므로, 복수 선택을 넣으려면 `Record<number, string>` 구조부터 수정해야 한다.
 
-## 4. 추천 유지보수 원칙
+## 5. 사용자 전용 라이브 세션 주의점
+
+### 사용자 전환
+
+현재 구현은 `useCloneStudio(currentUser)`가 `currentUser.userId`가 바뀔 때 아래를 모두 초기화한다.
+
+- 클론/음성 목록
+- 선택 중인 모달 상태
+- 채팅 입력 및 메시지
+- 논쟁 상태
+- 등록 중인 음성 파일과 별칭
+- 활성 `AbortController`
+- 활성 `PcmStreamPlayer`
+
+이 동작 덕분에 다른 사용자가 같은 브라우저에서 로그인해도 이전 사용자의 라이브 세션이 섞이지 않는다.
+
+### 페이지 이탈
+
+`visibilitychange`는 탭 전환/최소화에서도 발생해서 너무 공격적이었기 때문에, 현재는 `pagehide`만 사용한다.
+
+정리 시점
+- 브라우저 새로고침
+- 다른 URL로 이동
+- 탭 닫기
+- 뒤로가기/앞으로가기 등으로 현재 문서를 떠나는 경우
+
+정리 내용
+- 채팅/논쟁 스트림 abort
+- `PcmStreamPlayer.dispose()`
+- 이미 렌더된 `<audio>` pause
+- 음성 인식 stop
+
+### 탈퇴/인증 만료
+
+- 회원 탈퇴는 `App.tsx`가 `DELETE /api/auth/me`를 호출한 뒤 토큰을 제거하고 로그인 화면으로 복귀한다.
+- 인증 만료는 `apiFetch`가 `401`을 감지해 전역 이벤트를 발행하고, `App.tsx`가 이를 받아 동일하게 로그인 화면으로 돌린다.
+- 유지보수 시 “인증 종료”와 “페이지 이탈”은 서로 다른 정리 경로라는 점을 구분하는 것이 중요하다.
+
+## 6. 추천 유지보수 원칙
 
 - 스트리밍 오디오와 음성 인식은 각각 독립 훅/유틸로 유지한다.
-- `useCloneStudio`는 세션 오케스트레이션까지만 맡기고, 브라우저 API 세부 구현은 더 넣지 않는다.
+- `useCloneStudio`는 세션 오케스트레이션과 사용자 전용 상태까지만 맡기고, 브라우저 API 세부 구현은 더 넣지 않는다.
 - PCM 포맷, silence threshold, restart delay 같은 값은 상수로 한곳에 모아둔다.
+- 인증 토큰 처리와 401 공통 처리는 `api.ts`에 모은다.
 - 브라우저별 편차가 큰 기능은 UI 문구와 fallback을 먼저 준비한 뒤 기능을 확장한다.
 
-## 5. 빠른 체크리스트
+## 7. 빠른 체크리스트
+
+- 로그인했는데 바로 로그인 화면으로 돌아간다
+  - `/api/auth/me` 응답 코드와 `apiFetch(...)`의 401 처리 확인
+  - 로컬 스토리지 토큰 값과 JWT 만료 여부 확인
+- 다른 사용자 데이터가 잠깐 보인다
+  - `useCloneStudio(currentUser)`의 `currentUser.userId` 의존 효과가 유지되는지 확인
+  - 사용자 전환 시 `clearActiveSession()`과 목록 재로딩이 모두 호출되는지 확인
 
 - PCM이 깨져 들린다
   - 서버 `sampleRate/channels`와 `PcmStreamPlayer.configure(...)` 전달값 확인
+- 논쟁 종료 후에도 소리가 계속 난다
+  - `handleDebateExit()` abort, `pagehide` 정리, `PcmStreamPlayer.dispose()` 호출 여부 확인
 - 음성 인식이 바로 꺼진다
   - `useSpeechInput`의 `onend` 재시작과 silence threshold 확인
 - 설문 제출 버튼이 안 켜진다

@@ -21,8 +21,8 @@ Authorization: Bearer <access-token>
 보호 대상 API
 - `/api/auth/me` (`GET`, `DELETE`)
 - `/api/system-prompt`
-- `/api/clones`
-- `/api/voices`
+- `/api/clones` (`GET`)
+- `/api/voices` (`GET`, `POST`)
 - `/api/chat/**`
 - `/api/debates/**`
 
@@ -144,6 +144,10 @@ Body
 ## POST `/api/auth/logout`
 
 서버 저장 세션 없이 동작하므로, 로그아웃은 클라이언트가 현재 access token을 폐기하는 의미다.
+
+설명
+- 이 엔드포인트 자체는 토큰이 없어도 호출할 수 있다.
+- 현재 프론트는 서버 `logout` 호출 없이 로컬 토큰만 제거하는 방식으로 로그아웃한다.
 
 ### Success Response
 
@@ -466,6 +470,9 @@ Content Type
 {"type":"error","message":"Failed to stream TTS audio."}
 ```
 
+프론트 참고
+- 현재 프론트는 `message`를 먼저 화면에 추가하고, `done` 시점에 누적 PCM을 WAV로 합쳐 마지막 어시스턴트 메시지에 `<audio>` URL을 연결한다.
+
 ## POST `/api/debates`
 
 현재 로그인한 회원의 두 클론과 주제를 받아 논쟁 세션을 시작하고, 첫 번째 발언만 생성한다.
@@ -528,6 +535,10 @@ Body
 ## POST `/api/debates/stream`
 
 논쟁 세션을 만들고 첫 턴을 NDJSON 스트림으로 내려준다. 첫 이벤트는 항상 `CLONE_A`의 발언이며, 이후 PCM 오디오 청크와 완료 이벤트가 이어진다.
+
+프론트 참고
+- 프론트는 첫 턴 스트림이 끝난 뒤 `/api/debates/{id}/next/stream`를 반복 호출해 논쟁을 이어간다.
+- 더 이상 별도 `stop` API는 없고, 클라이언트가 다음 턴 요청을 중단하면 논쟁도 종료된다.
 
 ## POST `/api/debates/{debateSessionId}/next`
 
@@ -624,8 +635,9 @@ Body
 
 참고
 - `integrationTest` Gradle 태스크는 `backend/.env` 파일이 있으면 그 값을 읽어 테스트 프로세스 환경변수로 주입한다.
-- 현재 `integrationTest`는 실제 OpenAI, 실제 DashScope, 실제 MySQL을 호출한다.
+- 현재 `integrationTest`는 회원가입으로 JWT를 발급받은 뒤, 실제 OpenAI, 실제 DashScope, 실제 MySQL을 호출한다.
 - `integrationTest`의 음성 등록 샘플은 외부 합성 대신 `backend/src/test/resources/sample/haru.wav` 파일을 사용한다.
+- `integrationTest`는 soft delete 후 기존 토큰이 보호 API에서 거부되는지도 함께 검증한다.
 - OpenAI 호출은 모두 `POST /v1/chat/completions` 형식을 사용한다.
 - 시스템 프롬프트 생성은 한 번에 JSON을 받는 방식이 아니라 `systemPrompt -> alias -> shortDescription` 순서의 단계형 OpenAI 호출로 처리된다.
 - 채팅 이어가기 시에는 시스템 프롬프트를 항상 포함하고, 과거 대화는 최근 `OPENAI_CHAT_HISTORY_TURNS`턴만 OpenAI로 전송한다.

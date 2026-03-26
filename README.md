@@ -7,8 +7,10 @@ SSARVIS는 설문 응답을 바탕으로 사용자를 모사하는 클론 시스
 
 - 회원 인증 및 소유권 분리
   - JWT access token 기반 로그인/회원가입
+  - 프론트는 access token을 로컬 스토리지에 저장하고, 보호 API 호출 시 `Authorization: Bearer ...` 헤더를 자동 부착
   - 클론, 음성, 대화, 논쟁, 오디오 자산은 회원 소유로 분리
   - soft delete 된 회원은 다시 로그인하거나 보호 API에 접근할 수 없음
+  - 회원 탈퇴 시 계정은 soft delete 되고, 현재 세션은 즉시 종료됨
 
 - 설문 응답으로 클론 생성
   - OpenAI를 사용해 사용자 모사용 `systemPrompt` 생성
@@ -38,6 +40,7 @@ SSARVIS는 설문 응답을 바탕으로 사용자를 모사하는 클론 시스
 - TTS / 보이스 등록: DashScope
 - 오디오 후처리: ffmpeg
 - 오브젝트 스토리지: S3 호환 스토리지 지원
+- 테스트: JUnit + MockMvc, Vitest + Testing Library
 
 프로젝트 구조
 
@@ -54,8 +57,15 @@ SSARVIS는 설문 응답을 바탕으로 사용자를 모사하는 클론 시스
    - `systemPrompt`
    - `alias`
    - `shortDescription`
-3. 결과를 `prompt_generation_logs`에 저장
+3. 결과를 현재 로그인한 회원의 `prompt_generation_logs`에 저장
 4. 프론트에서 새 클론 카드로 즉시 반영
+
+### 인증
+
+1. 앱 시작 시 프론트가 저장된 access token으로 `/api/auth/me`를 호출
+2. 유효하면 현재 회원 정보를 복구하고, 클론/음성 목록을 그 회원 기준으로 다시 불러옴
+3. 보호 API가 `401`을 반환하면 토큰을 제거하고 로그인 화면으로 복귀
+4. 회원 탈퇴 시 `/api/auth/me` `DELETE` 호출 후 자동 로그아웃
 
 ### 채팅
 
@@ -108,6 +118,7 @@ OpenAI 컨텍스트는 현재 발화하는 클론 기준으로 아래 순서로 
 - `OPENAI_CHAT_HISTORY_TURNS`
 - `APP_AUTH_JWT_SECRET`
 - `APP_AUTH_JWT_ACCESS_TOKEN_EXPIRATION_MINUTES`
+- `APP_CORS_ALLOWED_ORIGINS`
 - `DASHSCOPE_API_KEY`
 - `DASHSCOPE_BASE_URL`
 - `DASHSCOPE_REALTIME_URL`
@@ -133,6 +144,7 @@ OpenAI 컨텍스트는 현재 발화하는 클론 기준으로 아래 순서로 
 
 - `backend/.env`는 `bootRun`과 `integrationTest`에서 자동으로 읽힙니다.
 - 프론트는 기본적으로 `http://localhost:8080`의 백엔드를 대상으로 동작합니다.
+- JWT secret은 최소 32바이트 이상이어야 합니다.
 
 ## 로컬 실행
 
@@ -204,6 +216,7 @@ npm run test
 
 통합 테스트 특징
 
+- 회원가입 후 JWT를 발급받아 보호 API를 실제 호출
 - 실제 OpenAI 호출
 - 실제 DashScope 호출
 - 실제 MySQL 사용
@@ -234,6 +247,9 @@ npm run test
 
 ## 프론트 화면 구조
 
+- 인증 화면
+  - 로그인 / 회원가입 탭
+  - 세션 복구 실패 또는 만료 시 자동 복귀
 - 클론 탭
   - 새 클론 만들기
   - 기존 클론 목록
@@ -242,6 +258,10 @@ npm run test
   - 클론과 채팅
   - 음성 입력 버튼
   - 클론 간 논쟁 진행 상태
+- 계정 바
+  - 현재 로그인 회원 표시
+  - 로그아웃
+  - 회원 탈퇴
 
 ## 현재 알려진 특성
 
