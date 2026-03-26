@@ -1,6 +1,8 @@
 package com.ssarvis.backend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -8,6 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ssarvis.backend.auth.AuthResponse;
+import com.ssarvis.backend.auth.UserAccount;
+import com.ssarvis.backend.auth.UserAccountRepository;
 import com.ssarvis.backend.chat.ChatConversation;
 import com.ssarvis.backend.chat.ChatConversationRepository;
 import com.ssarvis.backend.chat.ChatMessage;
@@ -35,15 +40,20 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 @Tag("integration")
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("integration")
+@TestPropertySource(properties = {
+        "app.auth.jwt.secret=integration-test-jwt-secret-key-that-is-at-least-32-bytes-long"
+})
 class PromptIntegrationTest {
     @Autowired
     private MockMvc mockMvc;
@@ -71,6 +81,9 @@ class PromptIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private UserAccountRepository userAccountRepository;
 
     @Autowired
     private AppProperties appProperties;
@@ -107,18 +120,26 @@ class PromptIntegrationTest {
                 .filter(log -> log.getCreatedAt() != null && !log.getCreatedAt().isBefore(testStartedAt))
                 .map(PromptGenerationLog::getId)
                 .forEach(promptGenerationLogRepository::deleteById);
+        userAccountRepository.findAll().stream()
+                .filter(user -> user.getCreatedAt() != null && !user.getCreatedAt().isBefore(testStartedAt))
+                .map(UserAccount::getId)
+                .forEach(userAccountRepository::deleteById);
         testStartedAt = Instant.now();
     }
 
     @Test
-    void integrationTestCallsOpenAiAndWritesToMysql() throws Exception {
+    void integrationTestCallsProtectedApisWithJwtAndWritesOwnedRows() throws Exception {
         long beforeCount = promptGenerationLogRepository.count();
         long beforeConversationCount = chatConversationRepository.count();
         long beforeMessageCount = chatMessageRepository.count();
         long beforeRegisteredVoiceCount = registeredVoiceRepository.count();
         long beforeAudioAssetCount = generatedAudioAssetRepository.count();
 
+        AuthResponse auth = signUp("integration-user-" + System.currentTimeMillis(), "secret123", "통합테스터");
+        String authorizationHeader = bearer(auth.accessToken());
+
         String promptResponseBody = mockMvc.perform(post("/api/system-prompt")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -151,7 +172,9 @@ class PromptIntegrationTest {
         long promptGenerationLogId = promptResponse.get("promptGenerationLogId").asLong();
 
         PromptGenerationLog firstPromptLog = promptGenerationLogRepository.findById(promptGenerationLogId).orElseThrow();
+        UserAccount owner = userAccountRepository.findById(auth.userId()).orElseThrow();
         PromptGenerationLog secondPromptLog = promptGenerationLogRepository.save(new PromptGenerationLog(
+                owner,
                 firstPromptLog.getModel(),
                 firstPromptLog.getAnswersJson(),
                 firstPromptLog.getSystemPrompt(),
@@ -167,7 +190,8 @@ class PromptIntegrationTest {
                                 "dashscope-sample",
                                 dashScopeSampleAudio.contentType(),
                                 dashScopeSampleAudio.bytes()
-                        )))
+                        ))
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.registeredVoiceId").isNumber())
                 .andExpect(jsonPath("$.voiceId").isString())
@@ -179,6 +203,7 @@ class PromptIntegrationTest {
         long registeredVoiceId = voiceResponse.get("registeredVoiceId").asLong();
 
         String chatResponseBody = mockMvc.perform(post("/api/chat/messages")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -201,6 +226,7 @@ class PromptIntegrationTest {
         long conversationId = chatResponse.get("conversationId").asLong();
 
         String debateResponseBody = mockMvc.perform(post("/api/debates")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -257,6 +283,7 @@ class PromptIntegrationTest {
         assertThat(latestLog.getSystemPrompt()).isNotBlank();
 
         ChatConversation conversation = chatConversationRepository.findById(conversationId).orElseThrow();
+        assertThat(conversation.getUser().getId()).isEqualTo(auth.userId());
         assertThat(conversation.getPromptGenerationLog().getId()).isEqualTo(promptGenerationLogId);
 
         List<ChatMessage> messages = chatMessageRepository.findByConversationIdOrderByIdAsc(conversationId);
@@ -279,6 +306,7 @@ class PromptIntegrationTest {
         assertThat(chatResponse.get("ttsAudioBase64").asText()).isNotBlank();
 
         DebateSession debateSession = debateSessionRepository.findById(debateSessionId).orElseThrow();
+        assertThat(debateSession.getUser().getId()).isEqualTo(auth.userId());
         assertThat(debateSession.getCloneA().getId()).isEqualTo(promptGenerationLogId);
         assertThat(debateSession.getCloneB().getId()).isEqualTo(secondPromptGenerationLogId);
 
@@ -286,6 +314,31 @@ class PromptIntegrationTest {
         assertThat(debateTurns).hasSize(1);
         assertThat(debateTurns.get(0).getSpeaker()).isEqualTo(DebateTurn.Speaker.CLONE_A);
         assertThat(debateTurns.get(0).getContent()).isNotBlank();
+
+        mockMvc.perform(get("/api/clones")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].cloneId").isNumber());
+    }
+
+    @Test
+    void softDeletedUserTokenStopsWorkingInIntegrationFlow() throws Exception {
+        AuthResponse auth = signUp("soft-delete-user-" + System.currentTimeMillis(), "secret123", "삭제테스터");
+        String authorizationHeader = bearer(auth.accessToken());
+
+        mockMvc.perform(get("/api/auth/me")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(auth.userId()));
+
+        mockMvc.perform(delete("/api/auth/me")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/clones")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("User not found or inactive."));
     }
 
     private SampleAudio createDashScopeSampleAudio() throws Exception {
@@ -303,6 +356,29 @@ class PromptIntegrationTest {
             return baseAlias.substring(0, 118) + " 2";
         }
         return baseAlias + " 2";
+    }
+
+    private AuthResponse signUp(String username, String password, String displayName) throws Exception {
+        String responseBody = mockMvc.perform(post("/api/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "%s",
+                                  "password": "%s",
+                                  "displayName": "%s"
+                                }
+                                """.formatted(username, password, displayName)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readValue(responseBody, AuthResponse.class);
+    }
+
+    private String bearer(String accessToken) {
+        return "Bearer " + accessToken;
     }
 
     private record SampleAudio(byte[] bytes, String contentType) {
