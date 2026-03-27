@@ -49,6 +49,14 @@ SSARVIS는 설문 응답을 바탕으로 사용자를 모사하는 클론 시스
 - 오브젝트 스토리지: S3 호환 스토리지 지원
 - 테스트: JUnit + MockMvc, Vitest + Testing Library
 
+프론트 구조 메모
+
+- 인증 상태는 `App.tsx`가 관리
+- 클론 스튜디오 상태 오케스트레이션은 `useCloneStudio`
+- 친구 검색/요청/수락/거절/취소/해제는 `useFriendWorkspace`
+- 보호 API JSON 호출은 `fetchJsonOrThrow(...)`로 공통 처리
+- 자산 배지/작성자/공개 토글 행은 `AssetMeta`로 공통 렌더링
+
 프로젝트 구조
 
 - [backend](./backend)
@@ -72,6 +80,7 @@ SSARVIS는 설문 응답을 바탕으로 사용자를 모사하는 클론 시스
 1. 앱 시작 시 프론트가 저장된 access token으로 `/api/auth/me`를 호출
 2. 유효하면 현재 회원 정보를 복구하고, 클론/음성 목록을 그 회원 기준으로 다시 불러옴
    - 목록은 `내 것`, `친구`, `공개`를 분리해서 조회
+   - 친구 탭의 요청/목록 상태는 별도 훅에서 관리
 3. 보호 API가 `401`을 반환하면 토큰을 제거하고 로그인 화면으로 복귀
 4. 회원 탈퇴 시 `/api/auth/me` `DELETE` 호출 후 자동 로그아웃
 
@@ -114,6 +123,7 @@ OpenAI 컨텍스트는 현재 발화하는 클론 기준으로 아래 순서로 
 
 - DashScope realtime websocket으로 PCM 오디오 수신
 - 프론트는 PCM 청크를 바로 재생
+- 스트림 종료 후 브라우저 재생용 WAV object URL을 만들고, player dispose 시 revoke
 - 긴 텍스트는 UTF-8 600바이트 제한을 넘기지 않도록 분할
   - 가능하면 600바이트 이전 마지막 `.` 기준으로 자름
 - 전체 오디오는 WAV로 합쳐 응답에도 사용하고, 서버에서는 별도 인코딩/저장 가능
@@ -248,6 +258,12 @@ npm run build
 cd frontend
 npm run test
 ```
+
+프론트 리팩터링 검증
+
+- `useCloneStudio` 내부에서 친구 워크스페이스를 분리한 뒤에도 기존 페이지 테스트가 유지된다
+- `PcmStreamPlayer.dispose()`는 source 정리와 함께 마지막 WAV object URL도 revoke 한다
+- `fetchJsonOrThrow(...)` 도입 후 자산/친구 로더의 에러 처리 형식이 일관된다
 
 통합 테스트 특징
 

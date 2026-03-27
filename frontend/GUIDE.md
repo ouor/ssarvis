@@ -14,6 +14,7 @@
 - 앱 루트: [App.tsx](./src/App.tsx)
 - 메인 화면: [CloneStudioPage.tsx](./src/pages/CloneStudioPage.tsx)
 - 화면 상태 오케스트레이션: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+- 친구 워크스페이스 훅: [useFriendWorkspace.ts](./src/features/clone-studio/hooks/useFriendWorkspace.ts)
 
 ## 1. 인증 및 사용자 전용 데이터 로딩
 
@@ -24,6 +25,7 @@
 - API 유틸: [api.ts](./src/features/clone-studio/api.ts)
 - 메인 화면: [CloneStudioPage.tsx](./src/pages/CloneStudioPage.tsx)
 - 사용자 기준 상태 로딩: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+- 친구 상태 및 액션: [useFriendWorkspace.ts](./src/features/clone-studio/hooks/useFriendWorkspace.ts)
 - 저장된 채팅/논쟁 기록 열기: [LiveSessionPanel.tsx](./src/features/clone-studio/components/LiveSessionPanel.tsx)
 
 ### 현재 구조
@@ -40,8 +42,11 @@
   - 현재 로그인 회원 기준으로 클론/음성 목록 재로딩
   - `mine` / `friend` / `public` 자산을 분리 로딩하고 선택용 목록으로 다시 조합
   - 현재 로그인 회원 기준으로 채팅/논쟁 기록 목록 재로딩
-  - 친구 목록, 받은 요청, 보낸 요청을 별도 로딩
   - 사용자 전환 시 라이브 세션/모달/임시 입력 상태 정리
+- `useFriendWorkspace`
+  - 친구 목록, 받은 요청, 보낸 요청 로딩
+  - 사용자 검색, 요청 전송/수락/거절/취소/해제
+  - 친구 관계 변경 후 자산 목록 재동기화 콜백 호출
 
 ### 현재 동작
 
@@ -53,6 +58,7 @@
 6. 사용자 정보가 바뀌면 `useCloneStudio(currentUser)`가 기존 세션을 정리하고 해당 사용자 기준의 내 자산, 친구 자산, 공개 자산을 다시 불러옴
 7. Live 탭 왼쪽 기록 목록에서 이전 채팅/논쟁을 다시 열 수 있음
 8. Friends 탭을 열면 친구 목록, 받은 요청, 보낸 요청을 별도 로딩함
+9. Friends 탭 관련 액션은 `useFriendWorkspace`가 전담하고, 친구 수락/해제 후에는 자산 목록을 다시 동기화함
 
 실제 세션 복구 흐름 예시
 
@@ -72,6 +78,7 @@ setCurrentUser(me)
 
 - 인증 상태와 클론 스튜디오 상태를 한 훅에 합치지 않는다. 지금 구조는 “계정 레벨”과 “작업 화면 레벨”이 분리돼 있어서 회귀를 줄인다.
 - 보호 API 호출은 직접 `fetch`보다 `apiFetch(...)`를 우선 사용한다.
+- JSON 응답 보호 API는 `fetchJsonOrThrow(...)`를 우선 사용해 에러 처리 형식을 맞춘다.
 - 회원 탈퇴는 서버 세션을 지우는 개념이 아니라 soft delete + 로컬 토큰 제거 흐름이다.
 - 사용자 전환 시 이전 사용자의 채팅/논쟁 상태가 남지 않도록 `useCloneStudio`의 `currentUser.userId` 의존 효과를 유지한다.
 - 기록 상세를 열 때도 직접 `fetch`보다 `apiFetch(...)`와 훅 내부 로딩 함수를 통해 일관되게 처리한다.
@@ -139,7 +146,7 @@ await readNdjsonStream(response, async (streamEvent) => {
 - `sampleRate`, `channels`는 서버 이벤트 값을 그대로 신뢰한다.
 - 청크 경계에서 1바이트가 남을 수 있어 `trailingByte`로 이어붙인다.
 - `dispose()`는 살아 있는 `AudioBufferSourceNode`를 직접 `stop()`하고 `AudioContext`를 닫는다.
-- `buildWavUrl()`은 누적 PCM으로 새 blob URL을 만들지만, `dispose()`가 그 URL을 즉시 revoke하지는 않는다.
+- `buildWavUrl()`은 누적 PCM으로 새 blob URL을 만들고, `dispose()`는 마지막 object URL도 revoke한다.
 
 실제 PCM -> `AudioBuffer` 변환 예시
 
@@ -176,6 +183,7 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 - 논쟁 설정 모달: [DebateSetupModal.tsx](./src/features/clone-studio/components/modals/DebateSetupModal.tsx)
 - 친구 탭 UI: [FriendPanel.tsx](./src/features/clone-studio/components/FriendPanel.tsx)
 - 탭 전환 UI: [StudioTabs.tsx](./src/features/clone-studio/components/StudioTabs.tsx)
+- 공통 자산 메타 UI: [AssetMeta.tsx](./src/features/clone-studio/components/AssetMeta.tsx)
 
 ### 현재 구조
 
@@ -197,6 +205,7 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 6. `공개/비공개 전환` 버튼은 내 자산에만 노출되고, 친구 자산에는 절대 보이면 안 된다
 7. 친구 자산은 비공개라도 사용 가능하지만, 관리 권한은 여전히 소유자에게만 있다
 8. 친구나 공개 자산을 사용해 시작한 채팅/논쟁도 결과 기록 자체는 현재 로그인 사용자 소유로 저장
+9. 자산 배지/작성자/토글 버튼 행은 `AssetMeta`로 공통 렌더링한다
 
 ### 수정 시 주의점
 
@@ -216,7 +225,7 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 
 ### 현재 구조
 
-친구 기능은 별도 탭으로 분리되어 있고, 실제 데이터는 `useCloneStudio`가 들고 있다.
+친구 기능은 별도 탭으로 분리되어 있고, 실제 데이터와 액션은 `useFriendWorkspace`가 들고 있다.
 
 - `friends`
 - `receivedFriendRequests`
@@ -225,15 +234,16 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 - `friendSearchResults`
 - `friendActionKey`
 
-친구 탭 진입 시에만 친구 관련 API를 로딩하므로, 클론/라이브 탭에서는 불필요한 네트워크 요청을 줄일 수 있다.
+친구 탭 진입 시에만 친구 관련 API를 로딩하므로, 클론/라이브 탭에서는 불필요한 네트워크 요청을 줄일 수 있다.  
+또 친구 수락/해제처럼 자산 접근 범위가 바뀌는 액션은 완료 후 자산 목록 재동기화 콜백을 호출한다.
 
 ### 현재 동작
 
 1. 사용자가 Friends 탭으로 이동
-2. `useEffect`가 `/api/friends`, `/api/friends/requests/received`, `/api/friends/requests/sent`를 함께 호출
+2. `useFriendWorkspace`의 `useEffect`가 `/api/friends`, `/api/friends/requests/received`, `/api/friends/requests/sent`를 함께 호출
 3. 검색 폼 제출 시 `/api/friends/users/search?query=...` 호출
 4. 요청 보내기, 수락, 거절, 취소, 친구 해제 후에는 `loadFriendData()`를 다시 호출해 화면을 새로고침
-5. 친구가 생기거나 해제되더라도 자산 목록은 사용자 전환 시점이나 별도 새로고침 시 다시 반영된다
+5. 친구가 생기거나 해제되면 친구 탭 데이터와 함께 클론/음성 목록도 다시 반영된다
 
 ### 수정 시 주의점
 
@@ -574,6 +584,7 @@ const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
 
 - 스트리밍 오디오와 음성 인식은 각각 독립 훅/유틸로 유지한다.
 - `useCloneStudio`는 세션 오케스트레이션과 사용자 전용 상태까지만 맡기고, 브라우저 API 세부 구현은 더 넣지 않는다.
+- 친구 관계 관리처럼 독립된 화면/도메인은 별도 훅으로 분리하고, 상위 훅에는 재동기화 콜백만 남긴다.
 - PCM 포맷, silence threshold, restart delay 같은 값은 상수로 한곳에 모아둔다.
 - 인증 토큰 처리와 401 공통 처리는 `api.ts`에 모은다.
 - 브라우저별 편차가 큰 기능은 UI 문구와 fallback을 먼저 준비한 뒤 기능을 확장한다.
@@ -641,7 +652,7 @@ const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
 - [App.test.tsx](./src/App.test.tsx)
   - 로그인, 세션 복구, 인증 만료, 회원 탈퇴
 - [api.test.ts](./src/features/clone-studio/api.test.ts)
-  - access token 저장/전송, `401` 처리, 자산 접근 오류 메시지 포맷팅
+  - access token 저장/전송, `401` 처리, `fetchJsonOrThrow`, 자산 접근 오류 메시지 포맷팅
 - [CloneStudioPage.test.tsx](./src/pages/CloneStudioPage.test.tsx)
   - 사용자 전환
   - 친구 탭 액션
