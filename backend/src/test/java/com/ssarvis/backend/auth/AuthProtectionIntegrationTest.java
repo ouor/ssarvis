@@ -39,4 +39,11 @@ class AuthProtectionIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Invalid or expired access token."));
     }
+
+    @Test
+    void friendApiRejectsMissingAuthorizationHeader() throws Exception {
+        mockMvc.perform(get("/api/friends"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Authorization header is required."));
+    }
 }

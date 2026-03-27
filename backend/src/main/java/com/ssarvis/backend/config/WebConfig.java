@@ -42,6 +42,7 @@ public class WebConfig implements WebMvcConfigurer {
             registry.addInterceptor(jwtAuthenticationInterceptor)
                     .addPathPatterns(
                             "/api/auth/me",
+                            "/api/friends/**",
                             "/api/clones",
                             "/api/clones/**",
                             "/api/voices",

@@ -1,5 +1,7 @@
 package com.ssarvis.backend.auth;
 
+import java.util.List;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -67,6 +69,11 @@ public class AuthService {
     public UserAccount getActiveUserAccount(Long userId) {
         return userAccountRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found or inactive."));
+    }
+
+    public List<UserAccount> searchActiveUsers(Long currentUserId, String query, Pageable pageable) {
+        getActiveUserAccount(currentUserId);
+        return userAccountRepository.searchActiveUsers(currentUserId, normalize(query), pageable);
     }
 
     private AuthSession toSession(UserAccount userAccount) {
