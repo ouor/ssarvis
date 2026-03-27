@@ -21,11 +21,11 @@ function StudioHero({ cloneCount, voiceCount, friendCount, activeTab, currentUse
       <div className="studio-highlight">
         <div>
           <strong>{cloneCount}</strong>
-          <span>내 클론</span>
+          <span>사용 가능 클론</span>
         </div>
         <div>
           <strong>{voiceCount}</strong>
-          <span>내 목소리</span>
+          <span>사용 가능 목소리</span>
         </div>
         <div>
           <strong>{friendCount}</strong>

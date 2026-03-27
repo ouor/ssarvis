@@ -52,6 +52,7 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
       {studio.activeTab === 'clones' ? (
         <CloneGridSection
           currentUser={currentUser}
+          friendClones={studio.friendClones}
           loadError={studio.cloneLoadError}
           mineClones={studio.mineClones}
           onCloneSelect={studio.openCloneActions}
@@ -129,6 +130,7 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
         <VoicePickerModal
           clone={studio.selectedClone}
           currentUserDisplayName={currentUser.displayName}
+          friendVoices={studio.friendVoices}
           mineVoices={studio.mineVoices}
           onBack={studio.goBackToCloneActions}
           onClose={studio.closeModal}

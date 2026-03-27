@@ -80,6 +80,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([])
       }
 
+      if (url.includes('/api/clones?scope=friend') && authHeader === 'Bearer token-user-1') {
+        return jsonResponse([])
+      }
+
       if (url.includes('/api/voices?scope=mine') && authHeader === 'Bearer token-user-1') {
         return new Response(JSON.stringify([]), {
           status: 200,
@@ -88,6 +92,13 @@ describe('CloneStudioPage user-scoped data flow', () => {
       }
 
       if (url.includes('/api/voices?scope=public') && authHeader === 'Bearer token-user-1') {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/api/voices?scope=friend') && authHeader === 'Bearer token-user-1') {
         return new Response(JSON.stringify([]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -122,6 +133,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([])
       }
 
+      if (url.includes('/api/clones?scope=friend') && authHeader === 'Bearer token-user-2') {
+        return jsonResponse([])
+      }
+
       if (url.includes('/api/voices?scope=mine') && authHeader === 'Bearer token-user-2') {
         return new Response(JSON.stringify([]), {
           status: 200,
@@ -130,6 +145,13 @@ describe('CloneStudioPage user-scoped data flow', () => {
       }
 
       if (url.includes('/api/voices?scope=public') && authHeader === 'Bearer token-user-2') {
+        return new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      if (url.includes('/api/voices?scope=friend') && authHeader === 'Bearer token-user-2') {
         return new Response(JSON.stringify([]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -195,7 +217,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
       }
 
-      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=public') || url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=public')) {
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public') || url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
         return jsonResponse([])
       }
 
@@ -343,7 +365,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
         })
       }
 
-      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=public') || url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=public')) {
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public') || url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
         return new Response(JSON.stringify([]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -404,11 +426,19 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([])
       }
 
+      if (url.includes('/api/clones?scope=friend')) {
+        return jsonResponse([])
+      }
+
       if (url.includes('/api/voices?scope=mine')) {
         return jsonResponse([])
       }
 
       if (url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=friend')) {
         return jsonResponse([])
       }
 
@@ -498,6 +528,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return Promise.resolve(jsonResponse([]))
       }
 
+      if (url.includes('/api/clones?scope=friend')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+
       if (url.includes('/api/voices?scope=mine')) {
         return Promise.resolve(jsonResponse([
           {
@@ -524,6 +558,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
       }
 
       if (url.includes('/api/voices?scope=public')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+
+      if (url.includes('/api/voices?scope=friend')) {
         return Promise.resolve(jsonResponse([]))
       }
 
@@ -627,11 +665,19 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([])
       }
 
+      if (url.includes('/api/clones?scope=friend')) {
+        return jsonResponse([])
+      }
+
       if (url.includes('/api/voices?scope=mine')) {
         return jsonResponse([])
       }
 
       if (url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=friend')) {
         return jsonResponse([])
       }
 
@@ -774,6 +820,19 @@ describe('CloneStudioPage user-scoped data flow', () => {
         ])
       }
 
+      if (url.includes('/api/clones?scope=friend')) {
+        return jsonResponse([
+          {
+            cloneId: 303,
+            createdAt: '2026-03-26T00:00:00.000Z',
+            alias: '친구 클론',
+            shortDescription: '친구가 공유한 비공개 클론',
+            isPublic: false,
+            ownerDisplayName: '친구 사용자',
+          },
+        ])
+      }
+
       if (url.includes('/api/voices?scope=mine')) {
         return jsonResponse([
           {
@@ -804,6 +863,21 @@ describe('CloneStudioPage user-scoped data flow', () => {
         ])
       }
 
+      if (url.includes('/api/voices?scope=friend')) {
+        return jsonResponse([
+          {
+            registeredVoiceId: 3,
+            voiceId: 'voice-friend',
+            displayName: '친구 목소리',
+            preferredName: 'voicefriend',
+            originalFilename: 'friend.wav',
+            audioMimeType: 'audio/wav',
+            isPublic: false,
+            ownerDisplayName: '친구 사용자',
+          },
+        ])
+      }
+
       if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
         return jsonResponse([])
       }
@@ -826,8 +900,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
     )
 
     expect((await screen.findAllByText('내 클론', { selector: 'h2' })).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('친구 클론', { selector: 'h2' }).length).toBeGreaterThan(0)
     expect(screen.getAllByText('공개 클론', { selector: 'h2' }).length).toBeGreaterThan(0)
     expect(screen.getByText('작성자 다른 사용자')).toBeInTheDocument()
+    expect(screen.getByText('작성자 친구 사용자')).toBeInTheDocument()
 
     const mineCloneButton = screen.getByText('내가 만든 클론').closest('button')
     if (!mineCloneButton) {
@@ -855,6 +931,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([])
       }
 
+      if (url.includes('/api/clones?scope=friend')) {
+        return jsonResponse([])
+      }
+
       if (url.includes('/api/clones?scope=public')) {
         return jsonResponse([
           {
@@ -869,6 +949,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
       }
 
       if (url.includes('/api/voices?scope=mine')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=friend')) {
         return jsonResponse([])
       }
 
@@ -923,7 +1007,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(screen.queryByRole('button', { name: '공개로 전환' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /나와 대화하기/ }))
-    expect(screen.getByText('내 음성은 여기서 바로 공개 전환할 수 있고, 공개 음성은 작성자 표기를 확인한 뒤 현재 계정에서도 바로 사용할 수 있습니다.')).toBeInTheDocument()
+    expect(screen.getByText('내 음성은 여기서 바로 공개 전환할 수 있고, 친구 음성과 공개 음성은 작성자 표기를 확인한 뒤 현재 계정에서도 바로 사용할 수 있습니다.')).toBeInTheDocument()
     expect(screen.getAllByText('작성자 공개 작성자').length).toBeGreaterThan(0)
 
     const publicVoiceCard = screen.getByText('공개 음성 · public.wav').closest('label')
@@ -953,6 +1037,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([])
       }
 
+      if (url.includes('/api/clones?scope=friend')) {
+        return jsonResponse([])
+      }
+
       if (url.includes('/api/clones?scope=public')) {
         return jsonResponse([
           {
@@ -966,7 +1054,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
         ])
       }
 
-      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=public')) {
+      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
         return jsonResponse([])
       }
 
@@ -1006,6 +1094,248 @@ describe('CloneStudioPage user-scoped data flow', () => {
 
     expect(await screen.findByText(/선택한 클론 또는 목소리로 대화를 시작할 수 없습니다/)).toBeInTheDocument()
     expect(screen.getByText(/다른 사용자가 자산을 비공개로 전환했거나 현재 계정으로 접근할 수 없습니다/)).toBeInTheDocument()
+  })
+
+  it('starts chat with a friend clone and friend voice without showing visibility controls', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('ssarvis.access-token', 'friend-chat-token')
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/clones?scope=friend')) {
+        return jsonResponse([
+          {
+            cloneId: 505,
+            createdAt: '2026-03-26T00:00:00.000Z',
+            alias: '친구 화자',
+            shortDescription: '친구가 공유한 비공개 클론',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+        ])
+      }
+
+      if (url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=friend')) {
+        return jsonResponse([
+          {
+            registeredVoiceId: 15,
+            voiceId: 'voice-friend-private',
+            displayName: '친구 전용 음성',
+            preferredName: 'friendprivate',
+            originalFilename: 'friend-private.wav',
+            audioMimeType: 'audio/wav',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+        ])
+      }
+
+      if (url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/messages/stream')) {
+        expect(init?.method).toBe('POST')
+        expect(String(init?.body)).toContain('"promptGenerationLogId":505')
+        expect(String(init?.body)).toContain('"registeredVoiceId":15')
+        return ndjsonResponse([
+          { type: 'message', conversationId: 123, assistantMessage: '친구 자산으로도 대화를 시작할 수 있어요.' },
+          { type: 'done', conversationId: 123, ttsVoiceId: 'voice-friend-private', hasAudio: false },
+        ])
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 11, username: 'user11', displayName: '사용자11' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    const friendCloneCard = (await screen.findByText('친구가 공유한 비공개 클론')).closest('button')
+    if (!friendCloneCard) {
+      throw new Error('Friend clone card button not found.')
+    }
+
+    await user.click(friendCloneCard)
+    expect(screen.getByText('작성자 친구 작성자')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '공개로 전환' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /나와 대화하기/ }))
+    expect(screen.getByText('친구 전용 음성')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '비공개로 전환' })).not.toBeInTheDocument()
+
+    const friendVoiceCard = screen.getByText('친구 전용 음성 · friend-private.wav').closest('label')
+    if (!friendVoiceCard) {
+      throw new Error('Friend voice card not found.')
+    }
+
+    await user.click(friendVoiceCard)
+    await user.click(screen.getByRole('button', { name: /대화 시작/ }))
+    await user.type(await screen.findByLabelText('메시지'), '친구 자산으로 이야기해보자')
+    await user.click(screen.getByRole('button', { name: /보내기/ }))
+
+    expect(await screen.findByText('친구 자산으로도 대화를 시작할 수 있어요.')).toBeInTheDocument()
+  })
+
+  it('starts a debate with friend clones and friend voices', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('ssarvis.access-token', 'friend-debate-token')
+
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return Promise.resolve(jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }]))
+      }
+
+      if (url.includes('/api/clones?scope=mine')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+
+      if (url.includes('/api/clones?scope=friend')) {
+        return Promise.resolve(jsonResponse([
+          {
+            cloneId: 601,
+            createdAt: '2026-03-26T00:00:00.000Z',
+            alias: '친구 A',
+            shortDescription: '친구의 첫 번째 비공개 클론',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+          {
+            cloneId: 602,
+            createdAt: '2026-03-26T00:00:00.000Z',
+            alias: '친구 B',
+            shortDescription: '친구의 두 번째 비공개 클론',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+        ]))
+      }
+
+      if (url.includes('/api/clones?scope=public')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+
+      if (url.includes('/api/voices?scope=mine')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+
+      if (url.includes('/api/voices?scope=friend')) {
+        return Promise.resolve(jsonResponse([
+          {
+            registeredVoiceId: 31,
+            voiceId: 'friend-voice-a',
+            displayName: '친구 음성 A',
+            preferredName: 'friendvoicea',
+            originalFilename: 'friend-a.wav',
+            audioMimeType: 'audio/wav',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+          {
+            registeredVoiceId: 32,
+            voiceId: 'friend-voice-b',
+            displayName: '친구 음성 B',
+            preferredName: 'friendvoiceb',
+            originalFilename: 'friend-b.wav',
+            audioMimeType: 'audio/wav',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+        ]))
+      }
+
+      if (url.includes('/api/voices?scope=public')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+
+      if (url.endsWith('/api/debates/stream')) {
+        expect(init?.method).toBe('POST')
+        expect(String(init?.body)).toContain('"cloneAId":601')
+        expect(String(init?.body)).toContain('"cloneBId":602')
+        expect(String(init?.body)).toContain('"cloneAVoiceId":31')
+        expect(String(init?.body)).toContain('"cloneBVoiceId":32')
+        return Promise.resolve(ndjsonResponse([
+          {
+            type: 'turn',
+            debateSessionId: 71,
+            topic: '친구 자산으로도 논쟁을 만들 수 있는가?',
+            turn: { turnIndex: 1, speaker: 'CLONE_A', cloneId: 601, content: '친구 자산 조합으로도 논쟁을 시작할 수 있습니다.' },
+          },
+          { type: 'done', debateSessionId: 71, turnIndex: 1, ttsVoiceId: 'friend-voice-a', hasAudio: false },
+        ]))
+      }
+
+      if (url.endsWith('/api/debates/71/next/stream')) {
+        const signal = init?.signal
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () => {
+              reject(new DOMException('Aborted', 'AbortError'))
+            },
+            { once: true },
+          )
+        })
+      }
+
+      return Promise.reject(new Error(`Unhandled request: ${url}`))
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 12, username: 'user12', displayName: '사용자12' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    const firstFriendCloneCard = (await screen.findByText('친구의 첫 번째 비공개 클론')).closest('button')
+    if (!firstFriendCloneCard) {
+      throw new Error('Friend debate clone card button not found.')
+    }
+
+    await user.click(firstFriendCloneCard)
+    await user.click(screen.getByRole('button', { name: /논쟁시키기/ }))
+    await user.selectOptions(screen.getByLabelText('상대 클론'), '602')
+    await user.selectOptions(screen.getByLabelText('친구 A의 목소리'), '31')
+    await user.selectOptions(screen.getByLabelText('친구 B의 목소리'), '32')
+    await user.type(screen.getByLabelText('논쟁 주제'), '친구 자산으로도 논쟁을 만들 수 있는가?')
+    await user.click(screen.getByRole('button', { name: /논쟁 시작/ }))
+
+    expect(await screen.findByText('친구 자산 조합으로도 논쟁을 시작할 수 있습니다.')).toBeInTheDocument()
   })
 })
 

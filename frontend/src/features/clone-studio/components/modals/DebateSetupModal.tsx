@@ -55,6 +55,7 @@ function DebateSetupModal({
     >
       <div className="modal-stack">
         <p className="modal-note">공개 클론과 공개 음성도 선택할 수 있습니다. 작성자 이름과 공개 여부를 확인한 뒤 조합을 정해 주세요.</p>
+        <p className="modal-note">친구 클론과 친구 음성은 비공개 상태여도 여기에서 바로 사용할 수 있지만, 공개 전환 같은 관리 작업은 할 수 없습니다.</p>
         {cloneLoadError ? <p className="inline-error">{cloneLoadError}</p> : null}
         <label className="field-stack">
           <span>상대 클론</span>

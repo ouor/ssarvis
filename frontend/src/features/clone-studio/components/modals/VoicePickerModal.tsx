@@ -6,6 +6,7 @@ import { formatCloneName, formatVoiceLabel, formatVisibilityLabel } from '../../
 type VoicePickerModalProps = {
   clone: CloneOption
   mineVoices: VoiceOption[]
+  friendVoices: VoiceOption[]
   publicVoices: VoiceOption[]
   currentUserDisplayName: string
   selectedVoiceId: string
@@ -27,6 +28,7 @@ type VoicePickerModalProps = {
 function VoicePickerModal({
   clone,
   mineVoices,
+  friendVoices,
   publicVoices,
   currentUserDisplayName,
   selectedVoiceId,
@@ -53,7 +55,7 @@ function VoicePickerModal({
     >
       <div className="modal-stack">
         <p className="modal-note">
-          내 음성은 여기서 바로 공개 전환할 수 있고, 공개 음성은 작성자 표기를 확인한 뒤 현재 계정에서도 바로 사용할 수 있습니다.
+          내 음성은 여기서 바로 공개 전환할 수 있고, 친구 음성과 공개 음성은 작성자 표기를 확인한 뒤 현재 계정에서도 바로 사용할 수 있습니다.
         </p>
         <div className="voice-list">
           <button
@@ -98,6 +100,31 @@ function VoicePickerModal({
               </label>
             ))}
             {mineVoices.length === 0 ? <p className="muted-copy">내 계정에 등록된 목소리가 아직 없습니다.</p> : null}
+          </div>
+
+          <div className="voice-group">
+            <strong className="voice-group-title">친구 음성</strong>
+            {friendVoices.map((voice) => (
+              <label
+                key={voice.registeredVoiceId}
+                className={selectedVoiceId === String(voice.registeredVoiceId) ? 'voice-card voice-card-active' : 'voice-card'}
+              >
+                <input
+                  checked={selectedVoiceId === String(voice.registeredVoiceId)}
+                  name="voice-selection"
+                  onChange={() => onVoiceSelect(String(voice.registeredVoiceId))}
+                  type="radio"
+                  value={voice.registeredVoiceId}
+                />
+                <strong>{formatVoiceLabel(voice)}</strong>
+                <span>{voice.voiceId}</span>
+                <div className="asset-meta-row">
+                  <span className="asset-badge">친구 전용</span>
+                  <span className="asset-owner">작성자 {voice.ownerDisplayName ?? currentUserDisplayName}</span>
+                </div>
+              </label>
+            ))}
+            {friendVoices.length === 0 ? <p className="muted-copy">사용 가능한 친구 음성이 아직 없습니다.</p> : null}
           </div>
 
           <div className="voice-group">

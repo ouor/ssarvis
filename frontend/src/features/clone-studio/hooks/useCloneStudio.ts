@@ -33,9 +33,11 @@ export function useCloneStudio(currentUser: CurrentUser) {
   const [creatingClone, setCreatingClone] = useState(false)
   const [createCloneError, setCreateCloneError] = useState('')
   const [mineClones, setMineClones] = useState<CloneOption[]>([])
+  const [friendClones, setFriendClones] = useState<CloneOption[]>([])
   const [publicClones, setPublicClones] = useState<CloneOption[]>([])
   const [cloneLoadError, setCloneLoadError] = useState('')
   const [mineVoices, setMineVoices] = useState<VoiceOption[]>([])
+  const [friendVoices, setFriendVoices] = useState<VoiceOption[]>([])
   const [publicVoices, setPublicVoices] = useState<VoiceOption[]>([])
   const [voiceLoadError, setVoiceLoadError] = useState('')
   const [cloneVisibilityUpdatingId, setCloneVisibilityUpdatingId] = useState<number | null>(null)
@@ -100,13 +102,25 @@ export function useCloneStudio(currentUser: CurrentUser) {
 
   const canCreateClone = questions.length > 0 && answeredCount === questions.length
   const clones = useMemo(() => {
-    const publicCloneIds = new Set(mineClones.map((clone) => clone.cloneId))
-    return [...mineClones, ...publicClones.filter((clone) => !publicCloneIds.has(clone.cloneId))]
-  }, [mineClones, publicClones])
+    const seenIds = new Set<number>()
+    return [...mineClones, ...friendClones, ...publicClones].filter((clone) => {
+      if (seenIds.has(clone.cloneId)) {
+        return false
+      }
+      seenIds.add(clone.cloneId)
+      return true
+    })
+  }, [mineClones, friendClones, publicClones])
   const voices = useMemo(() => {
-    const mineVoiceIds = new Set(mineVoices.map((voice) => voice.registeredVoiceId))
-    return [...mineVoices, ...publicVoices.filter((voice) => !mineVoiceIds.has(voice.registeredVoiceId))]
-  }, [mineVoices, publicVoices])
+    const seenIds = new Set<number>()
+    return [...mineVoices, ...friendVoices, ...publicVoices].filter((voice) => {
+      if (seenIds.has(voice.registeredVoiceId)) {
+        return false
+      }
+      seenIds.add(voice.registeredVoiceId)
+      return true
+    })
+  }, [mineVoices, friendVoices, publicVoices])
   const debateOpponent = useMemo(
     () => clones.find((clone) => clone.cloneId === Number(debateOpponentId)) ?? null,
     [clones, debateOpponentId]
@@ -173,9 +187,11 @@ export function useCloneStudio(currentUser: CurrentUser) {
       setCreateCloneError('')
       setCloneLoadError('')
       setMineClones([])
+      setFriendClones([])
       setPublicClones([])
       setVoiceLoadError('')
       setMineVoices([])
+      setFriendVoices([])
       setPublicVoices([])
       setChatHistoryLoadError('')
       setChatHistory([])
@@ -274,21 +290,30 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadClones(signal?: AbortSignal) {
     try {
       setCloneLoadError('')
-      const [mineResponse, publicResponse] = await Promise.all([
+      const [mineResponse, friendResponse, publicResponse] = await Promise.all([
         apiFetch(`${apiBaseUrl}/api/clones?scope=mine`, { signal }),
+        apiFetch(`${apiBaseUrl}/api/clones?scope=friend`, { signal }),
         apiFetch(`${apiBaseUrl}/api/clones?scope=public`, { signal }),
       ])
       if (!mineResponse.ok) {
         throw new Error(await readErrorMessage(mineResponse, `내 클론 목록을 불러오지 못했습니다. (${mineResponse.status})`))
       }
+      if (!friendResponse.ok) {
+        throw new Error(await readErrorMessage(friendResponse, `친구 클론 목록을 불러오지 못했습니다. (${friendResponse.status})`))
+      }
       if (!publicResponse.ok) {
         throw new Error(await readErrorMessage(publicResponse, `공개 클론 목록을 불러오지 못했습니다. (${publicResponse.status})`))
       }
-      const [mineData, publicData]: [CloneOption[], CloneOption[]] = await Promise.all([mineResponse.json(), publicResponse.json()])
+      const [mineData, friendData, publicData]: [CloneOption[], CloneOption[], CloneOption[]] = await Promise.all([
+        mineResponse.json(),
+        friendResponse.json(),
+        publicResponse.json(),
+      ])
       if (signal?.aborted) {
         return
       }
       setMineClones(mineData)
+      setFriendClones(friendData)
       setPublicClones(publicData)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -301,21 +326,30 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadVoices(signal?: AbortSignal) {
     try {
       setVoiceLoadError('')
-      const [mineResponse, publicResponse] = await Promise.all([
+      const [mineResponse, friendResponse, publicResponse] = await Promise.all([
         apiFetch(`${apiBaseUrl}/api/voices?scope=mine`, { signal }),
+        apiFetch(`${apiBaseUrl}/api/voices?scope=friend`, { signal }),
         apiFetch(`${apiBaseUrl}/api/voices?scope=public`, { signal }),
       ])
       if (!mineResponse.ok) {
         throw new Error(await readErrorMessage(mineResponse, `내 목소리 목록을 불러오지 못했습니다. (${mineResponse.status})`))
       }
+      if (!friendResponse.ok) {
+        throw new Error(await readErrorMessage(friendResponse, `친구 목소리 목록을 불러오지 못했습니다. (${friendResponse.status})`))
+      }
       if (!publicResponse.ok) {
         throw new Error(await readErrorMessage(publicResponse, `공개 목소리 목록을 불러오지 못했습니다. (${publicResponse.status})`))
       }
-      const [mineData, publicData]: [VoiceOption[], VoiceOption[]] = await Promise.all([mineResponse.json(), publicResponse.json()])
+      const [mineData, friendData, publicData]: [VoiceOption[], VoiceOption[], VoiceOption[]] = await Promise.all([
+        mineResponse.json(),
+        friendResponse.json(),
+        publicResponse.json(),
+      ])
       if (signal?.aborted) {
         return
       }
       setMineVoices(mineData)
+      setFriendVoices(friendData)
       setPublicVoices(publicData)
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
@@ -1232,10 +1266,12 @@ export function useCloneStudio(currentUser: CurrentUser) {
     createCloneError,
     clones,
     mineClones,
+    friendClones,
     publicClones,
     cloneLoadError,
     voices,
     mineVoices,
+    friendVoices,
     publicVoices,
     voiceLoadError,
     cloneVisibilityUpdatingId,
