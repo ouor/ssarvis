@@ -3,7 +3,7 @@
 이 문서는 현재 프론트엔드 구현을 빠르게 이해하고 유지보수할 수 있도록 핵심 흐름과 주의점을 정리한 가이드다.
 
 - 인증 및 사용자 전용 데이터 로딩
-- 공개 자산(`내 것 / 공개`) 사용 흐름
+- 친구 및 공유 자산(`내 것 / 친구 / 공개`) 사용 흐름
 - 실시간 PCM 재생
 - 음성 입력(Web Speech API)
 - 설문 표시 및 처리
@@ -37,8 +37,9 @@
   - 로그아웃/회원 탈퇴 후 로그인 화면 복귀
 - `useCloneStudio`
   - 현재 로그인 회원 기준으로 클론/음성 목록 재로딩
-  - `mine` / `public` 자산을 분리 로딩하고 선택용 목록으로 다시 조합
+  - `mine` / `friend` / `public` 자산을 분리 로딩하고 선택용 목록으로 다시 조합
   - 현재 로그인 회원 기준으로 채팅/논쟁 기록 목록 재로딩
+  - 친구 목록, 받은 요청, 보낸 요청을 별도 로딩
   - 사용자 전환 시 라이브 세션/모달/임시 입력 상태 정리
 
 ### 현재 동작
@@ -48,8 +49,9 @@
 3. 실패하면 토큰을 제거하고 인증 화면으로 돌아감
 4. 이후 보호 API는 `apiFetch(...)`를 통해 항상 `Authorization: Bearer ...`를 자동 부착
 5. 어떤 보호 API에서든 `401`이 오면 `authExpiredEventName` 이벤트를 발행하고, 앱 루트가 이를 받아 자동 로그아웃
-6. 사용자 정보가 바뀌면 `useCloneStudio(currentUser)`가 기존 세션을 정리하고 해당 사용자 기준의 내 자산과 공개 자산을 다시 불러옴
+6. 사용자 정보가 바뀌면 `useCloneStudio(currentUser)`가 기존 세션을 정리하고 해당 사용자 기준의 내 자산, 친구 자산, 공개 자산을 다시 불러옴
 7. Live 탭 왼쪽 기록 목록에서 이전 채팅/논쟁을 다시 열 수 있음
+8. Friends 탭을 열면 친구 목록, 받은 요청, 보낸 요청을 별도 로딩함
 
 실제 세션 복구 흐름 예시
 
@@ -162,7 +164,7 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 - `<audio>` 재생이 `blob: ... ERR_FILE_NOT_FOUND`를 내면 URL revoke 타이밍 문제일 가능성이 높다.
 - 페이지를 실제로 떠날 때는 `pagehide`에서 스트림 abort, player dispose, 렌더된 `<audio>` pause까지 함께 정리한다.
 
-## 2-1. 공개 자산(`내 것 / 공개`) 사용 흐름
+## 2-1. 친구 및 공유 자산(`내 것 / 친구 / 공개`) 사용 흐름
 
 ### 관련 파일
 
@@ -171,34 +173,73 @@ for (let channel = 0; channel < this.channels; channel += 1) {
 - 클론 액션 모달: [CloneActionsModal.tsx](./src/features/clone-studio/components/modals/CloneActionsModal.tsx)
 - 음성 선택 모달: [VoicePickerModal.tsx](./src/features/clone-studio/components/modals/VoicePickerModal.tsx)
 - 논쟁 설정 모달: [DebateSetupModal.tsx](./src/features/clone-studio/components/modals/DebateSetupModal.tsx)
+- 친구 탭 UI: [FriendPanel.tsx](./src/features/clone-studio/components/FriendPanel.tsx)
+- 탭 전환 UI: [StudioTabs.tsx](./src/features/clone-studio/components/StudioTabs.tsx)
 
 ### 현재 구조
 
-클론과 음성은 각각 두 목록으로 관리한다.
+클론과 음성은 각각 세 목록으로 관리한다.
 
-- `mineClones` / `publicClones`
-- `mineVoices` / `publicVoices`
+- `mineClones` / `friendClones` / `publicClones`
+- `mineVoices` / `friendVoices` / `publicVoices`
 
 선택용으로는 훅 내부에서 중복 제거 후 `clones`, `voices`를 다시 만든다.  
-덕분에 화면은 `내 것 / 공개`로 나눠 보여주고, 채팅/논쟁 설정에서는 “현재 사용 가능한 전체 자산”을 일관되게 참조할 수 있다.
+덕분에 화면은 `내 것 / 친구 / 공개`로 나눠 보여주고, 채팅/논쟁 설정에서는 “현재 사용 가능한 전체 자산”을 일관되게 참조할 수 있다.
 
 ### 현재 동작
 
-1. `loadClones()`는 `/api/clones?scope=mine`, `/api/clones?scope=public`를 함께 호출
-2. `loadVoices()`는 `/api/voices?scope=mine`, `/api/voices?scope=public`를 함께 호출
-3. 클론 화면은 `내 클론`, `공개 클론` 섹션으로 분리 렌더링
-4. 음성 선택 모달은 `내 음성`, `공개 음성` 그룹으로 분리 렌더링
-5. 공개 자산 카드/옵션에는 `공개` 배지와 `작성자 displayName` 표시
-6. 공개/비공개 전환 버튼은 소유자 자산에만 노출
-7. 공개 자산을 사용해 시작한 채팅/논쟁도 결과 기록 자체는 현재 로그인 사용자 소유로 저장
+1. `loadClones()`는 `/api/clones?scope=mine`, `/api/clones?scope=friend`, `/api/clones?scope=public`를 함께 호출
+2. `loadVoices()`는 `/api/voices?scope=mine`, `/api/voices?scope=friend`, `/api/voices?scope=public`를 함께 호출
+3. 클론 화면은 `내 클론`, `친구 클론`, `공개 클론` 섹션으로 분리 렌더링
+4. 음성 선택 모달은 `내 음성`, `친구 음성`, `공개 음성` 그룹으로 분리 렌더링
+5. 친구/공개 자산 카드와 옵션에는 작성자 `displayName`을 표시해 같은 이름 자산을 구분한다
+6. `공개/비공개 전환` 버튼은 내 자산에만 노출되고, 친구 자산에는 절대 보이면 안 된다
+7. 친구 자산은 비공개라도 사용 가능하지만, 관리 권한은 여전히 소유자에게만 있다
+8. 친구나 공개 자산을 사용해 시작한 채팅/논쟁도 결과 기록 자체는 현재 로그인 사용자 소유로 저장
 
 ### 수정 시 주의점
 
-- 공개 자산은 “사용 가능”이지 “관리 가능”이 아니다. 소유자가 아닌 자산에는 visibility 버튼이 보이면 안 된다.
+- 친구/공개 자산은 “사용 가능”이지 “관리 가능”이 아니다. 소유자가 아닌 자산에는 visibility 버튼이 보이면 안 된다.
 - visibility 토글 후에는 목록뿐 아니라 현재 열려 있는 모달의 `selectedClone`도 같이 갱신해야 버튼 문구와 배지가 즉시 맞는다.
-- 선택용 `clones`, `voices`는 `mine + public` 합본이라, UI 문구와 소유권 판단은 반드시 원본 분리 목록(`mineClones`, `mineVoices`)을 기준으로 해야 한다.
-- 논쟁 설정 select 옵션은 공개 여부와 작성자를 함께 보여줘야 같은 이름의 자산을 구분하기 쉽다.
-- 공개 자산 사용 중 `403/404`가 오면 “자산이 비공개로 바뀌었거나 접근 권한이 없다”는 식의 친화적 메시지로 바꾸는 편이 UX가 좋다.
+- 선택용 `clones`, `voices`는 `mine + friend + public` 합본이라, UI 문구와 소유권 판단은 반드시 원본 분리 목록(`mineClones`, `friendClones`, `mineVoices`, `friendVoices`)을 기준으로 해야 한다.
+- 논쟁 설정 select 옵션은 공개 여부, 작성자, 친구 자산 여부를 함께 보여줘야 같은 이름의 자산을 구분하기 쉽다.
+- 친구 또는 공개 자산 사용 중 `403/404`가 오면 “자산이 비공개로 바뀌었거나 친구 관계/접근 권한이 사라졌을 수 있다”는 식의 친화적 메시지로 바꾸는 편이 UX가 좋다.
+
+## 2-2. 친구 탭과 관계 관리
+
+### 관련 파일
+
+- 상태 로딩 및 액션: [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
+- 친구 패널 UI: [FriendPanel.tsx](./src/features/clone-studio/components/FriendPanel.tsx)
+- 탭 UI: [StudioTabs.tsx](./src/features/clone-studio/components/StudioTabs.tsx)
+
+### 현재 구조
+
+친구 기능은 별도 탭으로 분리되어 있고, 실제 데이터는 `useCloneStudio`가 들고 있다.
+
+- `friends`
+- `receivedFriendRequests`
+- `sentFriendRequests`
+- `friendSearchQuery`
+- `friendSearchResults`
+- `friendActionKey`
+
+친구 탭 진입 시에만 친구 관련 API를 로딩하므로, 클론/라이브 탭에서는 불필요한 네트워크 요청을 줄일 수 있다.
+
+### 현재 동작
+
+1. 사용자가 Friends 탭으로 이동
+2. `useEffect`가 `/api/friends`, `/api/friends/requests/received`, `/api/friends/requests/sent`를 함께 호출
+3. 검색 폼 제출 시 `/api/friends/users/search?query=...` 호출
+4. 요청 보내기, 수락, 거절, 취소, 친구 해제 후에는 `loadFriendData()`를 다시 호출해 화면을 새로고침
+5. 친구가 생기거나 해제되더라도 자산 목록은 사용자 전환 시점이나 별도 새로고침 시 다시 반영된다
+
+### 수정 시 주의점
+
+- 친구 액션 버튼은 동시에 여러 번 눌리지 않도록 `friendActionKey` 기반 비활성화를 유지한다.
+- 친구 검색 결과에서는 본인, 이미 친구인 사용자, 이미 pending 상태인 관계를 어떻게 표시할지 UI 일관성을 지킨다.
+- 친구 해제는 기존 기록을 지우는 기능이 아니므로, Friends 탭 문구와 Live 탭 동작을 혼동하지 않게 한다.
+- 친구 관계가 바뀐 뒤 자산 사용이 실패하면, 친구 자산 접근 권한이 사라졌을 가능성까지 고려한 메시지를 유지한다.
 
 ## 3. 음성 입력(Web Speech API)
 
@@ -478,6 +519,7 @@ const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
 현재 구현은 `useCloneStudio(currentUser)`가 `currentUser.userId`가 바뀔 때 아래를 모두 초기화한다.
 
 - 클론/음성 목록
+- 친구 목록/친구 요청/검색 결과
 - 선택 중인 모달 상태
 - 채팅 입력 및 메시지
 - 논쟁 상태
@@ -543,16 +585,20 @@ const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
 - 다른 사용자 데이터가 잠깐 보인다
   - `useCloneStudio(currentUser)`의 `currentUser.userId` 의존 효과가 유지되는지 확인
   - 사용자 전환 시 `clearActiveSession()`과 목록 재로딩이 모두 호출되는지 확인
-- 공개 클론/공개 음성이 선택 목록에 안 보인다
-  - `/api/clones?scope=public`, `/api/voices?scope=public` 응답과 `mine/public` 병합 로직 확인
+- 친구/공개 자산이 선택 목록에 안 보인다
+  - `/api/clones?scope=friend|public`, `/api/voices?scope=friend|public` 응답과 `mine/friend/public` 병합 로직 확인
   - DTO에 `isPublic`, `ownerDisplayName`이 내려오는지 확인
+- 친구 탭이 비어 있거나 요청 액션 후 갱신되지 않는다
+  - Friends 탭 진입 시 `loadFriendData()`가 호출되는지 확인
+  - 요청/수락/거절/취소/해제 후 재조회가 일어나는지 확인
 
 - PCM이 깨져 들린다
   - 서버 `sampleRate/channels`와 `PcmStreamPlayer.configure(...)` 전달값 확인
 - 논쟁 종료 후에도 소리가 계속 난다
   - `handleDebateExit()` abort, `pagehide` 정리, `PcmStreamPlayer.dispose()` 호출 여부 확인
-- 공개 자산으로 시작하려는데 바로 실패한다
+- 친구/공개 자산으로 시작하려는데 바로 실패한다
   - 자산이 방금 비공개로 전환됐는지 확인
+  - 친구 관계가 방금 해제됐는지 확인
   - 프론트에서 `formatAssetAccessError(...)`를 거쳐 친화적 메시지로 바꿔 보여주는지 확인
 - 음성 인식이 바로 꺼진다
   - `useSpeechInput`의 `onend` 재시작과 silence threshold 확인
