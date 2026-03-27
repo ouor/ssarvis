@@ -18,11 +18,11 @@ import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import com.ssarvis.backend.voice.RegisteredVoice;
 import com.ssarvis.backend.voice.RegisteredVoiceRepository;
 import com.ssarvis.backend.voice.VoiceService;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
-import java.lang.reflect.Method;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -52,11 +52,13 @@ class DefaultAccountBootstrapServiceTest {
     private PasswordEncoder passwordEncoder;
     private AppProperties appProperties;
     private DefaultAccountBootstrapService bootstrapService;
+    private BootstrapVoiceSampleLoader bootstrapVoiceSampleLoader;
 
     @BeforeEach
     void setUp() {
         passwordEncoder = new BCryptPasswordEncoder();
         appProperties = new AppProperties();
+        bootstrapVoiceSampleLoader = new BootstrapVoiceSampleLoader();
         bootstrapService = new DefaultAccountBootstrapService(
                 appProperties,
                 userAccountRepository,
@@ -64,7 +66,9 @@ class DefaultAccountBootstrapServiceTest {
                 registeredVoiceRepository,
                 passwordEncoder,
                 voiceService,
-                new ObjectMapper()
+                new ObjectMapper(),
+                new DefaultAccountSeedCatalog(),
+                bootstrapVoiceSampleLoader
         );
     }
 
@@ -165,10 +169,10 @@ class DefaultAccountBootstrapServiceTest {
 
     @Test
     void resolveSamplePathSupportsBackendRelativePath() throws Exception {
-        Method resolveMethod = DefaultAccountBootstrapService.class.getDeclaredMethod("resolveSamplePath", List.class, int.class);
+        Method resolveMethod = BootstrapVoiceSampleLoader.class.getDeclaredMethod("resolveSamplePath", List.class, int.class);
         resolveMethod.setAccessible(true);
 
-        Path resolved = (Path) resolveMethod.invoke(bootstrapService, List.of("dev-assets/voices/voice1.wav"), 0);
+        Path resolved = (Path) resolveMethod.invoke(bootstrapVoiceSampleLoader, List.of("dev-assets/voices/voice1.wav"), 0);
 
         assertThat(resolved.toString().replace('\\', '/')).endsWith("backend/dev-assets/voices/voice1.wav");
     }

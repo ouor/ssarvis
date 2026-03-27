@@ -1,6 +1,6 @@
 package com.ssarvis.backend.prompt;
 
-import com.ssarvis.backend.friend.FriendRequestRepository;
+import com.ssarvis.backend.friend.FriendRelationshipService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -9,14 +9,14 @@ import org.springframework.web.server.ResponseStatusException;
 public class CloneAccessPolicy {
 
     private final PromptGenerationLogRepository promptGenerationLogRepository;
-    private final FriendRequestRepository friendRequestRepository;
+    private final FriendRelationshipService friendRelationshipService;
 
     public CloneAccessPolicy(
             PromptGenerationLogRepository promptGenerationLogRepository,
-            FriendRequestRepository friendRequestRepository
+            FriendRelationshipService friendRelationshipService
     ) {
         this.promptGenerationLogRepository = promptGenerationLogRepository;
-        this.friendRequestRepository = friendRequestRepository;
+        this.friendRelationshipService = friendRelationshipService;
     }
 
     public PromptGenerationLog getManageableClone(Long userId, Long cloneId) {
@@ -47,6 +47,6 @@ public class CloneAccessPolicy {
         if (clone.isPublic()) {
             return true;
         }
-        return friendRequestRepository.existsAcceptedBetweenUsers(userId, clone.getUser().getId());
+        return friendRelationshipService.areFriends(userId, clone.getUser().getId());
     }
 }

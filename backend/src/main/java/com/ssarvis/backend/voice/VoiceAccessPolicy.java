@@ -1,6 +1,6 @@
 package com.ssarvis.backend.voice;
 
-import com.ssarvis.backend.friend.FriendRequestRepository;
+import com.ssarvis.backend.friend.FriendRelationshipService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -9,14 +9,14 @@ import org.springframework.web.server.ResponseStatusException;
 public class VoiceAccessPolicy {
 
     private final RegisteredVoiceRepository registeredVoiceRepository;
-    private final FriendRequestRepository friendRequestRepository;
+    private final FriendRelationshipService friendRelationshipService;
 
     public VoiceAccessPolicy(
             RegisteredVoiceRepository registeredVoiceRepository,
-            FriendRequestRepository friendRequestRepository
+            FriendRelationshipService friendRelationshipService
     ) {
         this.registeredVoiceRepository = registeredVoiceRepository;
-        this.friendRequestRepository = friendRequestRepository;
+        this.friendRelationshipService = friendRelationshipService;
     }
 
     public RegisteredVoice getManageableVoice(Long userId, Long registeredVoiceId) {
@@ -47,6 +47,6 @@ public class VoiceAccessPolicy {
         if (voice.isPublic()) {
             return true;
         }
-        return friendRequestRepository.existsAcceptedBetweenUsers(userId, voice.getUser().getId());
+        return friendRelationshipService.areFriends(userId, voice.getUser().getId());
     }
 }

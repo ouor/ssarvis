@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 import com.ssarvis.backend.auth.UserAccount;
-import com.ssarvis.backend.friend.FriendRequestRepository;
+import com.ssarvis.backend.friend.FriendRelationshipService;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,13 +22,13 @@ class VoiceAccessPolicyTest {
     private RegisteredVoiceRepository registeredVoiceRepository;
 
     @Mock
-    private FriendRequestRepository friendRequestRepository;
+    private FriendRelationshipService friendRelationshipService;
 
     private VoiceAccessPolicy voiceAccessPolicy;
 
     @BeforeEach
     void setUp() {
-        voiceAccessPolicy = new VoiceAccessPolicy(registeredVoiceRepository, friendRequestRepository);
+        voiceAccessPolicy = new VoiceAccessPolicy(registeredVoiceRepository, friendRelationshipService);
     }
 
     @Test
@@ -47,7 +47,7 @@ class VoiceAccessPolicyTest {
         UserAccount owner = assignId(new UserAccount("miso", "hashed", "미소"), 2L);
         RegisteredVoice voice = new RegisteredVoice(owner, "voice-b", "tts-model", "voiceb", "미소 음성", "b.wav", "audio/wav");
         given(registeredVoiceRepository.findById(21L)).willReturn(Optional.of(voice));
-        given(friendRequestRepository.existsAcceptedBetweenUsers(1L, 2L)).willReturn(true);
+        given(friendRelationshipService.areFriends(1L, 2L)).willReturn(true);
 
         RegisteredVoice readable = voiceAccessPolicy.getReadableVoice(1L, 21L);
 
@@ -59,7 +59,7 @@ class VoiceAccessPolicyTest {
         UserAccount owner = assignId(new UserAccount("miso", "hashed", "미소"), 2L);
         RegisteredVoice voice = new RegisteredVoice(owner, "voice-c", "tts-model", "voicec", "미소 음성", "c.wav", "audio/wav");
         given(registeredVoiceRepository.findById(22L)).willReturn(Optional.of(voice));
-        given(friendRequestRepository.existsAcceptedBetweenUsers(1L, 2L)).willReturn(false);
+        given(friendRelationshipService.areFriends(1L, 2L)).willReturn(false);
 
         assertThatThrownBy(() -> voiceAccessPolicy.getReadableVoice(1L, 22L))
                 .isInstanceOf(ResponseStatusException.class)

@@ -6,7 +6,7 @@ import com.ssarvis.backend.access.AssetListScope;
 import com.ssarvis.backend.access.VisibilityUpdateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
-import com.ssarvis.backend.friend.FriendRequestRepository;
+import com.ssarvis.backend.friend.FriendRelationshipService;
 import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import java.io.IOException;
@@ -27,7 +27,7 @@ public class PromptService {
     private final OpenAiClient openAiClient;
     private final AuthService authService;
     private final CloneAccessPolicy cloneAccessPolicy;
-    private final FriendRequestRepository friendRequestRepository;
+    private final FriendRelationshipService friendRelationshipService;
 
     public PromptService(
             ObjectMapper objectMapper,
@@ -37,7 +37,7 @@ public class PromptService {
             OpenAiClient openAiClient,
             AuthService authService,
             CloneAccessPolicy cloneAccessPolicy,
-            FriendRequestRepository friendRequestRepository
+            FriendRelationshipService friendRelationshipService
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
@@ -46,7 +46,7 @@ public class PromptService {
         this.openAiClient = openAiClient;
         this.authService = authService;
         this.cloneAccessPolicy = cloneAccessPolicy;
-        this.friendRequestRepository = friendRequestRepository;
+        this.friendRelationshipService = friendRelationshipService;
     }
 
     public PromptGenerateResult generateSystemPrompt(Long userId, PromptGenerateRequest request) {
@@ -124,7 +124,7 @@ public class PromptService {
     }
 
     private List<PromptGenerationLog> listFriendClones(Long userId) {
-        List<Long> friendIds = friendRequestRepository.findAcceptedFriendIds(userId);
+        List<Long> friendIds = friendRelationshipService.findAcceptedFriendIds(userId);
         if (friendIds.isEmpty()) {
             return List.of();
         }

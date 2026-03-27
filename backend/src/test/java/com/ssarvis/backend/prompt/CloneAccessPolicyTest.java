@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 import com.ssarvis.backend.auth.UserAccount;
-import com.ssarvis.backend.friend.FriendRequestRepository;
+import com.ssarvis.backend.friend.FriendRelationshipService;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,13 +22,13 @@ class CloneAccessPolicyTest {
     private PromptGenerationLogRepository promptGenerationLogRepository;
 
     @Mock
-    private FriendRequestRepository friendRequestRepository;
+    private FriendRelationshipService friendRelationshipService;
 
     private CloneAccessPolicy cloneAccessPolicy;
 
     @BeforeEach
     void setUp() {
-        cloneAccessPolicy = new CloneAccessPolicy(promptGenerationLogRepository, friendRequestRepository);
+        cloneAccessPolicy = new CloneAccessPolicy(promptGenerationLogRepository, friendRelationshipService);
     }
 
     @Test
@@ -47,7 +47,7 @@ class CloneAccessPolicyTest {
         UserAccount owner = assignId(new UserAccount("miso", "hashed", "미소"), 2L);
         PromptGenerationLog clone = new PromptGenerationLog(owner, "gpt-5", "[]", "system", "미소 클론", "설명");
         given(promptGenerationLogRepository.findById(11L)).willReturn(Optional.of(clone));
-        given(friendRequestRepository.existsAcceptedBetweenUsers(1L, 2L)).willReturn(true);
+        given(friendRelationshipService.areFriends(1L, 2L)).willReturn(true);
 
         PromptGenerationLog readable = cloneAccessPolicy.getReadableClone(1L, 11L);
 
@@ -59,7 +59,7 @@ class CloneAccessPolicyTest {
         UserAccount owner = assignId(new UserAccount("miso", "hashed", "미소"), 2L);
         PromptGenerationLog clone = new PromptGenerationLog(owner, "gpt-5", "[]", "system", "미소 클론", "설명");
         given(promptGenerationLogRepository.findById(12L)).willReturn(Optional.of(clone));
-        given(friendRequestRepository.existsAcceptedBetweenUsers(1L, 2L)).willReturn(false);
+        given(friendRelationshipService.areFriends(1L, 2L)).willReturn(false);
 
         assertThatThrownBy(() -> cloneAccessPolicy.getReadableClone(1L, 12L))
                 .isInstanceOf(ResponseStatusException.class)

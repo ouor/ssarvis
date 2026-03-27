@@ -104,16 +104,16 @@ public class DebateService {
     @Transactional(readOnly = true)
     public List<DebateSessionSummaryResponse> listDebates(Long userId) {
         authService.getActiveUserAccount(userId);
-        return debateSessionRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(session -> new DebateSessionSummaryResponse(
-                        session.getId(),
-                        session.getCloneA().getId(),
-                        session.getCloneA().getAlias(),
-                        session.getCloneB().getId(),
-                        session.getCloneB().getAlias(),
-                        session.getTopic(),
-                        session.getCreatedAt(),
-                        debateTurnRepository.findByDebateSessionIdOrderByTurnIndexAsc(session.getId()).size()
+        return debateSessionRepository.findSummaryRowsByUserId(userId).stream()
+                .map(summary -> new DebateSessionSummaryResponse(
+                        summary.debateSessionId(),
+                        summary.cloneAId(),
+                        summary.cloneAAlias(),
+                        summary.cloneBId(),
+                        summary.cloneBAlias(),
+                        summary.topic(),
+                        summary.createdAt(),
+                        Math.toIntExact(summary.turnCount())
                 ))
                 .toList();
     }

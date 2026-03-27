@@ -166,21 +166,15 @@ public class ChatService {
     @Transactional(readOnly = true)
     public List<ChatConversationSummaryResponse> listConversations(Long userId) {
         authService.getActiveUserAccount(userId);
-        return chatConversationRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
-                .map(conversation -> {
-                    List<ChatMessage> messages = chatMessageRepository.findByConversationIdOrderByIdAsc(conversation.getId());
-                    String latestMessagePreview = messages.isEmpty()
-                            ? ""
-                            : abbreviate(messages.get(messages.size() - 1).getContent(), 80);
-                    return new ChatConversationSummaryResponse(
-                            conversation.getId(),
-                            conversation.getPromptGenerationLog().getId(),
-                            conversation.getPromptGenerationLog().getAlias(),
-                            conversation.getCreatedAt(),
-                            latestMessagePreview,
-                            messages.size()
-                    );
-                })
+        return chatConversationRepository.findSummaryRowsByUserId(userId).stream()
+                .map(summary -> new ChatConversationSummaryResponse(
+                        summary.conversationId(),
+                        summary.cloneId(),
+                        summary.cloneAlias(),
+                        summary.createdAt(),
+                        abbreviate(summary.latestMessageContent(), 80),
+                        Math.toIntExact(summary.messageCount())
+                ))
                 .toList();
     }
 
