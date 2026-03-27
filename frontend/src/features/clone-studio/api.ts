@@ -38,6 +38,14 @@ export async function apiFetch(input: string, init?: RequestInit) {
   return response
 }
 
+export async function fetchJsonOrThrow<T>(input: string, fallbackMessage: string, init?: RequestInit) {
+  const response = await apiFetch(input, init)
+  if (!response.ok) {
+    throw new Error(await readErrorMessage(response, fallbackMessage))
+  }
+  return response.json() as Promise<T>
+}
+
 export async function readErrorMessage(response: Response, fallbackMessage: string) {
   const contentType = response.headers.get('Content-Type') ?? ''
 

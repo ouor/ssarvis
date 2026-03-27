@@ -1,5 +1,6 @@
 import type { CloneOption, CurrentUser } from '../types'
 import { formatCloneName, formatVisibilityLabel } from '../utils'
+import AssetMeta from './AssetMeta'
 
 type CloneGridSectionProps = {
   mineClones: CloneOption[]
@@ -44,9 +45,12 @@ function CloneGridSection({ mineClones, friendClones, publicClones, currentUser,
                     <span>{formatCloneName(clone)}</span>
                     <time>{new Date(clone.createdAt).toLocaleDateString('ko-KR')}</time>
                   </div>
-                  <div className="asset-meta-row">
-                    <span className={`asset-badge${clone.isPublic ? ' asset-badge-public' : ''}`}>{formatVisibilityLabel(clone.isPublic)}</span>
-                  </div>
+                  <AssetMeta
+                    fallbackOwnerDisplayName={currentUser.displayName}
+                    label={formatVisibilityLabel(clone.isPublic)}
+                    ownerDisplayName={clone.ownerDisplayName}
+                    publicBadge={clone.isPublic}
+                  />
                   <h2>{clone.alias}</h2>
                   <p>{clone.shortDescription}</p>
                 </div>
@@ -77,10 +81,11 @@ function CloneGridSection({ mineClones, friendClones, publicClones, currentUser,
                     <span>{formatCloneName(clone)}</span>
                     <time>{new Date(clone.createdAt).toLocaleDateString('ko-KR')}</time>
                   </div>
-                  <div className="asset-meta-row">
-                    <span className="asset-badge">친구 전용</span>
-                    <span className="asset-owner">작성자 {clone.ownerDisplayName ?? '알 수 없음'}</span>
-                  </div>
+                  <AssetMeta
+                    fallbackOwnerDisplayName="알 수 없음"
+                    label="친구 전용"
+                    ownerDisplayName={clone.ownerDisplayName}
+                  />
                   <h2>{clone.alias}</h2>
                   <p>{clone.shortDescription}</p>
                 </div>
@@ -111,10 +116,12 @@ function CloneGridSection({ mineClones, friendClones, publicClones, currentUser,
                     <span>{formatCloneName(clone)}</span>
                     <time>{new Date(clone.createdAt).toLocaleDateString('ko-KR')}</time>
                   </div>
-                  <div className="asset-meta-row">
-                    <span className="asset-badge asset-badge-public">{formatVisibilityLabel(clone.isPublic)}</span>
-                    <span className="asset-owner">작성자 {clone.ownerDisplayName ?? '알 수 없음'}</span>
-                  </div>
+                  <AssetMeta
+                    fallbackOwnerDisplayName="알 수 없음"
+                    label={formatVisibilityLabel(clone.isPublic)}
+                    ownerDisplayName={clone.ownerDisplayName}
+                    publicBadge
+                  />
                   <h2>{clone.alias}</h2>
                   <p>{clone.shortDescription}</p>
                 </div>

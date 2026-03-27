@@ -1,5 +1,6 @@
 import type { ChangeEvent, FormEvent } from 'react'
 import AppModal from '../../../../components/AppModal'
+import AssetMeta from '../AssetMeta'
 import type { CloneOption, VoiceOption } from '../../types'
 import { formatCloneName, formatVoiceLabel, formatVisibilityLabel } from '../../utils'
 
@@ -82,21 +83,22 @@ function VoicePickerModal({
                 />
                 <strong>{formatVoiceLabel(voice)}</strong>
                 <span>{voice.voiceId}</span>
-                <div className="asset-meta-row">
-                  <span className={`asset-badge${voice.isPublic ? ' asset-badge-public' : ''}`}>{formatVisibilityLabel(voice.isPublic)}</span>
-                  <span className="asset-owner">작성자 {voice.ownerDisplayName ?? currentUserDisplayName}</span>
-                  <button
-                    className="secondary-button"
-                    disabled={visibilityUpdatingId === voice.registeredVoiceId}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      void onToggleVoiceVisibility(voice)
-                    }}
-                    type="button"
-                  >
-                    {visibilityUpdatingId === voice.registeredVoiceId ? '변경 중...' : voice.isPublic ? '비공개로 전환' : '공개로 전환'}
-                  </button>
-                </div>
+                <AssetMeta
+                  action={{
+                    disabled: visibilityUpdatingId === voice.registeredVoiceId,
+                    label:
+                      visibilityUpdatingId === voice.registeredVoiceId
+                        ? '변경 중...'
+                        : voice.isPublic
+                          ? '비공개로 전환'
+                          : '공개로 전환',
+                    onClick: () => onToggleVoiceVisibility(voice),
+                  }}
+                  fallbackOwnerDisplayName={currentUserDisplayName}
+                  label={formatVisibilityLabel(voice.isPublic)}
+                  ownerDisplayName={voice.ownerDisplayName}
+                  publicBadge={voice.isPublic}
+                />
               </label>
             ))}
             {mineVoices.length === 0 ? <p className="muted-copy">내 계정에 등록된 목소리가 아직 없습니다.</p> : null}
@@ -118,10 +120,11 @@ function VoicePickerModal({
                 />
                 <strong>{formatVoiceLabel(voice)}</strong>
                 <span>{voice.voiceId}</span>
-                <div className="asset-meta-row">
-                  <span className="asset-badge">친구 전용</span>
-                  <span className="asset-owner">작성자 {voice.ownerDisplayName ?? currentUserDisplayName}</span>
-                </div>
+                <AssetMeta
+                  fallbackOwnerDisplayName={currentUserDisplayName}
+                  label="친구 전용"
+                  ownerDisplayName={voice.ownerDisplayName}
+                />
               </label>
             ))}
             {friendVoices.length === 0 ? <p className="muted-copy">사용 가능한 친구 음성이 아직 없습니다.</p> : null}
@@ -143,10 +146,12 @@ function VoicePickerModal({
                 />
                 <strong>{formatVoiceLabel(voice)}</strong>
                 <span>{voice.voiceId}</span>
-                <div className="asset-meta-row">
-                  <span className="asset-badge asset-badge-public">{formatVisibilityLabel(voice.isPublic)}</span>
-                  <span className="asset-owner">작성자 {voice.ownerDisplayName ?? currentUserDisplayName}</span>
-                </div>
+                <AssetMeta
+                  fallbackOwnerDisplayName={currentUserDisplayName}
+                  label={formatVisibilityLabel(voice.isPublic)}
+                  ownerDisplayName={voice.ownerDisplayName}
+                  publicBadge
+                />
               </label>
             ))}
             {publicVoices.length === 0 ? <p className="muted-copy">사용 가능한 공개 음성이 아직 없습니다.</p> : null}

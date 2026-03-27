@@ -102,6 +102,10 @@ class PcmStreamPlayer {
       }
     }
     this.sources.clear()
+    if (this.wavUrl) {
+      URL.revokeObjectURL(this.wavUrl)
+      this.wavUrl = null
+    }
     await this.audioContext.close()
   }
 

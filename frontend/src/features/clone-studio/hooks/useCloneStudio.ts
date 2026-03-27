@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
-import { apiBaseUrl, apiFetch, formatAssetAccessError, questionAssetPath, readErrorMessage, readNdjsonStream } from '../api'
+import { apiBaseUrl, apiFetch, fetchJsonOrThrow, formatAssetAccessError, questionAssetPath, readErrorMessage, readNdjsonStream } from '../api'
 import type {
   CloneOption,
   ChatConversationDetail,
@@ -8,20 +8,18 @@ import type {
   CurrentUser,
   DebateSessionDetail,
   DebateSessionSummary,
-  FriendRequestSummary,
-  FriendSummary,
   LiveChatState,
   LiveDebateState,
   ModalState,
   PromptGenerateResponse,
   Question,
   StudioTab,
-  UserSearchResponse,
   VoiceOption,
   VoiceRegisterResponse,
 } from '../types'
 import PcmStreamPlayer from '../../../utils/PcmStreamPlayer'
 import { useSpeechInput } from './useSpeechInput'
+import { useFriendWorkspace } from './useFriendWorkspace'
 
 export function useCloneStudio(currentUser: CurrentUser) {
   const [activeTab, setActiveTab] = useState<StudioTab>('clones')
@@ -46,15 +44,6 @@ export function useCloneStudio(currentUser: CurrentUser) {
   const [chatHistoryLoadError, setChatHistoryLoadError] = useState('')
   const [debateHistory, setDebateHistory] = useState<DebateSessionSummary[]>([])
   const [debateHistoryLoadError, setDebateHistoryLoadError] = useState('')
-  const [friends, setFriends] = useState<FriendSummary[]>([])
-  const [receivedFriendRequests, setReceivedFriendRequests] = useState<FriendRequestSummary[]>([])
-  const [sentFriendRequests, setSentFriendRequests] = useState<FriendRequestSummary[]>([])
-  const [friendLoadError, setFriendLoadError] = useState('')
-  const [friendSearchQuery, setFriendSearchQuery] = useState('')
-  const [friendSearchResults, setFriendSearchResults] = useState<UserSearchResponse[]>([])
-  const [friendSearchError, setFriendSearchError] = useState('')
-  const [friendSearchLoading, setFriendSearchLoading] = useState(false)
-  const [friendActionKey, setFriendActionKey] = useState<string | null>(null)
   const [selectedVoiceId, setSelectedVoiceId] = useState('')
   const [voiceAlias, setVoiceAlias] = useState('')
   const [voiceFile, setVoiceFile] = useState<File | null>(null)
@@ -148,6 +137,14 @@ export function useCloneStudio(currentUser: CurrentUser) {
     await speechInput.stop()
   }
 
+  const friendWorkspace = useFriendWorkspace({
+    activeTab,
+    currentUserId: currentUser.userId,
+    onRelationshipsChanged: async () => {
+      await Promise.all([loadClones(), loadVoices()])
+    },
+  })
+
   useEffect(() => {
     const controller = new AbortController()
 
@@ -197,15 +194,6 @@ export function useCloneStudio(currentUser: CurrentUser) {
       setChatHistory([])
       setDebateHistoryLoadError('')
       setDebateHistory([])
-      setFriends([])
-      setReceivedFriendRequests([])
-      setSentFriendRequests([])
-      setFriendLoadError('')
-      setFriendSearchQuery('')
-      setFriendSearchResults([])
-      setFriendSearchError('')
-      setFriendSearchLoading(false)
-      setFriendActionKey(null)
       setSelectedVoiceId('')
       setVoiceAlias('')
       setVoiceFile(null)
@@ -232,19 +220,6 @@ export function useCloneStudio(currentUser: CurrentUser) {
       controller.abort()
     }
   }, [currentUser.userId])
-
-  useEffect(() => {
-    if (activeTab !== 'friends') {
-      return
-    }
-
-    const controller = new AbortController()
-    void loadFriendData(controller.signal)
-
-    return () => {
-      controller.abort()
-    }
-  }, [activeTab, currentUser.userId])
 
   useEffect(() => {
     debateSessionIdRef.current = liveDebate?.debateSessionId ?? null
@@ -290,24 +265,10 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadClones(signal?: AbortSignal) {
     try {
       setCloneLoadError('')
-      const [mineResponse, friendResponse, publicResponse] = await Promise.all([
-        apiFetch(`${apiBaseUrl}/api/clones?scope=mine`, { signal }),
-        apiFetch(`${apiBaseUrl}/api/clones?scope=friend`, { signal }),
-        apiFetch(`${apiBaseUrl}/api/clones?scope=public`, { signal }),
-      ])
-      if (!mineResponse.ok) {
-        throw new Error(await readErrorMessage(mineResponse, `내 클론 목록을 불러오지 못했습니다. (${mineResponse.status})`))
-      }
-      if (!friendResponse.ok) {
-        throw new Error(await readErrorMessage(friendResponse, `친구 클론 목록을 불러오지 못했습니다. (${friendResponse.status})`))
-      }
-      if (!publicResponse.ok) {
-        throw new Error(await readErrorMessage(publicResponse, `공개 클론 목록을 불러오지 못했습니다. (${publicResponse.status})`))
-      }
-      const [mineData, friendData, publicData]: [CloneOption[], CloneOption[], CloneOption[]] = await Promise.all([
-        mineResponse.json(),
-        friendResponse.json(),
-        publicResponse.json(),
+      const [mineData, friendData, publicData] = await Promise.all([
+        fetchJsonOrThrow<CloneOption[]>(`${apiBaseUrl}/api/clones?scope=mine`, '내 클론 목록을 불러오지 못했습니다.', { signal }),
+        fetchJsonOrThrow<CloneOption[]>(`${apiBaseUrl}/api/clones?scope=friend`, '친구 클론 목록을 불러오지 못했습니다.', { signal }),
+        fetchJsonOrThrow<CloneOption[]>(`${apiBaseUrl}/api/clones?scope=public`, '공개 클론 목록을 불러오지 못했습니다.', { signal }),
       ])
       if (signal?.aborted) {
         return
@@ -326,24 +287,10 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadVoices(signal?: AbortSignal) {
     try {
       setVoiceLoadError('')
-      const [mineResponse, friendResponse, publicResponse] = await Promise.all([
-        apiFetch(`${apiBaseUrl}/api/voices?scope=mine`, { signal }),
-        apiFetch(`${apiBaseUrl}/api/voices?scope=friend`, { signal }),
-        apiFetch(`${apiBaseUrl}/api/voices?scope=public`, { signal }),
-      ])
-      if (!mineResponse.ok) {
-        throw new Error(await readErrorMessage(mineResponse, `내 목소리 목록을 불러오지 못했습니다. (${mineResponse.status})`))
-      }
-      if (!friendResponse.ok) {
-        throw new Error(await readErrorMessage(friendResponse, `친구 목소리 목록을 불러오지 못했습니다. (${friendResponse.status})`))
-      }
-      if (!publicResponse.ok) {
-        throw new Error(await readErrorMessage(publicResponse, `공개 목소리 목록을 불러오지 못했습니다. (${publicResponse.status})`))
-      }
-      const [mineData, friendData, publicData]: [VoiceOption[], VoiceOption[], VoiceOption[]] = await Promise.all([
-        mineResponse.json(),
-        friendResponse.json(),
-        publicResponse.json(),
+      const [mineData, friendData, publicData] = await Promise.all([
+        fetchJsonOrThrow<VoiceOption[]>(`${apiBaseUrl}/api/voices?scope=mine`, '내 목소리 목록을 불러오지 못했습니다.', { signal }),
+        fetchJsonOrThrow<VoiceOption[]>(`${apiBaseUrl}/api/voices?scope=friend`, '친구 목소리 목록을 불러오지 못했습니다.', { signal }),
+        fetchJsonOrThrow<VoiceOption[]>(`${apiBaseUrl}/api/voices?scope=public`, '공개 목소리 목록을 불러오지 못했습니다.', { signal }),
       ])
       if (signal?.aborted) {
         return
@@ -362,11 +309,9 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadChatHistory(signal?: AbortSignal) {
     try {
       setChatHistoryLoadError('')
-      const response = await apiFetch(`${apiBaseUrl}/api/chat/conversations`, { signal })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `채팅 기록을 불러오지 못했습니다. (${response.status})`))
-      }
-      const data: ChatConversationSummary[] = await response.json()
+      const data = await fetchJsonOrThrow<ChatConversationSummary[]>(`${apiBaseUrl}/api/chat/conversations`, '채팅 기록을 불러오지 못했습니다.', {
+        signal,
+      })
       if (signal?.aborted) {
         return
       }
@@ -382,11 +327,9 @@ export function useCloneStudio(currentUser: CurrentUser) {
   async function loadDebateHistory(signal?: AbortSignal) {
     try {
       setDebateHistoryLoadError('')
-      const response = await apiFetch(`${apiBaseUrl}/api/debates`, { signal })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `논쟁 기록을 불러오지 못했습니다. (${response.status})`))
-      }
-      const data: DebateSessionSummary[] = await response.json()
+      const data = await fetchJsonOrThrow<DebateSessionSummary[]>(`${apiBaseUrl}/api/debates`, '논쟁 기록을 불러오지 못했습니다.', {
+        signal,
+      })
       if (signal?.aborted) {
         return
       }
@@ -396,43 +339,6 @@ export function useCloneStudio(currentUser: CurrentUser) {
         return
       }
       setDebateHistoryLoadError(error instanceof Error ? error.message : '논쟁 기록을 불러오는 중 오류가 발생했습니다.')
-    }
-  }
-
-  async function loadFriendData(signal?: AbortSignal) {
-    try {
-      setFriendLoadError('')
-      const [friendsResponse, receivedResponse, sentResponse] = await Promise.all([
-        apiFetch(`${apiBaseUrl}/api/friends`, { signal }),
-        apiFetch(`${apiBaseUrl}/api/friends/requests/received`, { signal }),
-        apiFetch(`${apiBaseUrl}/api/friends/requests/sent`, { signal }),
-      ])
-
-      if (!friendsResponse.ok) {
-        throw new Error(await readErrorMessage(friendsResponse, `친구 목록을 불러오지 못했습니다. (${friendsResponse.status})`))
-      }
-      if (!receivedResponse.ok) {
-        throw new Error(await readErrorMessage(receivedResponse, `받은 요청을 불러오지 못했습니다. (${receivedResponse.status})`))
-      }
-      if (!sentResponse.ok) {
-        throw new Error(await readErrorMessage(sentResponse, `보낸 요청을 불러오지 못했습니다. (${sentResponse.status})`))
-      }
-
-      const [friendsData, receivedData, sentData]: [FriendSummary[], FriendRequestSummary[], FriendRequestSummary[]] =
-        await Promise.all([friendsResponse.json(), receivedResponse.json(), sentResponse.json()])
-
-      if (signal?.aborted) {
-        return
-      }
-
-      setFriends(friendsData)
-      setReceivedFriendRequests(receivedData)
-      setSentFriendRequests(sentData)
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        return
-      }
-      setFriendLoadError(error instanceof Error ? error.message : '친구 정보를 불러오는 중 오류가 발생했습니다.')
     }
   }
 
@@ -1137,122 +1043,6 @@ export function useCloneStudio(currentUser: CurrentUser) {
     }
   }
 
-  async function handleFriendSearchSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-
-    const query = friendSearchQuery.trim()
-    if (!query) {
-      setFriendSearchResults([])
-      setFriendSearchError('검색어를 입력해 주세요.')
-      return
-    }
-
-    setFriendSearchLoading(true)
-    setFriendSearchError('')
-    try {
-      const response = await apiFetch(`${apiBaseUrl}/api/friends/users/search?query=${encodeURIComponent(query)}`)
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `사용자 검색에 실패했습니다. (${response.status})`))
-      }
-      const data: UserSearchResponse[] = await response.json()
-      setFriendSearchResults(data)
-    } catch (error) {
-      setFriendSearchError(error instanceof Error ? error.message : '사용자 검색 중 오류가 발생했습니다.')
-    } finally {
-      setFriendSearchLoading(false)
-    }
-  }
-
-  async function sendFriendRequest(receiverUserId: number) {
-    const actionKey = `send-${receiverUserId}`
-    setFriendActionKey(actionKey)
-    setFriendSearchError('')
-    try {
-      const response = await apiFetch(`${apiBaseUrl}/api/friends/requests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ receiverUserId }),
-      })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `친구 요청을 보내지 못했습니다. (${response.status})`))
-      }
-      await loadFriendData()
-      setFriendSearchResults((current) => current.filter((user) => user.userId !== receiverUserId))
-    } catch (error) {
-      setFriendSearchError(error instanceof Error ? error.message : '친구 요청을 보내는 중 오류가 발생했습니다.')
-    } finally {
-      setFriendActionKey(null)
-    }
-  }
-
-  async function acceptFriendRequest(requestId: number) {
-    const actionKey = `accept-${requestId}`
-    setFriendActionKey(actionKey)
-    setFriendLoadError('')
-    try {
-      const response = await apiFetch(`${apiBaseUrl}/api/friends/requests/${requestId}/accept`, { method: 'POST' })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `친구 요청을 수락하지 못했습니다. (${response.status})`))
-      }
-      await loadFriendData()
-    } catch (error) {
-      setFriendLoadError(error instanceof Error ? error.message : '친구 요청을 수락하는 중 오류가 발생했습니다.')
-    } finally {
-      setFriendActionKey(null)
-    }
-  }
-
-  async function rejectFriendRequest(requestId: number) {
-    const actionKey = `reject-${requestId}`
-    setFriendActionKey(actionKey)
-    setFriendLoadError('')
-    try {
-      const response = await apiFetch(`${apiBaseUrl}/api/friends/requests/${requestId}/reject`, { method: 'POST' })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `친구 요청을 거절하지 못했습니다. (${response.status})`))
-      }
-      await loadFriendData()
-    } catch (error) {
-      setFriendLoadError(error instanceof Error ? error.message : '친구 요청을 거절하는 중 오류가 발생했습니다.')
-    } finally {
-      setFriendActionKey(null)
-    }
-  }
-
-  async function cancelFriendRequest(requestId: number) {
-    const actionKey = `cancel-${requestId}`
-    setFriendActionKey(actionKey)
-    setFriendLoadError('')
-    try {
-      const response = await apiFetch(`${apiBaseUrl}/api/friends/requests/${requestId}/cancel`, { method: 'POST' })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `친구 요청을 취소하지 못했습니다. (${response.status})`))
-      }
-      await loadFriendData()
-    } catch (error) {
-      setFriendLoadError(error instanceof Error ? error.message : '친구 요청을 취소하는 중 오류가 발생했습니다.')
-    } finally {
-      setFriendActionKey(null)
-    }
-  }
-
-  async function unfriend(friendUserId: number) {
-    const actionKey = `unfriend-${friendUserId}`
-    setFriendActionKey(actionKey)
-    setFriendLoadError('')
-    try {
-      const response = await apiFetch(`${apiBaseUrl}/api/friends/${friendUserId}`, { method: 'DELETE' })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, `친구 해제를 완료하지 못했습니다. (${response.status})`))
-      }
-      await loadFriendData()
-    } catch (error) {
-      setFriendLoadError(error instanceof Error ? error.message : '친구 해제 중 오류가 발생했습니다.')
-    } finally {
-      setFriendActionKey(null)
-    }
-  }
-
   return {
     activeTab,
     setActiveTab,
@@ -1280,16 +1070,16 @@ export function useCloneStudio(currentUser: CurrentUser) {
     chatHistoryLoadError,
     debateHistory,
     debateHistoryLoadError,
-    friends,
-    receivedFriendRequests,
-    sentFriendRequests,
-    friendLoadError,
-    friendSearchQuery,
-    setFriendSearchQuery,
-    friendSearchResults,
-    friendSearchError,
-    friendSearchLoading,
-    friendActionKey,
+    friends: friendWorkspace.friends,
+    receivedFriendRequests: friendWorkspace.receivedFriendRequests,
+    sentFriendRequests: friendWorkspace.sentFriendRequests,
+    friendLoadError: friendWorkspace.friendLoadError,
+    friendSearchQuery: friendWorkspace.friendSearchQuery,
+    setFriendSearchQuery: friendWorkspace.setFriendSearchQuery,
+    friendSearchResults: friendWorkspace.friendSearchResults,
+    friendSearchError: friendWorkspace.friendSearchError,
+    friendSearchLoading: friendWorkspace.friendSearchLoading,
+    friendActionKey: friendWorkspace.friendActionKey,
     selectedVoiceId,
     setSelectedVoiceId,
     voiceAlias,
@@ -1326,12 +1116,12 @@ export function useCloneStudio(currentUser: CurrentUser) {
     handleChatSubmit,
     handleChatInputChange,
     handleChatSpeechToggle,
-    handleFriendSearchSubmit,
-    sendFriendRequest,
-    acceptFriendRequest,
-    rejectFriendRequest,
-    cancelFriendRequest,
-    unfriend,
+    handleFriendSearchSubmit: friendWorkspace.handleFriendSearchSubmit,
+    sendFriendRequest: friendWorkspace.sendFriendRequest,
+    acceptFriendRequest: friendWorkspace.acceptFriendRequest,
+    rejectFriendRequest: friendWorkspace.rejectFriendRequest,
+    cancelFriendRequest: friendWorkspace.cancelFriendRequest,
+    unfriend: friendWorkspace.unfriend,
     openChatHistorySession,
     openDebateHistorySession,
     handleStartDebate,
