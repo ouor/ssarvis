@@ -23,6 +23,8 @@ import com.ssarvis.backend.debate.DebateSession;
 import com.ssarvis.backend.debate.DebateSessionRepository;
 import com.ssarvis.backend.debate.DebateTurn;
 import com.ssarvis.backend.debate.DebateTurnRepository;
+import com.ssarvis.backend.friend.FriendRequest;
+import com.ssarvis.backend.friend.FriendRequestRepository;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import com.ssarvis.backend.voice.GeneratedAudioAsset;
@@ -91,6 +93,9 @@ class PromptIntegrationTest {
     @Autowired
     private AppProperties appProperties;
 
+    @Autowired
+    private FriendRequestRepository friendRequestRepository;
+
     private Instant testStartedAt = Instant.now();
 
     @AfterEach
@@ -123,6 +128,10 @@ class PromptIntegrationTest {
                 .filter(log -> log.getCreatedAt() != null && !log.getCreatedAt().isBefore(testStartedAt))
                 .map(PromptGenerationLog::getId)
                 .forEach(promptGenerationLogRepository::deleteById);
+        friendRequestRepository.findAll().stream()
+                .filter(request -> request.getCreatedAt() != null && !request.getCreatedAt().isBefore(testStartedAt))
+                .map(FriendRequest::getId)
+                .forEach(friendRequestRepository::deleteById);
         userAccountRepository.findAll().stream()
                 .filter(user -> user.getCreatedAt() != null && !user.getCreatedAt().isBefore(testStartedAt))
                 .map(UserAccount::getId)
@@ -490,6 +499,178 @@ class PromptIntegrationTest {
                 .andExpect(jsonPath("$.message").value("Clone A not found."));
     }
 
+    @Test
+    void friendAssetsRequireAcceptanceThenAllowUseAndBlockNewUseAfterUnfriend() throws Exception {
+        AuthResponse ownerAuth = signUp("friend-owner-" + System.currentTimeMillis(), "secret123", "친구소유자");
+        AuthResponse friendAuth = signUp("friend-user-" + System.currentTimeMillis(), "secret123", "친구사용자");
+        String ownerAuthorization = bearer(ownerAuth.accessToken());
+        String friendAuthorization = bearer(friendAuth.accessToken());
+
+        long privateCloneAId = createClone(ownerAuthorization);
+        PromptGenerationLog firstClone = promptGenerationLogRepository.findById(privateCloneAId).orElseThrow();
+        UserAccount owner = userAccountRepository.findById(ownerAuth.userId()).orElseThrow();
+        PromptGenerationLog secondClone = promptGenerationLogRepository.save(new PromptGenerationLog(
+                owner,
+                firstClone.getModel(),
+                firstClone.getAnswersJson(),
+                firstClone.getSystemPrompt(),
+                abbreviateAlias(firstClone.getAlias()),
+                firstClone.getShortDescription()
+        ));
+        long privateCloneBId = secondClone.getId();
+        long privateVoiceId = registerVoice(ownerAuthorization);
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "promptGenerationLogId": %d,
+                                  "registeredVoiceId": %d,
+                                  "message": "친구 전에는 접근되면 안 됩니다."
+                                }
+                                """.formatted(privateCloneAId, privateVoiceId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Prompt generation log not found."));
+
+        mockMvc.perform(post("/api/debates")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cloneAId": %d,
+                                  "cloneBId": %d,
+                                  "cloneAVoiceId": %d,
+                                  "cloneBVoiceId": %d,
+                                  "topic": "친구 전에는 논쟁도 막혀야 한다"
+                                }
+                                """.formatted(privateCloneAId, privateCloneBId, privateVoiceId, privateVoiceId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Clone A not found."));
+
+        long friendRequestId = sendFriendRequest(ownerAuthorization, friendAuth.userId());
+        acceptFriendRequest(friendAuthorization, friendRequestId);
+
+        String friendClonesBody = mockMvc.perform(get("/api/clones")
+                        .param("scope", "friend")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].ownerDisplayName").value("친구소유자"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Set<Long> friendCloneIds = objectMapper.readTree(friendClonesBody).findValuesAsText("cloneId").stream()
+                .map(Long::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(friendCloneIds).contains(privateCloneAId, privateCloneBId);
+
+        String friendVoicesBody = mockMvc.perform(get("/api/voices")
+                        .param("scope", "friend")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].ownerDisplayName").value("친구소유자"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Set<Long> friendVoiceIds = objectMapper.readTree(friendVoicesBody).findValuesAsText("registeredVoiceId").stream()
+                .map(Long::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(friendVoiceIds).contains(privateVoiceId);
+
+        String chatResponseBody = mockMvc.perform(post("/api/chat/messages")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "promptGenerationLogId": %d,
+                                  "registeredVoiceId": %d,
+                                  "message": "이제 친구 자산으로 대화해볼게요."
+                                }
+                                """.formatted(privateCloneAId, privateVoiceId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversationId").isNumber())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long conversationId = objectMapper.readTree(chatResponseBody).get("conversationId").asLong();
+        ChatConversation conversation = chatConversationRepository.findById(conversationId).orElseThrow();
+        assertThat(conversation.getUser().getId()).isEqualTo(friendAuth.userId());
+        assertThat(conversation.getPromptGenerationLog().getId()).isEqualTo(privateCloneAId);
+
+        String debateResponseBody = mockMvc.perform(post("/api/debates")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cloneAId": %d,
+                                  "cloneBId": %d,
+                                  "cloneAVoiceId": %d,
+                                  "cloneBVoiceId": %d,
+                                  "topic": "친구 자산으로도 논쟁이 되는가?"
+                                }
+                                """.formatted(privateCloneAId, privateCloneBId, privateVoiceId, privateVoiceId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").isNumber())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long debateSessionId = objectMapper.readTree(debateResponseBody).get("debateSessionId").asLong();
+        DebateSession debateSession = debateSessionRepository.findById(debateSessionId).orElseThrow();
+        assertThat(debateSession.getUser().getId()).isEqualTo(friendAuth.userId());
+        assertThat(debateSession.getCloneA().getId()).isEqualTo(privateCloneAId);
+        assertThat(debateSession.getCloneB().getId()).isEqualTo(privateCloneBId);
+
+        mockMvc.perform(delete("/api/friends/{friendUserId}", ownerAuth.userId())
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELED"));
+
+        mockMvc.perform(get("/api/chat/conversations/{conversationId}", conversationId)
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.conversationId").value(conversationId))
+                .andExpect(jsonPath("$.cloneId").value(privateCloneAId));
+
+        mockMvc.perform(get("/api/debates/{debateSessionId}", debateSessionId)
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.debateSessionId").value(debateSessionId))
+                .andExpect(jsonPath("$.cloneAId").value(privateCloneAId))
+                .andExpect(jsonPath("$.cloneBId").value(privateCloneBId));
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "promptGenerationLogId": %d,
+                                  "registeredVoiceId": %d,
+                                  "message": "해제 후에는 새 대화가 막혀야 합니다."
+                                }
+                                """.formatted(privateCloneAId, privateVoiceId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Prompt generation log not found."));
+
+        mockMvc.perform(post("/api/debates")
+                        .header(HttpHeaders.AUTHORIZATION, friendAuthorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "cloneAId": %d,
+                                  "cloneBId": %d,
+                                  "cloneAVoiceId": %d,
+                                  "cloneBVoiceId": %d,
+                                  "topic": "해제 후에는 새 논쟁도 막혀야 한다"
+                                }
+                                """.formatted(privateCloneAId, privateCloneBId, privateVoiceId, privateVoiceId)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Clone A not found."));
+    }
+
     private SampleAudio createDashScopeSampleAudio() throws Exception {
         try {
             Path samplePath = resolveSampleAudioPath();
@@ -611,6 +792,28 @@ class PromptIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.registeredVoiceId").value(registeredVoiceId))
                 .andExpect(jsonPath("$.isPublic").value(isPublic));
+    }
+
+    private long sendFriendRequest(String authorizationHeader, long receiverUserId) throws Exception {
+        String responseBody = mockMvc.perform(post("/api/friends/requests")
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("receiverUserId", receiverUserId))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.friendRequestId").isNumber())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readTree(responseBody).get("friendRequestId").asLong();
+    }
+
+    private void acceptFriendRequest(String authorizationHeader, long requestId) throws Exception {
+        mockMvc.perform(post("/api/friends/requests/{requestId}/accept", requestId)
+                        .header(HttpHeaders.AUTHORIZATION, authorizationHeader))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.friendRequestId").value(requestId))
+                .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
 
     private record SampleAudio(byte[] bytes, String contentType) {

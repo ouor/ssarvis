@@ -1096,6 +1096,104 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(screen.getByText(/다른 사용자가 자산을 비공개로 전환했거나 현재 계정으로 접근할 수 없습니다/)).toBeInTheDocument()
   })
 
+  it('shows a friendly message when a friend asset becomes unavailable before chat starts', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('ssarvis.access-token', 'friend-chat-error-token')
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/clones?scope=friend')) {
+        return jsonResponse([
+          {
+            cloneId: 505,
+            createdAt: '2026-03-26T00:00:00.000Z',
+            alias: '친구 비공개 클론',
+            shortDescription: '친구 해제 또는 권한 상실 직전 상태',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+        ])
+      }
+
+      if (url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=friend')) {
+        return jsonResponse([
+          {
+            registeredVoiceId: 15,
+            voiceId: 'friend-voice-locked',
+            displayName: '친구 전용 음성',
+            preferredName: 'friendvoice',
+            originalFilename: 'friend.wav',
+            audioMimeType: 'audio/wav',
+            isPublic: false,
+            ownerDisplayName: '친구 작성자',
+          },
+        ])
+      }
+
+      if (url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/messages/stream')) {
+        return new Response(JSON.stringify({ message: 'Forbidden' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 13, username: 'user13', displayName: '사용자13' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    const friendCloneCard = (await screen.findByText('친구 해제 또는 권한 상실 직전 상태')).closest('button')
+    if (!friendCloneCard) {
+      throw new Error('Unavailable friend clone card button not found.')
+    }
+
+    await user.click(friendCloneCard)
+    await user.click(screen.getByRole('button', { name: /나와 대화하기/ }))
+    const friendVoiceCard = screen.getByText('친구 전용 음성 · friend.wav').closest('label')
+    if (!friendVoiceCard) {
+      throw new Error('Unavailable friend voice card not found.')
+    }
+    await user.click(friendVoiceCard)
+    await user.click(screen.getByRole('button', { name: /대화 시작/ }))
+    await user.type(await screen.findByLabelText('메시지'), '권한이 아직 있나 확인해볼게')
+    await user.click(screen.getByRole('button', { name: /보내기/ }))
+
+    expect(await screen.findByText(/선택한 클론 또는 목소리로 대화를 시작할 수 없습니다/)).toBeInTheDocument()
+    expect(screen.getByText(/다른 사용자가 자산을 비공개로 전환했거나 현재 계정으로 접근할 수 없습니다/)).toBeInTheDocument()
+  })
+
   it('starts chat with a friend clone and friend voice without showing visibility controls', async () => {
     const user = userEvent.setup()
     window.localStorage.setItem('ssarvis.access-token', 'friend-chat-token')
@@ -1183,11 +1281,11 @@ describe('CloneStudioPage user-scoped data flow', () => {
     }
 
     await user.click(friendCloneCard)
-    expect(screen.getByText('작성자 친구 작성자')).toBeInTheDocument()
+    expect(screen.getAllByText('작성자 친구 작성자').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: '공개로 전환' })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /나와 대화하기/ }))
-    expect(screen.getByText('친구 전용 음성')).toBeInTheDocument()
+    expect(screen.getByText('친구 전용 음성 · friend-private.wav')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '비공개로 전환' })).not.toBeInTheDocument()
 
     const friendVoiceCard = screen.getByText('친구 전용 음성 · friend-private.wav').closest('label')
