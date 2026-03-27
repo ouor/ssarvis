@@ -1,5 +1,6 @@
 package com.ssarvis.backend.voice;
 
+import com.ssarvis.backend.friend.FriendRequestRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -8,9 +9,14 @@ import org.springframework.web.server.ResponseStatusException;
 public class VoiceAccessPolicy {
 
     private final RegisteredVoiceRepository registeredVoiceRepository;
+    private final FriendRequestRepository friendRequestRepository;
 
-    public VoiceAccessPolicy(RegisteredVoiceRepository registeredVoiceRepository) {
+    public VoiceAccessPolicy(
+            RegisteredVoiceRepository registeredVoiceRepository,
+            FriendRequestRepository friendRequestRepository
+    ) {
         this.registeredVoiceRepository = registeredVoiceRepository;
+        this.friendRequestRepository = friendRequestRepository;
     }
 
     public RegisteredVoice getManageableVoice(Long userId, Long registeredVoiceId) {
@@ -19,11 +25,28 @@ public class VoiceAccessPolicy {
     }
 
     public RegisteredVoice getReadableVoice(Long userId, Long registeredVoiceId) {
-        return registeredVoiceRepository.findReadableById(registeredVoiceId, userId)
+        RegisteredVoice voice = registeredVoiceRepository.findById(registeredVoiceId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found."));
+        if (isReadableByUser(userId, voice)) {
+            return voice;
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Registered voice not found.");
     }
 
     public RegisteredVoice getUsableVoice(Long userId, Long registeredVoiceId) {
         return getReadableVoice(userId, registeredVoiceId);
+    }
+
+    private boolean isReadableByUser(Long userId, RegisteredVoice voice) {
+        if (voice.getUser() == null || voice.getUser().isDeleted()) {
+            return false;
+        }
+        if (voice.getUser().getId().equals(userId)) {
+            return true;
+        }
+        if (voice.isPublic()) {
+            return true;
+        }
+        return friendRequestRepository.existsAcceptedBetweenUsers(userId, voice.getUser().getId());
     }
 }
