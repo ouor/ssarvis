@@ -71,7 +71,7 @@
 
 .studio-highlight {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   padding: 22px;
   border: 1px solid rgba(196, 120, 106, 0.16);
@@ -131,7 +131,8 @@
 }
 
 .studio-grid,
-.live-grid {
+.live-grid,
+.friend-grid {
   max-width: 1320px;
   margin: 0 auto;
 }
@@ -168,10 +169,24 @@
   align-items: start;
 }
 
+.friend-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.3fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.friend-panel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
 @media (max-width: 1120px) {
   .studio-hero,
   .studio-grid,
-  .live-grid {
+  .live-grid,
+  .friend-grid {
     grid-template-columns: 1fr;
   }
 }

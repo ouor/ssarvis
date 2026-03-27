@@ -160,7 +160,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
 
     expect(await screen.findByText('Alpha', { selector: 'h2' })).toBeInTheDocument()
     expect(
-      screen.getByText('사용자1님의 자산은 물론, 다른 사용자가 공개한 클론과 목소리까지 불러와 대화와 논쟁 흐름을 이어갈 수 있습니다.'),
+      screen.getByText('사용자1님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.'),
     ).toBeInTheDocument()
 
     window.localStorage.setItem('ssarvis.access-token', 'token-user-2')
@@ -179,8 +179,155 @@ describe('CloneStudioPage user-scoped data flow', () => {
       expect(screen.queryByText('Alpha', { selector: 'h2' })).not.toBeInTheDocument()
     })
     expect(
-      screen.getByText('사용자2님의 자산은 물론, 다른 사용자가 공개한 클론과 목소리까지 불러와 대화와 논쟁 흐름을 이어갈 수 있습니다.'),
+      screen.getByText('사용자2님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.'),
     ).toBeInTheDocument()
+    expect(fetchSpy).toHaveBeenCalled()
+  })
+
+  it('loads the friends tab, searches users, and handles request actions', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('ssarvis.access-token', 'friend-ui-token')
+
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=public') || url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/friends')) {
+        if (init?.method === 'DELETE') {
+          return jsonResponse({
+            friendRequestId: 99,
+            status: 'CANCELED',
+            createdAt: '2026-03-27T00:00:00.000Z',
+            respondedAt: '2026-03-27T01:00:00.000Z',
+            requester: { userId: 10, username: 'user10', displayName: '사용자10' },
+            receiver: { userId: 77, username: 'friend77', displayName: '친구77' },
+          })
+        }
+
+        return jsonResponse([
+          {
+            user: { userId: 77, username: 'friend77', displayName: '친구77' },
+            friendsSince: '2026-03-27T01:00:00.000Z',
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/friends/requests/received')) {
+        return jsonResponse([
+          {
+            friendRequestId: 21,
+            status: 'PENDING',
+            createdAt: '2026-03-27T00:00:00.000Z',
+            respondedAt: null,
+            requester: { userId: 88, username: 'incoming88', displayName: '받은친구' },
+            receiver: { userId: 10, username: 'user10', displayName: '사용자10' },
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/friends/requests/sent')) {
+        return jsonResponse([
+          {
+            friendRequestId: 22,
+            status: 'PENDING',
+            createdAt: '2026-03-27T00:10:00.000Z',
+            respondedAt: null,
+            requester: { userId: 10, username: 'user10', displayName: '사용자10' },
+            receiver: { userId: 99, username: 'outgoing99', displayName: '보낸친구' },
+          },
+        ])
+      }
+
+      if (url.includes('/api/friends/users/search')) {
+        return jsonResponse([
+          { userId: 55, username: 'search55', displayName: '검색친구' },
+        ])
+      }
+
+      if (url.endsWith('/api/friends/requests') && init?.method === 'POST') {
+        expect(String(init.body)).toContain('"receiverUserId":55')
+        return jsonResponse({
+          friendRequestId: 33,
+          status: 'PENDING',
+          createdAt: '2026-03-27T00:20:00.000Z',
+          respondedAt: null,
+          requester: { userId: 10, username: 'user10', displayName: '사용자10' },
+          receiver: { userId: 55, username: 'search55', displayName: '검색친구' },
+        })
+      }
+
+      if (url.endsWith('/api/friends/requests/21/accept') && init?.method === 'POST') {
+        return jsonResponse({
+          friendRequestId: 21,
+          status: 'ACCEPTED',
+          createdAt: '2026-03-27T00:00:00.000Z',
+          respondedAt: '2026-03-27T00:30:00.000Z',
+          requester: { userId: 88, username: 'incoming88', displayName: '받은친구' },
+          receiver: { userId: 10, username: 'user10', displayName: '사용자10' },
+        })
+      }
+
+      if (url.endsWith('/api/friends/requests/22/cancel') && init?.method === 'POST') {
+        return jsonResponse({
+          friendRequestId: 22,
+          status: 'CANCELED',
+          createdAt: '2026-03-27T00:10:00.000Z',
+          respondedAt: '2026-03-27T00:40:00.000Z',
+          requester: { userId: 10, username: 'user10', displayName: '사용자10' },
+          receiver: { userId: 99, username: 'outgoing99', displayName: '보낸친구' },
+        })
+      }
+
+      if (url.endsWith('/api/friends/77') && init?.method === 'DELETE') {
+        return jsonResponse({
+          friendRequestId: 99,
+          status: 'CANCELED',
+          createdAt: '2026-03-27T00:00:00.000Z',
+          respondedAt: '2026-03-27T01:10:00.000Z',
+          requester: { userId: 10, username: 'user10', displayName: '사용자10' },
+          receiver: { userId: 77, username: 'friend77', displayName: '친구77' },
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 10, username: 'user10', displayName: '사용자10' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: '친구' }))
+
+    expect(await screen.findByRole('heading', { name: '사용자 검색' })).toBeInTheDocument()
+    expect(await screen.findByText('친구77')).toBeInTheDocument()
+    expect(screen.getByText('받은친구')).toBeInTheDocument()
+    expect(screen.getByText('보낸친구')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('표시명 또는 아이디'), '검색')
+    await user.click(screen.getByRole('button', { name: '사용자 검색' }))
+    expect(await screen.findByText('검색친구')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '친구 요청' }))
+    await user.click(screen.getByRole('button', { name: '수락' }))
+    await user.click(screen.getByRole('button', { name: '요청 취소' }))
+    await user.click(screen.getByRole('button', { name: '친구 해제' }))
+
     expect(fetchSpy).toHaveBeenCalled()
   })
 

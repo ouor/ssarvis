@@ -209,6 +209,44 @@
   background: linear-gradient(160deg, rgba(255, 236, 228, 0.94), rgba(255, 255, 255, 0.92));
 }
 
+.friend-search-panel {
+  position: sticky;
+  top: 20px;
+}
+
+.friend-item-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid rgba(124, 96, 73, 0.12);
+  border-radius: 22px;
+  background: rgba(255, 252, 249, 0.88);
+}
+
+.friend-item-card strong,
+.friend-item-card span {
+  display: block;
+}
+
+.friend-item-card span {
+  margin-top: 6px;
+  color: var(--muted-strong);
+  font-size: 0.84rem;
+}
+
+.friend-item-card-stack {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.friend-item-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .panel-heading {
   display: flex;
   justify-content: space-between;

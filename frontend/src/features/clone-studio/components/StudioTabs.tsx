@@ -1,6 +1,8 @@
+import type { StudioTab } from '../types'
+
 type StudioTabsProps = {
-  activeTab: 'clones' | 'live'
-  onTabChange: (tab: 'clones' | 'live') => void
+  activeTab: StudioTab
+  onTabChange: (tab: StudioTab) => void
 }
 
 function StudioTabs({ activeTab, onTabChange }: StudioTabsProps) {
@@ -12,6 +14,13 @@ function StudioTabs({ activeTab, onTabChange }: StudioTabsProps) {
         type="button"
       >
         클론 스튜디오
+      </button>
+      <button
+        className={activeTab === 'friends' ? 'tab-chip tab-chip-active' : 'tab-chip'}
+        onClick={() => onTabChange('friends')}
+        type="button"
+      >
+        친구
       </button>
       <button
         className={activeTab === 'live' ? 'tab-chip tab-chip-active' : 'tab-chip'}

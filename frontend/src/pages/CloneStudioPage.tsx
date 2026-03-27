@@ -1,5 +1,6 @@
 import type { CurrentUser } from '../features/clone-studio/types'
 import CloneGridSection from '../features/clone-studio/components/CloneGridSection'
+import FriendPanel from '../features/clone-studio/components/FriendPanel'
 import LiveSessionPanel from '../features/clone-studio/components/LiveSessionPanel'
 import StudioHero from '../features/clone-studio/components/StudioHero'
 import StudioTabs from '../features/clone-studio/components/StudioTabs'
@@ -43,6 +44,7 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
         activeTab={studio.activeTab}
         cloneCount={studio.clones.length}
         currentUser={currentUser}
+        friendCount={studio.friends.length}
         voiceCount={studio.voices.length}
       />
       <StudioTabs activeTab={studio.activeTab} onTabChange={studio.setActiveTab} />
@@ -55,6 +57,25 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
           onCloneSelect={studio.openCloneActions}
           onCreateClone={studio.openCreateCloneModal}
           publicClones={studio.publicClones}
+        />
+      ) : studio.activeTab === 'friends' ? (
+        <FriendPanel
+          friendActionKey={studio.friendActionKey}
+          friendLoadError={studio.friendLoadError}
+          friendSearchError={studio.friendSearchError}
+          friendSearchLoading={studio.friendSearchLoading}
+          friendSearchQuery={studio.friendSearchQuery}
+          friendSearchResults={studio.friendSearchResults}
+          friends={studio.friends}
+          onAcceptRequest={studio.acceptFriendRequest}
+          onCancelRequest={studio.cancelFriendRequest}
+          onRejectRequest={studio.rejectFriendRequest}
+          onSearchQueryChange={studio.setFriendSearchQuery}
+          onSearchSubmit={studio.handleFriendSearchSubmit}
+          onSendRequest={studio.sendFriendRequest}
+          onUnfriend={studio.unfriend}
+          receivedRequests={studio.receivedFriendRequests}
+          sentRequests={studio.sentFriendRequests}
         />
       ) : (
         <LiveSessionPanel

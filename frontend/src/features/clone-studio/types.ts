@@ -21,6 +21,8 @@ export type CurrentUser = {
   displayName: string
 }
 
+export type StudioTab = 'clones' | 'friends' | 'live'
+
 export type CloneOption = {
   cloneId: number
   createdAt: string
@@ -40,6 +42,34 @@ export type VoiceOption = {
   createdAt?: string
   isPublic: boolean
   ownerDisplayName?: string | null
+}
+
+export type FriendRequestStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELED'
+
+export type FriendUserSummary = {
+  userId: number
+  username: string
+  displayName: string
+}
+
+export type FriendRequestSummary = {
+  friendRequestId: number
+  status: FriendRequestStatus
+  createdAt: string
+  respondedAt?: string | null
+  requester: FriendUserSummary
+  receiver: FriendUserSummary
+}
+
+export type FriendSummary = {
+  user: FriendUserSummary
+  friendsSince: string
+}
+
+export type UserSearchResponse = {
+  userId: number
+  username: string
+  displayName: string
 }
 
 export type ChatMessage = {
