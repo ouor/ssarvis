@@ -2,6 +2,7 @@ package com.ssarvis.backend.friend;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -111,6 +112,17 @@ class FriendControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].user.userId").value(2))
                 .andExpect(jsonPath("$[0].user.displayName").value("미소"));
+    }
+
+    @Test
+    void unfriendReturnsCanceledRelationship() throws Exception {
+        given(friendService.unfriend(1L, 2L)).willReturn(requestResponse(FriendRequestStatus.CANCELED));
+
+        mockMvc.perform(delete("/api/friends/2")
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELED"))
+                .andExpect(jsonPath("$.receiver.userId").value(2));
     }
 
     @Test

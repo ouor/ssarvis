@@ -88,6 +88,10 @@ public class FriendRequest {
         transitionTo(FriendRequestStatus.CANCELED);
     }
 
+    public void unfriend() {
+        transitionTo(FriendRequestStatus.CANCELED);
+    }
+
     public boolean isPending() {
         return status == FriendRequestStatus.PENDING;
     }

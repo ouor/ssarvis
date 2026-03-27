@@ -120,4 +120,18 @@ public interface FriendRequestRepository extends JpaRepository<FriendRequest, Lo
               and request.status = com.ssarvis.backend.friend.FriendRequestStatus.PENDING
             """)
     Optional<FriendRequest> findPendingByIdAndRequesterId(@Param("requestId") Long requestId, @Param("requesterId") Long requesterId);
+
+    @Query("""
+            select request
+            from FriendRequest request
+            join fetch request.requester requester
+            join fetch request.receiver receiver
+            where request.status = com.ssarvis.backend.friend.FriendRequestStatus.ACCEPTED
+              and (
+                    (request.requester.id = :firstUserId and request.receiver.id = :secondUserId)
+                    or
+                    (request.requester.id = :secondUserId and request.receiver.id = :firstUserId)
+              )
+            """)
+    Optional<FriendRequest> findAcceptedBetweenUsers(@Param("firstUserId") Long firstUserId, @Param("secondUserId") Long secondUserId);
 }

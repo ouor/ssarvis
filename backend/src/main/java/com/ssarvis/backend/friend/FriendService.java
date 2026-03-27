@@ -100,6 +100,16 @@ public class FriendService {
                 .toList();
     }
 
+    @Transactional
+    public FriendRequestResponse unfriend(Long userId, Long friendUserId) {
+        authService.getActiveUserAccount(userId);
+        authService.getActiveUserAccount(friendUserId);
+        FriendRequest friendRequest = friendRequestRepository.findAcceptedBetweenUsers(userId, friendUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Friend not found."));
+        friendRequest.unfriend();
+        return toRequestResponse(friendRequestRepository.save(friendRequest));
+    }
+
     @Transactional(readOnly = true)
     public List<UserSearchResponse> searchUsers(Long userId, String query) {
         authService.getActiveUserAccount(userId);

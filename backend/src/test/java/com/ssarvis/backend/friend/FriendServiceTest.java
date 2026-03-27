@@ -138,6 +138,24 @@ class FriendServiceTest {
     }
 
     @Test
+    void unfriendMarksAcceptedRelationshipCanceled() {
+        UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
+        UserAccount friend = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
+        FriendRequest accepted = reflectId(new FriendRequest(me, friend), 32L);
+        accepted.accept();
+        given(authService.getActiveUserAccount(1L)).willReturn(me);
+        given(authService.getActiveUserAccount(2L)).willReturn(friend);
+        given(friendRequestRepository.findAcceptedBetweenUsers(1L, 2L)).willReturn(Optional.of(accepted));
+        given(friendRequestRepository.save(accepted)).willReturn(accepted);
+
+        FriendRequestResponse response = friendService.unfriend(1L, 2L);
+
+        assertThat(response.friendRequestId()).isEqualTo(32L);
+        assertThat(response.status()).isEqualTo(FriendRequestStatus.CANCELED);
+        assertThat(response.respondedAt()).isNotNull();
+    }
+
+    @Test
     void searchUsersReturnsEmptyWhenQueryIsBlank() {
         UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
         given(authService.getActiveUserAccount(1L)).willReturn(me);

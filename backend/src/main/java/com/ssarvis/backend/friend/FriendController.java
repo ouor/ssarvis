@@ -7,6 +7,7 @@ import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -74,6 +75,14 @@ public class FriendController {
             @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user
     ) {
         return friendService.listFriends(user.userId());
+    }
+
+    @DeleteMapping("/{friendUserId}")
+    public FriendRequestResponse unfriend(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @PathVariable Long friendUserId
+    ) {
+        return friendService.unfriend(user.userId(), friendUserId);
     }
 
     @GetMapping("/users/search")
