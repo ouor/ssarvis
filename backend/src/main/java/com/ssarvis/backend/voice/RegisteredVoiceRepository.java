@@ -13,6 +13,8 @@ public interface RegisteredVoiceRepository extends JpaRepository<RegisteredVoice
 
     List<RegisteredVoice> findAllByIsPublicTrueOrderByIdDesc();
 
+    List<RegisteredVoice> findAllByUserIdInAndIsPublicFalseOrderByIdDesc(List<Long> userIds);
+
     Optional<RegisteredVoice> findByIdAndUserId(Long id, Long userId);
 
     @Query("""

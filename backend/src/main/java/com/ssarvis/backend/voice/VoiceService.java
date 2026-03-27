@@ -14,6 +14,7 @@ import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.access.AssetListScope;
 import com.ssarvis.backend.access.VisibilityUpdateRequest;
 import com.ssarvis.backend.config.AppProperties;
+import com.ssarvis.backend.friend.FriendRequestRepository;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -53,6 +54,7 @@ public class VoiceService {
     private final AudioStorageService audioStorageService;
     private final AuthService authService;
     private final VoiceAccessPolicy voiceAccessPolicy;
+    private final FriendRequestRepository friendRequestRepository;
 
     public VoiceService(
             HttpClient httpClient,
@@ -61,7 +63,8 @@ public class VoiceService {
             RegisteredVoiceRepository registeredVoiceRepository,
             AudioStorageService audioStorageService,
             AuthService authService,
-            VoiceAccessPolicy voiceAccessPolicy
+            VoiceAccessPolicy voiceAccessPolicy,
+            FriendRequestRepository friendRequestRepository
     ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
@@ -70,6 +73,7 @@ public class VoiceService {
         this.audioStorageService = audioStorageService;
         this.authService = authService;
         this.voiceAccessPolicy = voiceAccessPolicy;
+        this.friendRequestRepository = friendRequestRepository;
     }
 
     public RegisteredVoice registerVoice(Long userId, MultipartFile sampleFile, String alias) {
@@ -166,6 +170,7 @@ public class VoiceService {
         String currentTtsModel = appProperties.getDashscope().getTtsModel();
         List<RegisteredVoice> voices = switch (scope) {
             case MINE -> registeredVoiceRepository.findAllByUserIdOrderByIdDesc(userId);
+            case FRIEND -> listFriendVoices(userId);
             case PUBLIC -> registeredVoiceRepository.findAllByIsPublicTrueOrderByIdDesc();
         };
         return voices.stream()
@@ -182,6 +187,14 @@ public class VoiceService {
                         voice.getUser() != null ? voice.getUser().getDisplayName() : null
                 ))
                 .toList();
+    }
+
+    private List<RegisteredVoice> listFriendVoices(Long userId) {
+        List<Long> friendIds = friendRequestRepository.findAcceptedFriendIds(userId);
+        if (friendIds.isEmpty()) {
+            return List.of();
+        }
+        return registeredVoiceRepository.findAllByUserIdInAndIsPublicFalseOrderByIdDesc(friendIds);
     }
 
     public VoiceVisibilityResponse updateVoiceVisibility(Long userId, Long registeredVoiceId, VisibilityUpdateRequest request) {

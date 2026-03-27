@@ -68,6 +68,24 @@ class CloneControllerTest {
     }
 
     @Test
+    void listClonesReturnsFriendScope() throws Exception {
+        given(promptService.listClones(1L, AssetListScope.FRIEND)).willReturn(List.of(
+                new CloneSummaryResponse(13L, Instant.parse("2026-03-26T04:00:00Z"), "친구 클론", "친구 설명", false, "친구A")
+        ));
+
+        mockMvc.perform(get("/api/clones")
+                        .param("scope", "friend")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].cloneId").value(13))
+                .andExpect(jsonPath("$[0].isPublic").value(false))
+                .andExpect(jsonPath("$[0].ownerDisplayName").value("친구A"));
+    }
+
+    @Test
     void updateCloneVisibilityReturnsUpdatedState() throws Exception {
         given(promptService.updateCloneVisibility(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.eq(12L), org.mockito.ArgumentMatchers.any()))
                 .willReturn(new CloneVisibilityResponse(12L, true));

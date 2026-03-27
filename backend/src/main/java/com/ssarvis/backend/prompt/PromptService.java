@@ -6,6 +6,7 @@ import com.ssarvis.backend.access.AssetListScope;
 import com.ssarvis.backend.access.VisibilityUpdateRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.config.AppProperties;
+import com.ssarvis.backend.friend.FriendRequestRepository;
 import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import java.io.IOException;
@@ -26,6 +27,7 @@ public class PromptService {
     private final OpenAiClient openAiClient;
     private final AuthService authService;
     private final CloneAccessPolicy cloneAccessPolicy;
+    private final FriendRequestRepository friendRequestRepository;
 
     public PromptService(
             ObjectMapper objectMapper,
@@ -34,7 +36,8 @@ public class PromptService {
             OpenAiContextAssembler openAiContextAssembler,
             OpenAiClient openAiClient,
             AuthService authService,
-            CloneAccessPolicy cloneAccessPolicy
+            CloneAccessPolicy cloneAccessPolicy,
+            FriendRequestRepository friendRequestRepository
     ) {
         this.objectMapper = objectMapper;
         this.appProperties = appProperties;
@@ -43,6 +46,7 @@ public class PromptService {
         this.openAiClient = openAiClient;
         this.authService = authService;
         this.cloneAccessPolicy = cloneAccessPolicy;
+        this.friendRequestRepository = friendRequestRepository;
     }
 
     public PromptGenerateResult generateSystemPrompt(Long userId, PromptGenerateRequest request) {
@@ -103,6 +107,7 @@ public class PromptService {
         authService.getActiveUserAccount(userId);
         List<PromptGenerationLog> logs = switch (scope) {
             case MINE -> promptGenerationLogRepository.findAllByUserIdOrderByIdDesc(userId);
+            case FRIEND -> listFriendClones(userId);
             case PUBLIC -> promptGenerationLogRepository.findAllByIsPublicTrueOrderByIdDesc();
         };
 
@@ -116,6 +121,14 @@ public class PromptService {
                         log.getUser() != null ? log.getUser().getDisplayName() : null
                 ))
                 .toList();
+    }
+
+    private List<PromptGenerationLog> listFriendClones(Long userId) {
+        List<Long> friendIds = friendRequestRepository.findAcceptedFriendIds(userId);
+        if (friendIds.isEmpty()) {
+            return List.of();
+        }
+        return promptGenerationLogRepository.findAllByUserIdInAndIsPublicFalseOrderByIdDesc(friendIds);
     }
 
     public CloneVisibilityResponse updateCloneVisibility(Long userId, Long cloneId, VisibilityUpdateRequest request) {

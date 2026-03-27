@@ -10,11 +10,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssarvis.backend.auth.AuthService;
 import com.ssarvis.backend.auth.UserAccount;
 import com.ssarvis.backend.config.AppProperties;
+import com.ssarvis.backend.friend.FriendRequestRepository;
 import java.lang.reflect.Method;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +38,9 @@ class VoiceServiceTest {
     @Mock
     private VoiceAccessPolicy voiceAccessPolicy;
 
+    @Mock
+    private FriendRequestRepository friendRequestRepository;
+
     private VoiceService voiceService;
 
     @BeforeEach
@@ -52,7 +55,8 @@ class VoiceServiceTest {
                 registeredVoiceRepository,
                 audioStorageService,
                 authService,
-                voiceAccessPolicy
+                voiceAccessPolicy,
+                friendRequestRepository
         );
     }
 

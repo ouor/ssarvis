@@ -53,6 +53,24 @@ class VoiceControllerTest {
     }
 
     @Test
+    void listVoicesReturnsFriendScope() throws Exception {
+        given(voiceService.listVoices(1L, AssetListScope.FRIEND)).willReturn(List.of(
+                new VoiceSummaryResponse(6L, "voice-provider-2", "친구 목소리", "friend-voice", "friend.wav", "audio/wav", Instant.parse("2026-03-26T02:00:00Z"), false, "친구A")
+        ));
+
+        mockMvc.perform(get("/api/voices")
+                        .param("scope", "friend")
+                        .requestAttr(
+                                JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
+                                new AuthenticatedUser(1L, "haru", "하루")
+                        ))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].registeredVoiceId").value(6))
+                .andExpect(jsonPath("$[0].isPublic").value(false))
+                .andExpect(jsonPath("$[0].ownerDisplayName").value("친구A"));
+    }
+
+    @Test
     void registerVoiceReturnsRegisteredVoice() throws Exception {
         given(voiceService.registerVoice(eq(1L), any(), any()))
                 .willReturn(new RegisteredVoice(

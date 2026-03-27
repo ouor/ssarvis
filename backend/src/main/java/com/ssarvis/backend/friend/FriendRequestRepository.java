@@ -51,6 +51,22 @@ public interface FriendRequestRepository extends JpaRepository<FriendRequest, Lo
     List<FriendRequest> findAcceptedByUserId(@Param("userId") Long userId);
 
     @Query("""
+            select case
+                     when request.requester.id = :userId then request.receiver.id
+                     else request.requester.id
+                   end
+            from FriendRequest request
+            where request.status = com.ssarvis.backend.friend.FriendRequestStatus.ACCEPTED
+              and (
+                    request.requester.id = :userId
+                    or request.receiver.id = :userId
+              )
+              and request.requester.deletedAt is null
+              and request.receiver.deletedAt is null
+            """)
+    List<Long> findAcceptedFriendIds(@Param("userId") Long userId);
+
+    @Query("""
             select case when count(request) > 0 then true else false end
             from FriendRequest request
             where request.status = com.ssarvis.backend.friend.FriendRequestStatus.PENDING

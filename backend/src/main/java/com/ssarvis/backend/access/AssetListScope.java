@@ -5,6 +5,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 public enum AssetListScope {
     MINE,
+    FRIEND,
     PUBLIC;
 
     public static AssetListScope from(String rawValue) {
@@ -14,8 +15,9 @@ public enum AssetListScope {
 
         return switch (rawValue.trim().toLowerCase()) {
             case "mine" -> MINE;
+            case "friend" -> FRIEND;
             case "public" -> PUBLIC;
-            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "scope must be one of: mine, public.");
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "scope must be one of: mine, friend, public.");
         };
     }
 }

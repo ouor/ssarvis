@@ -13,6 +13,8 @@ public interface PromptGenerationLogRepository extends JpaRepository<PromptGener
 
     List<PromptGenerationLog> findAllByIsPublicTrueOrderByIdDesc();
 
+    List<PromptGenerationLog> findAllByUserIdInAndIsPublicFalseOrderByIdDesc(List<Long> userIds);
+
     Optional<PromptGenerationLog> findByIdAndUserId(Long id, Long userId);
 
     @Query("""

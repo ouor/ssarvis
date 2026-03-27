@@ -73,4 +73,22 @@ class FriendRequestDataJpaTest {
         assertThat(nextRequest.getStatus()).isEqualTo(FriendRequestStatus.PENDING);
         assertThat(nextRequest.getId()).isNotEqualTo(firstRequest.getId());
     }
+
+    @Test
+    void findAcceptedFriendIdsReturnsCounterpartUsers() {
+        UserAccount me = userAccountRepository.save(new UserAccount("friend-g", "hashed", "친구G"));
+        UserAccount friendA = userAccountRepository.save(new UserAccount("friend-h", "hashed", "친구H"));
+        UserAccount friendB = userAccountRepository.save(new UserAccount("friend-i", "hashed", "친구I"));
+
+        FriendRequest first = friendRequestRepository.saveAndFlush(new FriendRequest(me, friendA));
+        first.accept();
+        friendRequestRepository.saveAndFlush(first);
+
+        FriendRequest second = friendRequestRepository.saveAndFlush(new FriendRequest(friendB, me));
+        second.accept();
+        friendRequestRepository.saveAndFlush(second);
+
+        assertThat(friendRequestRepository.findAcceptedFriendIds(me.getId()))
+                .containsExactlyInAnyOrder(friendA.getId(), friendB.getId());
+    }
 }
