@@ -1059,6 +1059,7 @@ Body
 - `integrationTest`의 음성 등록 샘플은 외부 합성 대신 `backend/src/test/resources/sample/haru.wav` 파일을 사용한다.
 - `integrationTest`는 soft delete 후 기존 토큰이 보호 API에서 거부되는지도 함께 검증한다.
 - `integrationTest`는 공개 클론/공개 음성을 다른 회원이 사용한 뒤, 소유자가 비공개로 되돌리면 기존 기록은 유지되고 신규 사용만 차단되는 흐름도 검증한다.
+- `integrationTest`는 친구 수락 전 접근 불가, 수락 후 friend scope 조회 및 채팅/논쟁 사용 가능, 친구 해제 후 기존 기록 유지와 신규 사용 차단 흐름도 검증한다.
 - OpenAI 호출은 모두 `POST /v1/chat/completions` 형식을 사용한다.
 - 시스템 프롬프트 생성은 한 번에 JSON을 받는 방식이 아니라 `systemPrompt -> alias -> shortDescription` 순서의 단계형 OpenAI 호출로 처리된다.
 - 채팅 이어가기 시에는 시스템 프롬프트를 항상 포함하고, 과거 대화는 최근 `OPENAI_CHAT_HISTORY_TURNS`턴만 OpenAI로 전송한다.

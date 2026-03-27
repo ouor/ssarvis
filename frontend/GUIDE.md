@@ -7,6 +7,7 @@
 - 실시간 PCM 재생
 - 음성 입력(Web Speech API)
 - 설문 표시 및 처리
+- 테스트 관점에서 주의할 포인트
 
 기준 경로
 - 프로젝트 루트: `frontend`
@@ -606,3 +607,52 @@ const response = await apiFetch(`${apiBaseUrl}/api/system-prompt`, {
   - `answeredCount`와 `questions.length` 비교, `answers[index]` 누락 여부 확인
 - 질문 로드 실패
   - `questions.json` 경로와 Vite public asset 경로 확인
+
+## 8. 테스트 포인트
+
+최근 구현 기준으로 회귀가 나기 쉬운 핵심 시나리오는 아래와 같다.
+
+- 인증
+  - 저장된 token으로 `/api/auth/me` 세션 복구
+  - `401` 응답 시 자동 로그아웃
+  - 회원 탈퇴 후 로그인 화면 복귀
+- 자산 범위
+  - `mine / friend / public` 목록이 각각 올바르게 보이는지
+  - 친구/공개 자산에는 작성자 표시가 나오는지
+  - 내 자산에만 visibility 토글이 보이는지
+- 친구 관계
+  - 친구 탭 진입 시 목록 로딩
+  - 사용자 검색
+  - 요청 보내기 / 수락 / 거절 / 취소 / 친구 해제 후 재조회
+- 라이브 사용 흐름
+  - 공개 클론/음성으로 채팅 시작
+  - 친구 클론/음성으로 채팅 시작
+  - 친구 클론/음성 조합으로 논쟁 시작
+  - 저장된 채팅/논쟁 기록 다시 열기
+- 권한 상실 시 UX
+  - 공개 자산이 비공개로 바뀐 경우 친화적 오류 메시지 표시
+  - 친구 해제 등으로 친구 자산 접근 권한이 사라진 경우 친화적 오류 메시지 표시
+- 실시간 정리
+  - 논쟁 종료 시 abort와 오디오 정리
+  - `pagehide` 시 스트림, 플레이어, `<audio>` 정리
+
+현재 프론트 테스트 범위
+
+- [App.test.tsx](./src/App.test.tsx)
+  - 로그인, 세션 복구, 인증 만료, 회원 탈퇴
+- [api.test.ts](./src/features/clone-studio/api.test.ts)
+  - access token 저장/전송, `401` 처리, 자산 접근 오류 메시지 포맷팅
+- [CloneStudioPage.test.tsx](./src/pages/CloneStudioPage.test.tsx)
+  - 사용자 전환
+  - 친구 탭 액션
+  - `내 것 / 친구 / 공개` 자산 섹션 렌더링
+  - 공개 자산 채팅
+  - 친구 자산 채팅
+  - 친구 자산 논쟁
+  - 공개/친구 자산 권한 상실 시 메시지 처리
+
+테스트 유지보수 시 주의점
+
+- `useCloneStudio`는 마운트 시 클론, 음성, 채팅 기록, 논쟁 기록을 함께 불러오므로, 테스트 fetch mock에 `scope=friend`까지 빠짐없이 포함해야 한다.
+- jsdom은 `HTMLMediaElement.pause()`를 구현하지 않아 경고가 나올 수 있지만, 현재 테스트 실패 원인은 아니다.
+- 텍스트가 카드와 모달에 동시에 나타나면 `getByText`보다 `getAllByText`가 더 안전할 수 있다.
