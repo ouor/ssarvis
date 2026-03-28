@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
+import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import java.time.Instant;
@@ -40,7 +41,7 @@ class DebateControllerTest {
         mockMvc.perform(get("/api/debates")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].debateSessionId").value(9))
@@ -71,7 +72,7 @@ class DebateControllerTest {
         mockMvc.perform(get("/api/debates/9")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.debateSessionId").value(9))
@@ -91,7 +92,7 @@ class DebateControllerTest {
         mockMvc.perform(post("/api/debates")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -121,7 +122,7 @@ class DebateControllerTest {
         mockMvc.perform(post("/api/debates/9/next")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.debateSessionId").value(9))

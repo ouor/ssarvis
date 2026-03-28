@@ -72,6 +72,7 @@ describe('App auth flow', () => {
           userId: 11,
           username: 'juno',
           displayName: 'Juno',
+          visibility: 'PUBLIC',
           accessToken: 'new-token',
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },

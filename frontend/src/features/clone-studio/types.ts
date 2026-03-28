@@ -12,6 +12,7 @@ export type AuthResponse = {
   userId: number
   username: string
   displayName: string
+  visibility: 'PUBLIC' | 'PRIVATE'
   accessToken: string
 }
 
@@ -19,6 +20,7 @@ export type CurrentUser = {
   userId: number
   username: string
   displayName: string
+  visibility?: 'PUBLIC' | 'PRIVATE'
 }
 
 export type StudioTab = 'clones' | 'friends' | 'live'

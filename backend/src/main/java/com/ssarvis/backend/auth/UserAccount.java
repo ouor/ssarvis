@@ -2,6 +2,8 @@ package com.ssarvis.backend.auth;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -25,6 +27,10 @@ public class UserAccount {
 
     @Column(nullable = false, length = 100)
     private String displayName;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AccountVisibility visibility = AccountVisibility.PUBLIC;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -50,6 +56,10 @@ public class UserAccount {
         deletedAt = Instant.now();
     }
 
+    public void updateVisibility(AccountVisibility visibility) {
+        this.visibility = visibility == null ? AccountVisibility.PUBLIC : visibility;
+    }
+
     public Long getId() {
         return id;
     }
@@ -66,6 +76,10 @@ public class UserAccount {
         return displayName;
     }
 
+    public AccountVisibility getVisibility() {
+        return visibility;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
@@ -76,5 +90,9 @@ public class UserAccount {
 
     public boolean isDeleted() {
         return deletedAt != null;
+    }
+
+    public boolean isPrivateAccount() {
+        return visibility == AccountVisibility.PRIVATE;
     }
 }

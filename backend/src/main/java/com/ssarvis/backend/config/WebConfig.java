@@ -43,6 +43,8 @@ public class WebConfig implements WebMvcConfigurer {
                     .addPathPatterns(
                             "/api/auth/me",
                             "/api/friends/**",
+                            "/api/follows/**",
+                            "/api/profiles/**",
                             "/api/clones",
                             "/api/clones/**",
                             "/api/voices",

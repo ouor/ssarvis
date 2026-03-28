@@ -57,7 +57,18 @@ public class AuthService {
     public AuthenticatedUser getAuthenticatedUser(Long userId) {
         UserAccount userAccount = getActiveUserAccount(userId);
 
-        return new AuthenticatedUser(userAccount.getId(), userAccount.getUsername(), userAccount.getDisplayName());
+        return new AuthenticatedUser(
+                userAccount.getId(),
+                userAccount.getUsername(),
+                userAccount.getDisplayName(),
+                userAccount.getVisibility()
+        );
+    }
+
+    public void updateVisibility(Long userId, AccountVisibility visibility) {
+        UserAccount userAccount = getActiveUserAccount(userId);
+        userAccount.updateVisibility(visibility);
+        userAccountRepository.save(userAccount);
     }
 
     public void deactivate(Long userId) {
@@ -81,6 +92,7 @@ public class AuthService {
                 userAccount.getId(),
                 userAccount.getUsername(),
                 userAccount.getDisplayName(),
+                userAccount.getVisibility(),
                 jwtTokenService.createAccessToken(userAccount)
         );
     }

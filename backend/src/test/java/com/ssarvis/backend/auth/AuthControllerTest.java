@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
+import com.ssarvis.backend.auth.AccountVisibility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -32,7 +33,7 @@ class AuthControllerTest {
     @Test
     void signUpReturnsAuthResponse() throws Exception {
         given(authService.signUp(any()))
-                .willReturn(new AuthSession(1L, "haru", "하루", "access-token"));
+                .willReturn(new AuthSession(1L, "haru", "하루", AccountVisibility.PUBLIC, "access-token"));
 
         mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -53,7 +54,7 @@ class AuthControllerTest {
     @Test
     void loginReturnsAuthResponse() throws Exception {
         given(authService.login(any()))
-                .willReturn(new AuthSession(2L, "miso", "미소", "login-token"));
+                .willReturn(new AuthSession(2L, "miso", "미소", AccountVisibility.PUBLIC, "login-token"));
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -91,12 +92,13 @@ class AuthControllerTest {
         mockMvc.perform(get("/api/auth/me")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(3L, "dami", "다미")
+                                new AuthenticatedUser(3L, "dami", "다미", AccountVisibility.PRIVATE)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(3))
                 .andExpect(jsonPath("$.username").value("dami"))
-                .andExpect(jsonPath("$.displayName").value("다미"));
+                .andExpect(jsonPath("$.displayName").value("다미"))
+                .andExpect(jsonPath("$.visibility").value("PRIVATE"));
     }
 
     @Test
@@ -110,7 +112,7 @@ class AuthControllerTest {
         mockMvc.perform(delete("/api/auth/me")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(8L, "nara", "나라")
+                                new AuthenticatedUser(8L, "nara", "나라", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isNoContent());
 

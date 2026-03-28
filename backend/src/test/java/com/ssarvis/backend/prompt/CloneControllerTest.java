@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
 import com.ssarvis.backend.access.AssetListScope;
+import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import java.time.Instant;
@@ -39,7 +40,7 @@ class CloneControllerTest {
         mockMvc.perform(get("/api/clones")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].cloneId").value(11))
@@ -59,7 +60,7 @@ class CloneControllerTest {
                         .param("scope", "public")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].cloneId").value(12))
@@ -77,7 +78,7 @@ class CloneControllerTest {
                         .param("scope", "friend")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].cloneId").value(13))
@@ -93,7 +94,7 @@ class CloneControllerTest {
         mockMvc.perform(patch("/api/clones/12/visibility")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         )
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                         .content("""

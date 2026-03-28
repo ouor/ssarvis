@@ -24,13 +24,13 @@ public class AuthController {
     @PostMapping("/signup")
     public AuthResponse signUp(@Valid @RequestBody SignUpRequest request) {
         AuthSession session = authService.signUp(request);
-        return new AuthResponse(session.userId(), session.username(), session.displayName(), session.accessToken());
+        return new AuthResponse(session.userId(), session.username(), session.displayName(), session.visibility(), session.accessToken());
     }
 
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         AuthSession session = authService.login(request);
-        return new AuthResponse(session.userId(), session.username(), session.displayName(), session.accessToken());
+        return new AuthResponse(session.userId(), session.username(), session.displayName(), session.visibility(), session.accessToken());
     }
 
     @PostMapping("/logout")
@@ -43,7 +43,7 @@ public class AuthController {
     public MeResponse me(
             @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user
     ) {
-        return new MeResponse(user.userId(), user.username(), user.displayName());
+        return new MeResponse(user.userId(), user.username(), user.displayName(), user.visibility());
     }
 
     @DeleteMapping("/me")

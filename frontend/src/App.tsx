@@ -84,6 +84,7 @@ function App() {
         userId: session.userId,
         username: session.username,
         displayName: session.displayName,
+        visibility: session.visibility,
       })
       setPassword('')
       setAuthError('')

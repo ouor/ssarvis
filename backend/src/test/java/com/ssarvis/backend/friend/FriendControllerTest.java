@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
+import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import java.time.Instant;
@@ -37,7 +38,7 @@ class FriendControllerTest {
                 .willReturn(requestResponse(FriendRequestStatus.PENDING));
 
         mockMvc.perform(post("/api/friends/requests")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루"))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -56,7 +57,7 @@ class FriendControllerTest {
         given(friendService.listReceivedRequests(1L)).willReturn(List.of(requestResponse(FriendRequestStatus.PENDING)));
 
         mockMvc.perform(get("/api/friends/requests/received")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].friendRequestId").value(10));
     }
@@ -66,7 +67,7 @@ class FriendControllerTest {
         given(friendService.listSentRequests(1L)).willReturn(List.of(requestResponse(FriendRequestStatus.PENDING)));
 
         mockMvc.perform(get("/api/friends/requests/sent")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].status").value("PENDING"));
     }
@@ -76,7 +77,7 @@ class FriendControllerTest {
         given(friendService.acceptRequest(1L, 10L)).willReturn(requestResponse(FriendRequestStatus.ACCEPTED));
 
         mockMvc.perform(post("/api/friends/requests/10/accept")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACCEPTED"));
     }
@@ -86,7 +87,7 @@ class FriendControllerTest {
         given(friendService.rejectRequest(1L, 10L)).willReturn(requestResponse(FriendRequestStatus.REJECTED));
 
         mockMvc.perform(post("/api/friends/requests/10/reject")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"));
     }
@@ -96,7 +97,7 @@ class FriendControllerTest {
         given(friendService.cancelRequest(1L, 10L)).willReturn(requestResponse(FriendRequestStatus.CANCELED));
 
         mockMvc.perform(post("/api/friends/requests/10/cancel")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELED"));
     }
@@ -108,7 +109,7 @@ class FriendControllerTest {
         ));
 
         mockMvc.perform(get("/api/friends")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].user.userId").value(2))
                 .andExpect(jsonPath("$[0].user.displayName").value("미소"));
@@ -119,7 +120,7 @@ class FriendControllerTest {
         given(friendService.unfriend(1L, 2L)).willReturn(requestResponse(FriendRequestStatus.CANCELED));
 
         mockMvc.perform(delete("/api/friends/2")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELED"))
                 .andExpect(jsonPath("$.receiver.userId").value(2));
@@ -133,7 +134,7 @@ class FriendControllerTest {
 
         mockMvc.perform(get("/api/friends/users/search")
                         .param("query", "미")
-                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루")))
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].userId").value(2))
                 .andExpect(jsonPath("$[0].username").value("miso"));

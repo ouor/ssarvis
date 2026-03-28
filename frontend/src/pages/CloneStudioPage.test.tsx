@@ -432,7 +432,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
     )
 
     expect(await screen.findByRole('button', { name: 'Profile' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText('기존 스튜디오 기능은 우선 프로필 하위 작업 공간에서 유지합니다.')).toBeInTheDocument()
+    expect(screen.getByText('기존 스튜디오를 유지하면서 계정 공개성을 먼저 고정합니다.')).toBeInTheDocument()
     expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Home' }))
@@ -443,6 +443,98 @@ describe('CloneStudioPage user-scoped data flow', () => {
     await user.click(screen.getByRole('button', { name: 'Profile' }))
     expect(screen.getByRole('button', { name: 'Profile' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
+  })
+
+  it('searches public accounts and updates account visibility from the profile shell', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/follows/users/search')) {
+        return jsonResponse([
+          {
+            userId: 81,
+            username: 'public81',
+            displayName: '공개 사용자',
+            visibility: 'PUBLIC',
+            following: false,
+          },
+          {
+            userId: 82,
+            username: 'private82',
+            displayName: '이미 팔로우 중인 비공개 사용자',
+            visibility: 'PRIVATE',
+            following: true,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/follows/81') && init?.method === 'POST') {
+        return jsonResponse({
+          userId: 81,
+          username: 'public81',
+          displayName: '공개 사용자',
+          visibility: 'PUBLIC',
+          following: true,
+        })
+      }
+
+      if (url.endsWith('/api/profiles/me/visibility') && init?.method === 'PATCH') {
+        expect(String(init.body)).toContain('"visibility":"PRIVATE"')
+        return jsonResponse({
+          userId: 14,
+          username: 'user14',
+          displayName: '사용자14',
+          visibility: 'PRIVATE',
+          me: true,
+          following: false,
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 14, username: 'user14', displayName: '사용자14', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    expect(await screen.findByRole('button', { name: '공개 계정' })).toHaveClass('sns-visibility-button-active')
+
+    await user.click(screen.getByRole('button', { name: '비공개 계정' }))
+    expect(await screen.findByRole('button', { name: '비공개 계정' })).toHaveClass('sns-visibility-button-active')
+
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+    await user.type(screen.getByPlaceholderText('표시명 또는 아이디를 입력하세요'), '사용자')
+    await user.click(screen.getByRole('button', { name: '검색' }))
+
+    expect(await screen.findByText('공개 사용자')).toBeInTheDocument()
+    expect(screen.getByText('이미 팔로우 중인 비공개 사용자')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '언팔로우' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '팔로우' }))
+    expect((await screen.findAllByRole('button', { name: '언팔로우' })).length).toBe(2)
   })
 
   it('streams a chat reply through the live session flow', async () => {

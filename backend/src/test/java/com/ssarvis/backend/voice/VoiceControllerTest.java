@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
 import com.ssarvis.backend.access.AssetListScope;
+import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import java.time.Instant;
@@ -44,7 +45,7 @@ class VoiceControllerTest {
                         .param("scope", "public")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].registeredVoiceId").value(5))
@@ -62,7 +63,7 @@ class VoiceControllerTest {
                         .param("scope", "friend")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].registeredVoiceId").value(6))
@@ -88,7 +89,7 @@ class VoiceControllerTest {
                         .file(sample)
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.voiceId").value("voice-provider-1"))
@@ -109,7 +110,7 @@ class VoiceControllerTest {
                         .file(sample)
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Voice sample file is required."));
@@ -123,7 +124,7 @@ class VoiceControllerTest {
         mockMvc.perform(patch("/api/voices/5/visibility")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         )
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                         .content("""

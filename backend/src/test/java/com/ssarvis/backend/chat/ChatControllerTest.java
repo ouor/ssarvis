@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ssarvis.backend.api.GlobalExceptionHandler;
+import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import java.time.Instant;
@@ -41,7 +42,7 @@ class ChatControllerTest {
         mockMvc.perform(get("/api/chat/conversations")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].conversationId").value(41))
@@ -66,7 +67,7 @@ class ChatControllerTest {
         mockMvc.perform(get("/api/chat/conversations/41")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         ))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.conversationId").value(41))
@@ -88,7 +89,7 @@ class ChatControllerTest {
         mockMvc.perform(post("/api/chat/messages")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -110,7 +111,7 @@ class ChatControllerTest {
         mockMvc.perform(post("/api/chat/messages")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -132,7 +133,7 @@ class ChatControllerTest {
         mockMvc.perform(post("/api/chat/messages")
                         .requestAttr(
                                 JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE,
-                                new AuthenticatedUser(1L, "haru", "하루")
+                                new AuthenticatedUser(1L, "haru", "하루", AccountVisibility.PUBLIC)
                         )
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
