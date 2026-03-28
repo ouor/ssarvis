@@ -513,6 +513,143 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(screen.getByDisplayValue('새 이름')).toBeInTheDocument()
   })
 
+  it('opens another user profile from search and shows posts with inline actions', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (
+        url.includes('/api/clones?scope=mine')
+        || url.includes('/api/clones?scope=friend')
+        || url.includes('/api/clones?scope=public')
+        || url.includes('/api/voices?scope=mine')
+        || url.includes('/api/voices?scope=friend')
+        || url.includes('/api/voices?scope=public')
+      ) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/follows/users/search')) {
+        return jsonResponse([
+          {
+            userId: 22,
+            username: 'miso',
+            displayName: '미소',
+            visibility: 'PUBLIC',
+            following: false,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/profiles/22')) {
+        return jsonResponse({
+          userId: 22,
+          username: 'miso',
+          displayName: '미소',
+          visibility: 'PUBLIC',
+          me: false,
+          following: false,
+        })
+      }
+
+      if (url.endsWith('/api/profiles/22/posts')) {
+        return jsonResponse([
+          {
+            postId: 301,
+            ownerUserId: 22,
+            ownerUsername: 'miso',
+            ownerDisplayName: '미소',
+            ownerVisibility: 'PUBLIC',
+            content: '미소의 첫 게시물',
+            createdAt: '2026-03-28T00:00:00Z',
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/follows/22') && init?.method === 'POST') {
+        return jsonResponse({
+          userId: 22,
+          username: 'miso',
+          displayName: '미소',
+          visibility: 'PUBLIC',
+          following: true,
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads') && init?.method === 'POST') {
+        expect(String(init?.body)).toContain('"targetUserId":22')
+        return jsonResponse({
+          threadId: 88,
+          otherParticipant: {
+            userId: 22,
+            username: 'miso',
+            displayName: '미소',
+            visibility: 'PUBLIC',
+          },
+          createdAt: '2026-03-28T00:00:00Z',
+          messages: [],
+          hiddenBundleMessageIds: [],
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads') && (!init?.method || init.method === 'GET')) {
+        return jsonResponse([
+          {
+            threadId: 88,
+            otherParticipant: {
+              userId: 22,
+              username: 'miso',
+              displayName: '미소',
+              visibility: 'PUBLIC',
+            },
+            createdAt: '2026-03-28T00:00:00Z',
+            latestMessagePreview: '',
+            latestMessageCreatedAt: null,
+          },
+        ])
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 14, username: 'user14', displayName: '사용자14', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+    await user.type(screen.getByLabelText('사용자 검색'), '미소')
+    await user.click(screen.getByRole('button', { name: '검색' }))
+
+    expect(await screen.findByText('미소')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '프로필 보기' }))
+
+    expect(await screen.findByText('미소의 첫 게시물')).toBeInTheDocument()
+    expect(screen.getByText('검색 결과에서 바로 프로필과 게시물 탐색 흐름을 검증합니다.')).toBeInTheDocument()
+
+    await user.click(screen.getAllByRole('button', { name: '팔로우' })[1])
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: '언팔로우' }).length).toBeGreaterThan(0)
+    })
+
+    await user.click(screen.getAllByRole('button', { name: 'DM 시작' })[1])
+    expect(await screen.findByRole('button', { name: 'DM' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByText('아직 메시지가 없습니다. 첫 메시지를 보내보세요.')).toBeInTheDocument()
+  })
+
   it('opens debate setup directly from the profile persona panel', async () => {
     const user = userEvent.setup()
 

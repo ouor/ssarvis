@@ -84,6 +84,11 @@ type AutoReplySettings = {
   lastActivityAt?: string | null
 }
 
+type SearchProfileState = {
+  profile: UserProfile
+  posts: PostSummary[]
+}
+
 const shellTabs: Array<{ id: SnsShellTab; label: string; eyebrow: string; title: string; description: string }> = [
   {
     id: 'home',
@@ -140,6 +145,8 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
   const [searchResults, setSearchResults] = useState<FollowUserSummary[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
+  const [viewedProfile, setViewedProfile] = useState<SearchProfileState | null>(null)
+  const [viewedProfileLoading, setViewedProfileLoading] = useState(false)
   const [followActionUserId, setFollowActionUserId] = useState<number | null>(null)
   const [feedPosts, setFeedPosts] = useState<PostSummary[]>([])
   const [feedLoading, setFeedLoading] = useState(false)
@@ -283,10 +290,33 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
         '사용자 검색에 실패했습니다.',
       )
       setSearchResults(data)
+      setViewedProfile(null)
     } catch (error) {
       setSearchError(error instanceof Error ? error.message : '사용자 검색에 실패했습니다.')
     } finally {
       setSearchLoading(false)
+    }
+  }
+
+  async function handleOpenProfile(userId: number) {
+    setViewedProfileLoading(true)
+    setSearchError('')
+
+    try {
+      const [profileData, postsData] = await Promise.all([
+        fetchJsonOrThrow<UserProfile>(`${apiBaseUrl}/api/profiles/${userId}`, '프로필을 불러오지 못했습니다.'),
+        fetchJsonOrThrow<PostSummary[]>(`${apiBaseUrl}/api/profiles/${userId}/posts`, '게시물을 불러오지 못했습니다.'),
+      ])
+
+      setViewedProfile({
+        profile: profileData,
+        posts: postsData,
+      })
+    } catch (error) {
+      setViewedProfile(null)
+      setSearchError(error instanceof Error ? error.message : '프로필을 불러오지 못했습니다.')
+    } finally {
+      setViewedProfileLoading(false)
     }
   }
 
@@ -305,9 +335,29 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
         )
       }
 
+      const nextFollowing = !result.following
+      const shouldRemovePrivateProfile = result.visibility === 'PRIVATE' && !nextFollowing
+
       setSearchResults((current) =>
-        current.map((item) => (item.userId === result.userId ? { ...item, following: !result.following } : item)),
+        current
+          .map((item) => (item.userId === result.userId ? { ...item, following: nextFollowing } : item))
+          .filter((item) => !(item.userId === result.userId && shouldRemovePrivateProfile)),
       )
+      setViewedProfile((current) => {
+        if (!current || current.profile.userId !== result.userId) {
+          return current
+        }
+        if (shouldRemovePrivateProfile) {
+          return null
+        }
+        return {
+          ...current,
+          profile: {
+            ...current.profile,
+            following: nextFollowing,
+          },
+        }
+      })
     } catch (error) {
       setSearchError(error instanceof Error ? error.message : '팔로우 상태를 변경하지 못했습니다.')
     } finally {
@@ -921,6 +971,14 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                   <div className="sns-shell-search-actions">
                     <button
                       className="secondary-button"
+                      disabled={viewedProfileLoading}
+                      onClick={() => void handleOpenProfile(result.userId)}
+                      type="button"
+                    >
+                      {viewedProfileLoading && viewedProfile?.profile.userId === result.userId ? '불러오는 중...' : '프로필 보기'}
+                    </button>
+                    <button
+                      className="secondary-button"
                       disabled={followActionUserId === result.userId || result.visibility === 'PRIVATE' && !result.following}
                       onClick={() => void handleFollowToggle(result)}
                       type="button"
@@ -943,6 +1001,80 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                 <p className="sns-shell-muted">공개 계정 또는 이미 팔로우 중인 비공개 계정만 검색 결과에 표시됩니다.</p>
               ) : null}
             </section>
+
+            {viewedProfileLoading && !viewedProfile ? <p className="sns-shell-muted">프로필을 불러오는 중입니다.</p> : null}
+
+            {viewedProfile ? (
+              <section className="sns-shell-profile-card">
+                <header className="sns-shell-post-header">
+                  <div>
+                    <strong>{viewedProfile.profile.displayName}</strong>
+                    <p>
+                      @{viewedProfile.profile.username} · {viewedProfile.profile.visibility === 'PUBLIC' ? '공개 계정' : '비공개 계정'}
+                    </p>
+                  </div>
+                  <button className="secondary-button" onClick={() => setViewedProfile(null)} type="button">
+                    닫기
+                  </button>
+                </header>
+
+                <p className="sns-shell-muted">
+                  {viewedProfile.profile.visibility === 'PUBLIC'
+                    ? '누구나 프로필과 게시물을 볼 수 있고 DM을 보낼 수 있습니다.'
+                    : '이미 팔로우 중인 사용자만 이 비공개 프로필과 게시물을 볼 수 있습니다.'}
+                </p>
+
+                <div className="sns-shell-profile-actions">
+                  <button
+                    className="secondary-button"
+                    disabled={
+                      followActionUserId === viewedProfile.profile.userId
+                      || viewedProfile.profile.visibility === 'PRIVATE' && !viewedProfile.profile.following
+                    }
+                    onClick={() =>
+                      void handleFollowToggle({
+                        userId: viewedProfile.profile.userId,
+                        username: viewedProfile.profile.username,
+                        displayName: viewedProfile.profile.displayName,
+                        visibility: viewedProfile.profile.visibility,
+                        following: viewedProfile.profile.following,
+                      })
+                    }
+                    type="button"
+                  >
+                    {viewedProfile.profile.following
+                      ? '언팔로우'
+                      : viewedProfile.profile.visibility === 'PRIVATE'
+                        ? '팔로우 불가'
+                        : '팔로우'}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={dmActionUserId === viewedProfile.profile.userId}
+                    onClick={() => void handleStartDm(viewedProfile.profile.userId)}
+                    type="button"
+                  >
+                    {dmActionUserId === viewedProfile.profile.userId ? 'DM 여는 중...' : 'DM 시작'}
+                  </button>
+                </div>
+
+                <section className="sns-shell-post-list">
+                  <header className="sns-shell-post-header">
+                    <div>
+                      <strong>게시물</strong>
+                      <p>검색 결과에서 바로 프로필과 게시물 탐색 흐름을 검증합니다.</p>
+                    </div>
+                  </header>
+                  {viewedProfile.posts.map((post) => (
+                    <article className="sns-shell-post-card" key={post.postId}>
+                      <strong>{post.content}</strong>
+                      <span>{new Date(post.createdAt).toLocaleString('ko-KR')}</span>
+                    </article>
+                  ))}
+                  {viewedProfile.posts.length === 0 ? <p className="sns-shell-muted">아직 게시물이 없습니다.</p> : null}
+                </section>
+              </section>
+            ) : null}
           </section>
         ) : null}
 

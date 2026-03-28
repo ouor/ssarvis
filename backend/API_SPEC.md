@@ -260,6 +260,10 @@ Authorization: Bearer <access-token>
 }
 ```
 
+프론트 사용 흐름
+- `Search` 탭의 `프로필 보기`에서 이 API를 호출한다.
+- 일반적으로 같은 시점에 `GET /api/profiles/{profileUserId}/posts`도 함께 호출해 프로필 상세와 게시물 목록을 묶어 보여준다.
+
 ## GET `/api/follows`
 
 내가 현재 팔로우 중인 사용자 목록을 반환한다.

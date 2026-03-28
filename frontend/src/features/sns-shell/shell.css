@@ -210,6 +210,12 @@
   gap: 8px;
 }
 
+.sns-shell-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .sns-shell-dm-panel {
   display: flex;
   flex-direction: column;

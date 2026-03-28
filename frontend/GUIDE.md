@@ -18,6 +18,7 @@
   - 피드 조회
 - `Search`
   - 사용자 검색
+  - 타 사용자 프로필 보기
   - 팔로우
   - DM 시작
 - `DM`
@@ -102,6 +103,7 @@
 - `activeTab`
 - `profile`, `profileError`, `visibilityUpdating`
 - `searchQuery`, `searchResults`, `searchLoading`, `searchError`
+  - `viewedProfile`, `viewedProfileLoading`
 - `feedPosts`, `feedLoading`, `feedError`, `postDraft`, `postSubmitting`
 - `dmThreads`, `dmThreadsLoading`, `dmError`
 - `selectedThread`, `selectedThreadLoading`
@@ -117,6 +119,8 @@
 - `GET /api/profiles/me/auto-reply`
 - `PATCH /api/profiles/me/auto-reply`
 - `GET /api/follows/users/search`
+- `GET /api/profiles/{profileUserId}`
+- `GET /api/profiles/{profileUserId}/posts`
 - `POST /api/follows/{targetUserId}`
 - `DELETE /api/follows/{targetUserId}`
 - `GET /api/posts/feed`
@@ -133,6 +137,7 @@
 
 중요 포인트
 - `Search`에서 `DM 시작`을 누르면 즉시 `DM` 탭으로 이동한다.
+- `Search`에서 `프로필 보기`를 누르면 같은 탭 안에서 타 사용자 프로필 요약과 게시물 목록을 펼친다.
 - `DM` 탭은 사람 간 DM 전용이다.
 - 서버가 조건을 만족하면 `DM` 탭 메시지 사이에 AI 프록시 응답이 함께 내려온다.
 - AI 묶음 숨김은 `selectedThread.hiddenBundleMessageIds`를 기준으로 현재 사용자 화면에만 적용한다.
@@ -286,6 +291,7 @@ DM 응답에서 꼭 알아둘 필드
 - `loadMyPosts()`
 - `handlePostSubmit(event)`
 - `handleVisibilityChange(nextVisibility)`
+ - `handleOpenProfile(userId)`
 
 프로필 편집 관련 함수
 - `handleProfileSubmit(event)`
@@ -294,6 +300,7 @@ DM 응답에서 꼭 알아둘 필드
 - `Home` 탭 첫 진입 시 피드를 1회 로드한다.
 - `Profile` 탭에서 `PATCH /api/profiles/me`로 표시 이름을 저장한다.
 - `Profile` 탭에서 `내 게시물 불러오기` 버튼으로 내 게시물을 가져온다.
+- `Search` 탭에서 타 사용자 프로필을 열면 `GET /api/profiles/{id}`와 `GET /api/profiles/{id}/posts`를 함께 호출한다.
 - 게시물 작성 성공 시
   - `feedPosts` 앞에 prepend
   - `myPosts` 앞에 prepend
@@ -367,6 +374,8 @@ DM 응답에서 꼭 알아둘 필드
   - `/api/debates`
 - SNS 탭 테스트에는 추가로 아래가 들어간다.
   - `/api/follows/users/search`
+  - `/api/profiles/{id}`
+  - `/api/profiles/{id}/posts`
   - `/api/follows/{id}`
   - `/api/posts/feed`
   - `/api/posts`
