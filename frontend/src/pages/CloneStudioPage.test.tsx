@@ -679,6 +679,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
           },
           createdAt: '2026-03-28T00:00:00.000Z',
           messages: [],
+          hiddenBundleMessageIds: [],
         })
       }
 
@@ -707,8 +708,32 @@ describe('CloneStudioPage user-scoped data flow', () => {
           senderUserId: 16,
           senderDisplayName: '사용자16',
           aiGenerated: false,
+          bundleRootMessageId: null,
           content: '안녕하세요, 처음 메시지예요',
           createdAt: '2026-03-28T00:01:00.000Z',
+        })
+      }
+
+      if (url.endsWith('/api/dms/messages/402/tts') && init?.method === 'POST') {
+        return jsonResponse({
+          messageId: 402,
+          voiceId: 'voice-61',
+          audioMimeType: 'audio/wav',
+          audioBase64: 'UklGRg==',
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads/301/bundles/401/hide') && init?.method === 'POST') {
+        return jsonResponse({
+          bundleRootMessageId: 401,
+          hidden: true,
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads/301/bundles/401/hide') && init?.method === 'DELETE') {
+        return jsonResponse({
+          bundleRootMessageId: 401,
+          hidden: false,
         })
       }
 
@@ -729,6 +754,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
                   senderUserId: 16,
                   senderDisplayName: '사용자16',
                   aiGenerated: false,
+                  bundleRootMessageId: 401,
                   content: '안녕하세요, 처음 메시지예요',
                   createdAt: '2026-03-28T00:01:00.000Z',
                 },
@@ -737,11 +763,13 @@ describe('CloneStudioPage user-scoped data flow', () => {
                   senderUserId: 61,
                   senderDisplayName: '대화 상대',
                   aiGenerated: true,
+                  bundleRootMessageId: 401,
                   content: '지금 자리를 비워서 AI가 대신 답장하고 있어요.',
                   createdAt: '2026-03-28T00:01:10.000Z',
                 },
               ]
             : [],
+          hiddenBundleMessageIds: [],
         })
       }
 
@@ -772,6 +800,21 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(await screen.findByText('안녕하세요, 처음 메시지예요')).toBeInTheDocument()
     expect(await screen.findByText('지금 자리를 비워서 AI가 대신 답장하고 있어요.')).toBeInTheDocument()
     expect(screen.getByText('AI')).toBeInTheDocument()
+
+    const listenButtons = screen.getAllByRole('button', { name: '음성으로 듣기' })
+    await user.click(listenButtons[1])
+    await waitFor(() => {
+      expect(document.querySelector('audio')).not.toBeNull()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'AI 묶음 숨기기' }))
+    expect(await screen.findByText('숨긴 AI 응답 묶음')).toBeInTheDocument()
+    expect(screen.queryByText('지금 자리를 비워서 AI가 대신 답장하고 있어요.')).not.toBeInTheDocument()
+    expect(screen.queryByText('안녕하세요, 처음 메시지예요')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '다시 보기' }))
+    expect(await screen.findByText('안녕하세요, 처음 메시지예요')).toBeInTheDocument()
+    expect(screen.getByText('지금 자리를 비워서 AI가 대신 답장하고 있어요.')).toBeInTheDocument()
   })
 
   it('loads and updates auto reply settings in the Settings tab', async () => {

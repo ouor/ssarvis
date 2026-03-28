@@ -10,11 +10,14 @@ import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.voice.VoiceService;
+import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,31 +30,37 @@ public class DmService {
 
     private final DmThreadRepository dmThreadRepository;
     private final DmMessageRepository dmMessageRepository;
+    private final DmHiddenBundleRepository dmHiddenBundleRepository;
     private final AuthService authService;
     private final FollowRepository followRepository;
     private final PromptGenerationLogRepository promptGenerationLogRepository;
     private final OpenAiContextAssembler openAiContextAssembler;
     private final OpenAiClient openAiClient;
     private final AppProperties appProperties;
+    private final VoiceService voiceService;
 
     public DmService(
             DmThreadRepository dmThreadRepository,
             DmMessageRepository dmMessageRepository,
+            DmHiddenBundleRepository dmHiddenBundleRepository,
             AuthService authService,
             FollowRepository followRepository,
             PromptGenerationLogRepository promptGenerationLogRepository,
             OpenAiContextAssembler openAiContextAssembler,
             OpenAiClient openAiClient,
-            AppProperties appProperties
+            AppProperties appProperties,
+            VoiceService voiceService
     ) {
         this.dmThreadRepository = dmThreadRepository;
         this.dmMessageRepository = dmMessageRepository;
+        this.dmHiddenBundleRepository = dmHiddenBundleRepository;
         this.authService = authService;
         this.followRepository = followRepository;
         this.promptGenerationLogRepository = promptGenerationLogRepository;
         this.openAiContextAssembler = openAiContextAssembler;
         this.openAiClient = openAiClient;
         this.appProperties = appProperties;
+        this.voiceService = voiceService;
     }
 
     @Transactional
@@ -101,8 +110,47 @@ public class DmService {
         UserAccount sender = authService.getActiveUserAccount(currentUserId);
         DmThread thread = getAccessibleThread(currentUserId, threadId);
         DmMessage message = dmMessageRepository.save(new DmMessage(thread, sender, request.content().trim()));
-        maybeCreateAutoReply(thread, sender);
+        maybeCreateAutoReply(thread, sender, message);
         return toMessage(message);
+    }
+
+    @Transactional
+    public DmBundleVisibilityResponse hideBundle(Long currentUserId, Long threadId, Long bundleRootMessageId) {
+        UserAccount viewer = authService.getActiveUserAccount(currentUserId);
+        DmThread thread = getAccessibleThread(currentUserId, threadId);
+        DmMessage bundleRootMessage = getHideableBundleRoot(threadId, bundleRootMessageId);
+
+        if (!dmHiddenBundleRepository.existsByViewerIdAndBundleRootMessageId(currentUserId, bundleRootMessageId)) {
+            dmHiddenBundleRepository.save(new DmHiddenBundle(viewer, thread, bundleRootMessage));
+        }
+
+        return new DmBundleVisibilityResponse(bundleRootMessageId, true);
+    }
+
+    @Transactional
+    public DmBundleVisibilityResponse showBundle(Long currentUserId, Long threadId, Long bundleRootMessageId) {
+        authService.getActiveUserAccount(currentUserId);
+        getAccessibleThread(currentUserId, threadId);
+        getHideableBundleRoot(threadId, bundleRootMessageId);
+        dmHiddenBundleRepository.deleteByViewerIdAndBundleRootMessageId(currentUserId, bundleRootMessageId);
+        return new DmBundleVisibilityResponse(bundleRootMessageId, false);
+    }
+
+    @Transactional(readOnly = true)
+    public DmMessageAudioResponse synthesizeMessageAudio(Long currentUserId, Long messageId) {
+        authService.getActiveUserAccount(currentUserId);
+        DmMessage message = dmMessageRepository.findById(messageId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DM message not found."));
+        if (!message.getThread().involves(currentUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot access this DM message.");
+        }
+
+        VoiceSynthesisResult result = voiceService.synthesizeDirectMessageText(message.getContent(), message.getSender().getId());
+        if (result == null || !StringUtils.hasText(result.audioBase64())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "This message does not have a playable voice yet.");
+        }
+
+        return new DmMessageAudioResponse(message.getId(), result.voiceId(), result.audioMimeType(), result.audioBase64());
     }
 
     private void validateDmStartAllowed(Long currentUserId, UserAccount targetUser) {
@@ -140,26 +188,48 @@ public class DmService {
     }
 
     private DmThreadDetailResponse toDetail(Long currentUserId, DmThread thread, List<DmMessage> messages) {
+        Set<Long> hiddenBundleMessageIds = dmHiddenBundleRepository.findAllByViewerIdAndThreadIdOrderByIdAsc(currentUserId, thread.getId()).stream()
+                .map(hiddenBundle -> hiddenBundle.getBundleRootMessage().getId())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+
         return new DmThreadDetailResponse(
                 thread.getId(),
                 toParticipant(thread.otherParticipant(currentUserId)),
                 thread.getCreatedAt(),
-                messages.stream().map(this::toMessage).toList()
+                messages.stream().map(message -> toMessage(message, messages)).toList(),
+                List.copyOf(hiddenBundleMessageIds)
         );
     }
 
     private DmMessageResponse toMessage(DmMessage message) {
+        return toMessage(message, List.of(message));
+    }
+
+    private DmMessageResponse toMessage(DmMessage message, List<DmMessage> threadMessages) {
+        Set<Long> triggerMessageIds = threadMessages.stream()
+                .filter(candidate -> candidate.getKind() == DmMessageKind.AI_PROXY && candidate.getTriggerMessage() != null)
+                .map(candidate -> candidate.getTriggerMessage().getId())
+                .collect(java.util.stream.Collectors.toSet());
+
+        Long bundleRootMessageId = null;
+        if (message.getKind() == DmMessageKind.AI_PROXY && message.getTriggerMessage() != null) {
+            bundleRootMessageId = message.getTriggerMessage().getId();
+        } else if (triggerMessageIds.contains(message.getId())) {
+            bundleRootMessageId = message.getId();
+        }
+
         return new DmMessageResponse(
                 message.getId(),
                 message.getSender().getId(),
                 message.getSender().getDisplayName(),
                 message.getKind() == DmMessageKind.AI_PROXY,
+                bundleRootMessageId,
                 message.getContent(),
                 message.getCreatedAt()
         );
     }
 
-    private void maybeCreateAutoReply(DmThread thread, UserAccount sender) {
+    private void maybeCreateAutoReply(DmThread thread, UserAccount sender, DmMessage triggeringMessage) {
         UserAccount recipient = thread.otherParticipant(sender.getId());
         if (!shouldAutoReply(recipient)) {
             return;
@@ -183,7 +253,21 @@ public class DmService {
             return;
         }
 
-        dmMessageRepository.save(new DmMessage(thread, recipient, reply.trim(), DmMessageKind.AI_PROXY));
+        dmMessageRepository.save(new DmMessage(thread, recipient, reply.trim(), DmMessageKind.AI_PROXY, triggeringMessage));
+    }
+
+    private DmMessage getHideableBundleRoot(Long threadId, Long bundleRootMessageId) {
+        DmMessage bundleRootMessage = dmMessageRepository.findByIdAndThreadId(bundleRootMessageId, threadId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DM bundle root message not found."));
+
+        if (bundleRootMessage.getKind() != DmMessageKind.HUMAN) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only human trigger messages can be hidden as AI bundles.");
+        }
+        if (!dmMessageRepository.existsByThreadIdAndKindAndTriggerMessageId(threadId, DmMessageKind.AI_PROXY, bundleRootMessageId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This message is not the root of an AI reply bundle.");
+        }
+
+        return bundleRootMessage;
     }
 
     private boolean shouldAutoReply(UserAccount recipient) {

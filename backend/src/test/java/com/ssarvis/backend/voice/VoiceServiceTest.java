@@ -158,6 +158,28 @@ class VoiceServiceTest {
         assertThat(String.join(" ", chunks)).contains("첫 문장은 조금 길게 작성합니다.");
     }
 
+    @Test
+    void synthesizeDirectMessageTextUsesLatestVoiceOfOwner() throws Exception {
+        UserAccount owner = assignId(new UserAccount("miso", "hashed", "미소"), 2L);
+        RegisteredVoice voice = assignId(
+                new RegisteredVoice(owner, "voice-miso", "current-model", "misovoice", "미소 보이스", "miso.wav", "audio/wav"),
+                18L
+        );
+        DashscopeVoiceClient.DashscopeSynthesisResult synthesisResult =
+                new DashscopeVoiceClient.DashscopeSynthesisResult(new byte[] {1, 2, 3, 4}, "audio/wav");
+
+        given(registeredVoiceRepository.findTopByUserIdOrderByIdDesc(2L)).willReturn(Optional.of(voice));
+        given(dashscopeVoiceClient.synthesize(any(), any(), any(), any())).willReturn(synthesisResult);
+        given(audioStorageService.storeDashscopeAudio(any(), any(), any(), any())).willReturn(null);
+
+        VoiceSynthesisResult result = voiceService.synthesizeDirectMessageText("DM 음성으로 들려주기", 2L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.voiceId()).isEqualTo("voice-miso");
+        assertThat(result.audioMimeType()).isEqualTo("audio/wav");
+        assertThat(result.audioBase64()).isNotBlank();
+    }
+
     private UserAccount assignId(UserAccount userAccount, Long id) {
         try {
             java.lang.reflect.Field idField = UserAccount.class.getDeclaredField("id");

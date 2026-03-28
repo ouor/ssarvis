@@ -29,7 +29,7 @@
   - 내 AI 프로필 자산 요약
   - 레거시 클론 스튜디오 작업공간
 - `Settings`
-  - 아직 플레이스홀더
+  - 자동응답 설정
 
 중요 포인트
 - 메인 내비게이션은 이미 SNS 중심이다.
@@ -103,6 +103,8 @@
 - `dmThreads`, `dmThreadsLoading`, `dmError`
 - `selectedThread`, `selectedThreadLoading`
 - `dmDraft`, `dmSubmitting`
+- `dmBundleUpdatingId`
+- `dmAudioLoadingMessageId`, `dmAudioError`, `dmAudioSources`
 
 현재 연결된 SNS API
 - `GET /api/profiles/me`
@@ -120,11 +122,16 @@
 - `POST /api/dms/threads`
 - `GET /api/dms/threads/{threadId}`
 - `POST /api/dms/threads/{threadId}/messages`
+- `POST /api/dms/threads/{threadId}/bundles/{bundleRootMessageId}/hide`
+- `DELETE /api/dms/threads/{threadId}/bundles/{bundleRootMessageId}/hide`
+- `POST /api/dms/messages/{messageId}/tts`
 
 중요 포인트
 - `Search`에서 `DM 시작`을 누르면 즉시 `DM` 탭으로 이동한다.
 - `DM` 탭은 사람 간 DM 전용이다.
 - 서버가 조건을 만족하면 `DM` 탭 메시지 사이에 AI 프록시 응답이 함께 내려온다.
+- AI 묶음 숨김은 `selectedThread.hiddenBundleMessageIds`를 기준으로 현재 사용자 화면에만 적용한다.
+- 텍스트 DM은 클릭 시 개별 메시지 기준으로 TTS를 가져와 `<audio>`로 재생한다.
 
 ## 5. Profile 탭의 이중 구조
 
@@ -204,6 +211,21 @@
 - 같은 이름이 DM 목록과 상세 헤더에 동시에 나타날 수 있다.
 - 테스트에서 `getByText`보다 `getAllByText`가 더 안전한 경우가 있다.
 - AI 응답은 `aiGenerated` 플래그로 구분하고, UI에서는 `AI` 배지를 붙인다.
+- AI 숨김은 `bundleRootMessageId`로 묶음을 판단한다.
+- 숨긴 뒤에도 메시지 원본은 서버에 남고, 현재 사용자 UI에서만 가려진다.
+
+추가 함수
+- `handleBundleVisibilityChange(bundleRootMessageId, hidden)`
+- `handlePlayMessageAudio(message)`
+- `renderDmTimeline(thread)`
+
+DM 응답에서 꼭 알아둘 필드
+- `bundleRootMessageId`
+  - AI 묶음에 속하지 않으면 `null`
+  - 유발한 사람 메시지는 자기 자신의 `messageId`
+  - 해당 AI 응답은 그 사람 메시지의 `messageId`
+- `hiddenBundleMessageIds`
+  - 현재 사용자 기준으로 숨긴 묶음 루트 id 목록
 
 ## 8. Settings 탭과 자동응답
 
@@ -326,10 +348,13 @@
   - `/api/dms/threads`
   - `/api/dms/threads/{id}`
   - `/api/dms/threads/{id}/messages`
+  - `/api/dms/threads/{id}/bundles/{bundleRootMessageId}/hide`
+  - `/api/dms/messages/{id}/tts`
 
 선택자 팁
 - 같은 텍스트가 프로필 요약 패널과 카드에 동시에 보일 수 있다.
 - 같은 이름이 DM 목록과 DM 상세 헤더에 동시에 보일 수 있다.
+- `음성으로 듣기` 버튼은 DM 메시지마다 반복될 수 있다.
 - 이런 경우 `getAllByText(...)`, `findAllByText(...)`, 더 좁은 `closest(...)` 사용이 안전하다.
 
 ## 13. 유지보수 원칙
@@ -340,6 +365,7 @@
 - 사람이 주체인 DM과 클론 체험용 채팅은 도메인을 섞지 않는다.
 - “내 대표 클론/보이스 1개” 정책을 깨는 UI는 만들지 않는다.
 - 자동응답 판정은 프론트가 아니라 서버 정책에 맡긴다.
+- AI 묶음 숨김은 UI 상태처럼 보여도 서버 저장 상태를 따른다.
 - 문서와 테스트에서 메인 제품 흐름과 레거시 작업공간을 명시적으로 구분한다.
 
 ## 14. 빠른 체크리스트
@@ -361,5 +387,11 @@
   - `PATCH /api/profiles/me/visibility` 응답이 `profile` 상태에 반영되는지 확인
 - 자동응답 토글 후 UI가 안 바뀐다
   - `PATCH /api/profiles/me/auto-reply` 응답이 `autoReplySettings` 상태에 반영되는지 확인
+- DM에서 AI 묶음 숨김이 안 된다
+  - 대상 메시지에 `bundleRootMessageId`가 내려오는지 확인
+  - `/api/dms/threads/{id}/bundles/{bundleRootMessageId}/hide` 응답 코드를 확인
+- DM 메시지 음성이 안 들린다
+  - `/api/dms/messages/{id}/tts` 응답이 `audioBase64`를 주는지 확인
+  - 발화자 대표 보이스가 없는 메시지인지 확인
 - 테스트가 텍스트 중복으로 깨진다
   - `getByText` 대신 `getAllByText`로 바꿀 후보인지 먼저 확인

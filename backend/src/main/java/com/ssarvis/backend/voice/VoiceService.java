@@ -172,6 +172,28 @@ public class VoiceService {
         }
 
         RegisteredVoice voice = voiceAccessPolicy.getUsableVoice(userId, registeredVoiceId);
+        return synthesizeWithVoice(text, voice, dashscope);
+    }
+
+    public VoiceSynthesisResult synthesizeDirectMessageText(String text, Long voiceOwnerUserId) {
+        if (!StringUtils.hasText(text) || voiceOwnerUserId == null) {
+            return null;
+        }
+
+        AppProperties.Dashscope dashscope = appProperties.getDashscope();
+        if (!StringUtils.hasText(dashscope.getApiKey())) {
+            return null;
+        }
+
+        RegisteredVoice voice = registeredVoiceRepository.findTopByUserIdOrderByIdDesc(voiceOwnerUserId).orElse(null);
+        if (voice == null) {
+            return null;
+        }
+
+        return synthesizeWithVoice(text, voice, dashscope);
+    }
+
+    private VoiceSynthesisResult synthesizeWithVoice(String text, RegisteredVoice voice, AppProperties.Dashscope dashscope) {
         validateVoiceCompatibility(voice);
 
         try {

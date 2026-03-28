@@ -7,6 +7,7 @@ public record DmMessageResponse(
         Long senderUserId,
         String senderDisplayName,
         boolean aiGenerated,
+        Long bundleRootMessageId,
         String content,
         Instant createdAt
 ) {

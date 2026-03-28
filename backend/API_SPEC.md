@@ -402,7 +402,8 @@ Query Parameter
     "visibility": "PUBLIC"
   },
   "createdAt": "2026-03-28T00:00:00Z",
-  "messages": []
+  "messages": [],
+  "hiddenBundleMessageIds": []
 }
 ```
 
@@ -455,10 +456,13 @@ Query Parameter
       "messageId": 30,
       "senderUserId": 1,
       "senderDisplayName": "하루",
+      "aiGenerated": false,
+      "bundleRootMessageId": null,
       "content": "안녕!",
       "createdAt": "2026-03-28T00:01:00Z"
     }
-  ]
+  ],
+  "hiddenBundleMessageIds": [30]
 }
 ```
 
@@ -481,6 +485,8 @@ Query Parameter
   "messageId": 30,
   "senderUserId": 1,
   "senderDisplayName": "하루",
+  "aiGenerated": false,
+  "bundleRootMessageId": null,
   "content": "안녕!",
   "createdAt": "2026-03-28T00:01:00Z"
 }
@@ -500,10 +506,72 @@ Query Parameter
   "senderUserId": 2,
   "senderDisplayName": "미소",
   "aiGenerated": true,
+  "bundleRootMessageId": 29,
   "content": "지금은 잠깐 자리를 비웠어요.",
   "createdAt": "2026-03-28T00:01:10Z"
 }
 ```
+
+메시지 필드 의미
+- `aiGenerated`
+  - `true`면 사용자 대리 AI가 보낸 메시지다.
+- `bundleRootMessageId`
+  - AI 응답 묶음에 속하지 않은 일반 메시지는 `null`
+  - AI 응답을 유발한 사람 메시지는 자기 자신의 `messageId`
+  - 해당 AI 응답은 그 사람 메시지의 `messageId`
+- `hiddenBundleMessageIds`
+  - 현재 로그인한 사용자 기준으로 숨겨 둔 AI 응답 묶음 루트 메시지 id 목록이다.
+
+## POST `/api/dms/threads/{threadId}/bundles/{bundleRootMessageId}/hide`
+
+현재 사용자 기준으로 `유발 메시지 + AI 응답` 묶음을 숨긴다.
+
+### Success Response
+
+```json
+{
+  "bundleRootMessageId": 30,
+  "hidden": true
+}
+```
+
+규칙
+- 숨김은 메시지 삭제가 아니라 개인 UI 가시성 상태 저장이다.
+- 숨길 수 있는 대상은 AI 응답을 실제로 유발한 사람 메시지뿐이다.
+- 상대방 화면에는 영향을 주지 않는다.
+
+## DELETE `/api/dms/threads/{threadId}/bundles/{bundleRootMessageId}/hide`
+
+현재 사용자 기준으로 숨긴 AI 응답 묶음을 다시 표시한다.
+
+### Success Response
+
+```json
+{
+  "bundleRootMessageId": 30,
+  "hidden": false
+}
+```
+
+## POST `/api/dms/messages/{messageId}/tts`
+
+지정한 DM 텍스트 메시지를 발화자의 대표 보이스로 합성한다.
+
+### Success Response
+
+```json
+{
+  "messageId": 30,
+  "voiceId": "voice-demo",
+  "audioMimeType": "audio/wav",
+  "audioBase64": "UklGRg=="
+}
+```
+
+규칙
+- DM 참여자만 해당 메시지 음성에 접근할 수 있다.
+- 발화자에게 대표 보이스가 없으면 `404 Not Found`가 반환될 수 있다.
+- 이 API는 텍스트 DM 청취용이며, 메시지 원문 자체는 수정하지 않는다.
 
 ## 8. Clone APIs For Profile Workspace
 

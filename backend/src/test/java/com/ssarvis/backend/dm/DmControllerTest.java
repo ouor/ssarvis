@@ -3,6 +3,7 @@ package com.ssarvis.backend.dm;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -70,7 +71,7 @@ class DmControllerTest {
     @Test
     void sendMessageReturnsCreatedMessage() throws Exception {
         given(dmService.sendMessage(1L, 10L, new DmSendMessageRequest("안녕!"))).willReturn(
-                new DmMessageResponse(30L, 1L, "하루", false, "안녕!", Instant.parse("2026-03-28T00:01:00Z"))
+                new DmMessageResponse(30L, 1L, "하루", false, null, "안녕!", Instant.parse("2026-03-28T00:01:00Z"))
         );
 
         mockMvc.perform(post("/api/dms/threads/10/messages")
@@ -85,6 +86,40 @@ class DmControllerTest {
                 .andExpect(jsonPath("$.messageId").value(30))
                 .andExpect(jsonPath("$.senderUserId").value(1))
                 .andExpect(jsonPath("$.aiGenerated").value(false));
+    }
+
+    @Test
+    void hideBundleReturnsVisibilityState() throws Exception {
+        given(dmService.hideBundle(1L, 10L, 30L)).willReturn(new DmBundleVisibilityResponse(30L, true));
+
+        mockMvc.perform(post("/api/dms/threads/10/bundles/30/hide")
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, authUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bundleRootMessageId").value(30))
+                .andExpect(jsonPath("$.hidden").value(true));
+    }
+
+    @Test
+    void showBundleReturnsVisibilityState() throws Exception {
+        given(dmService.showBundle(1L, 10L, 30L)).willReturn(new DmBundleVisibilityResponse(30L, false));
+
+        mockMvc.perform(delete("/api/dms/threads/10/bundles/30/hide")
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, authUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hidden").value(false));
+    }
+
+    @Test
+    void synthesizeMessageAudioReturnsPlayablePayload() throws Exception {
+        given(dmService.synthesizeMessageAudio(1L, 30L)).willReturn(new DmMessageAudioResponse(30L, "voice-demo", "audio/wav", "UklGRg=="));
+
+        mockMvc.perform(post("/api/dms/messages/30/tts")
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, authUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messageId").value(30))
+                .andExpect(jsonPath("$.voiceId").value("voice-demo"))
+                .andExpect(jsonPath("$.audioMimeType").value("audio/wav"))
+                .andExpect(jsonPath("$.audioBase64").value("UklGRg=="));
     }
 
     private AuthenticatedUser authUser() {
@@ -106,7 +141,8 @@ class DmControllerTest {
                 10L,
                 new DmParticipantResponse(2L, "miso", "미소", AccountVisibility.PUBLIC),
                 Instant.parse("2026-03-28T00:00:00Z"),
-                List.of(new DmMessageResponse(30L, 1L, "하루", false, "안녕!", Instant.parse("2026-03-28T00:01:00Z")))
+                List.of(new DmMessageResponse(30L, 1L, "하루", false, null, "안녕!", Instant.parse("2026-03-28T00:01:00Z"))),
+                List.of()
         );
     }
 }

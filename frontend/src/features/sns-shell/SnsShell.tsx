@@ -55,6 +55,7 @@ type DmMessage = {
   senderUserId: number
   senderDisplayName: string
   aiGenerated: boolean
+  bundleRootMessageId?: number | null
   content: string
   createdAt: string
 }
@@ -64,6 +65,7 @@ type DmThreadDetail = {
   otherParticipant: DmParticipant
   createdAt: string
   messages: DmMessage[]
+  hiddenBundleMessageIds: number[]
 }
 
 type SnsShellProps = {
@@ -151,6 +153,10 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
   const [dmDraft, setDmDraft] = useState('')
   const [dmSubmitting, setDmSubmitting] = useState(false)
   const [dmActionUserId, setDmActionUserId] = useState<number | null>(null)
+  const [dmBundleUpdatingId, setDmBundleUpdatingId] = useState<number | null>(null)
+  const [dmAudioLoadingMessageId, setDmAudioLoadingMessageId] = useState<number | null>(null)
+  const [dmAudioError, setDmAudioError] = useState('')
+  const [dmAudioSources, setDmAudioSources] = useState<Record<number, string>>({})
   const [autoReplySettings, setAutoReplySettings] = useState<AutoReplySettings>({ mode: 'OFF', lastActivityAt: null })
   const [autoReplyLoading, setAutoReplyLoading] = useState(false)
   const [autoReplyUpdating, setAutoReplyUpdating] = useState(false)
@@ -308,6 +314,8 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
       const thread: DmThreadDetail = await response.json()
       setSelectedThread(thread)
       setDmDraft('')
+      setDmAudioSources({})
+      setDmAudioError('')
       setActiveTab('dm')
       await loadDmThreads()
     } catch (error) {
@@ -325,6 +333,7 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
       const data = await fetchJsonOrThrow<DmThreadDetail>(`${apiBaseUrl}/api/dms/threads/${threadId}`, 'DM을 불러오지 못했습니다.')
       setSelectedThread(data)
       setDmDraft('')
+      setDmAudioError('')
     } catch (error) {
       setDmError(error instanceof Error ? error.message : 'DM을 불러오지 못했습니다.')
     } finally {
@@ -363,12 +372,82 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
           : current,
       )
       setDmDraft('')
+      setDmAudioError('')
       await handleOpenThread(selectedThread.threadId)
       await loadDmThreads()
     } catch (error) {
       setDmError(error instanceof Error ? error.message : '메시지를 보내지 못했습니다.')
     } finally {
       setDmSubmitting(false)
+    }
+  }
+
+  async function handleBundleVisibilityChange(bundleRootMessageId: number, hidden: boolean) {
+    if (!selectedThread) {
+      return
+    }
+
+    setDmBundleUpdatingId(bundleRootMessageId)
+    setDmError('')
+
+    try {
+      const response = await apiFetch(
+        `${apiBaseUrl}/api/dms/threads/${selectedThread.threadId}/bundles/${bundleRootMessageId}/hide`,
+        { method: hidden ? 'POST' : 'DELETE' },
+      )
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, hidden ? 'AI 응답 묶음을 숨기지 못했습니다.' : 'AI 응답 묶음을 다시 표시하지 못했습니다.'))
+      }
+
+      setSelectedThread((current) => {
+        if (!current) {
+          return current
+        }
+
+        const nextHiddenBundleMessageIds = hidden
+          ? Array.from(new Set([...current.hiddenBundleMessageIds, bundleRootMessageId]))
+          : current.hiddenBundleMessageIds.filter((messageId) => messageId !== bundleRootMessageId)
+
+        return {
+          ...current,
+          hiddenBundleMessageIds: nextHiddenBundleMessageIds,
+        }
+      })
+    } catch (error) {
+      setDmError(error instanceof Error ? error.message : hidden ? 'AI 응답 묶음을 숨기지 못했습니다.' : 'AI 응답 묶음을 다시 표시하지 못했습니다.')
+    } finally {
+      setDmBundleUpdatingId(null)
+    }
+  }
+
+  async function handlePlayMessageAudio(message: DmMessage) {
+    const existingAudioSource = dmAudioSources[message.messageId]
+    if (existingAudioSource) {
+      return
+    }
+
+    setDmAudioLoadingMessageId(message.messageId)
+    setDmAudioError('')
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/dms/messages/${message.messageId}/tts`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '메시지 음성을 불러오지 못했습니다.'))
+      }
+
+      const payload: { audioMimeType: string; audioBase64: string } = await response.json()
+      setDmAudioSources((current) => ({
+        ...current,
+        [message.messageId]: `data:${payload.audioMimeType};base64,${payload.audioBase64}`,
+      }))
+    } catch (error) {
+      setDmAudioError(error instanceof Error ? error.message : '메시지 음성을 불러오지 못했습니다.')
+    } finally {
+      setDmAudioLoadingMessageId(null)
     }
   }
 
@@ -463,6 +542,82 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
     } finally {
       setPostSubmitting(false)
     }
+  }
+
+  function renderDmMessage(message: DmMessage) {
+    const audioSource = dmAudioSources[message.messageId]
+
+    return (
+      <article
+        className={`sns-shell-dm-message ${message.senderUserId === currentUser.userId ? 'sns-shell-dm-message-mine' : ''} ${message.aiGenerated ? 'sns-shell-dm-message-ai' : ''}`}
+        key={message.messageId}
+      >
+        <div className="sns-shell-dm-message-header">
+          <strong>{message.senderDisplayName}</strong>
+          <div className="sns-shell-dm-message-tools">
+            {message.aiGenerated ? <span className="sns-shell-ai-badge">AI</span> : null}
+            <button
+              className="secondary-button"
+              disabled={dmAudioLoadingMessageId === message.messageId}
+              onClick={() => void handlePlayMessageAudio(message)}
+              type="button"
+            >
+              {dmAudioLoadingMessageId === message.messageId ? '음성 준비 중...' : '음성으로 듣기'}
+            </button>
+            {message.aiGenerated && message.bundleRootMessageId ? (
+              <button
+                className="secondary-button"
+                disabled={dmBundleUpdatingId === message.bundleRootMessageId}
+                onClick={() => void handleBundleVisibilityChange(message.bundleRootMessageId!, true)}
+                type="button"
+              >
+                {dmBundleUpdatingId === message.bundleRootMessageId ? '숨기는 중...' : 'AI 묶음 숨기기'}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        <p>{message.content}</p>
+        {audioSource ? <audio controls src={audioSource} /> : null}
+      </article>
+    )
+  }
+
+  function renderHiddenBundle(bundleRootMessageId: number) {
+    return (
+      <article className="sns-shell-dm-hidden-bundle" key={`hidden-${bundleRootMessageId}`}>
+        <div>
+          <strong>숨긴 AI 응답 묶음</strong>
+          <p>이 메시지와 그에 대한 AI 응답은 현재 내 화면에서만 숨겨져 있습니다.</p>
+        </div>
+        <button
+          className="secondary-button"
+          disabled={dmBundleUpdatingId === bundleRootMessageId}
+          onClick={() => void handleBundleVisibilityChange(bundleRootMessageId, false)}
+          type="button"
+        >
+          {dmBundleUpdatingId === bundleRootMessageId ? '다시 불러오는 중...' : '다시 보기'}
+        </button>
+      </article>
+    )
+  }
+
+  function renderDmTimeline(thread: DmThreadDetail) {
+    const hiddenBundleMessageIds = new Set(thread.hiddenBundleMessageIds)
+    const renderedHiddenBundles = new Set<number>()
+
+    return thread.messages.map((message) => {
+      const bundleRootMessageId = message.bundleRootMessageId ?? null
+
+      if (bundleRootMessageId && hiddenBundleMessageIds.has(bundleRootMessageId)) {
+        if (renderedHiddenBundles.has(bundleRootMessageId) || message.messageId !== bundleRootMessageId) {
+          return null
+        }
+        renderedHiddenBundles.add(bundleRootMessageId)
+        return renderHiddenBundle(bundleRootMessageId)
+      }
+
+      return renderDmMessage(message)
+    })
   }
 
   return (
@@ -694,19 +849,9 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                       <strong>{selectedThread.otherParticipant.displayName}</strong>
                       <span>@{selectedThread.otherParticipant.username}</span>
                     </header>
+                    {dmAudioError ? <p className="auth-error">{dmAudioError}</p> : null}
                     <section className="sns-shell-dm-messages">
-                      {selectedThread.messages.map((message) => (
-                        <article
-                          className={`sns-shell-dm-message ${message.senderUserId === currentUser.userId ? 'sns-shell-dm-message-mine' : ''} ${message.aiGenerated ? 'sns-shell-dm-message-ai' : ''}`}
-                          key={message.messageId}
-                        >
-                          <div className="sns-shell-dm-message-header">
-                            <strong>{message.senderDisplayName}</strong>
-                            {message.aiGenerated ? <span className="sns-shell-ai-badge">AI</span> : null}
-                          </div>
-                          <p>{message.content}</p>
-                        </article>
-                      ))}
+                      {renderDmTimeline(selectedThread)}
                       {selectedThread.messages.length === 0 ? <p className="sns-shell-muted">아직 메시지가 없습니다. 첫 메시지를 보내보세요.</p> : null}
                     </section>
                     <form className="sns-shell-dm-form" onSubmit={(event) => void handleDmSubmit(event)}>

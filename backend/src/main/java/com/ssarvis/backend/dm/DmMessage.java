@@ -30,6 +30,10 @@ public class DmMessage {
     @JoinColumn(name = "sender_user_id", nullable = false)
     private UserAccount sender;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "trigger_message_id")
+    private DmMessage triggerMessage;
+
     @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
     @Column(nullable = false, length = 20)
     private DmMessageKind kind;
@@ -45,14 +49,19 @@ public class DmMessage {
     }
 
     public DmMessage(DmThread thread, UserAccount sender, String content) {
-        this(thread, sender, content, DmMessageKind.HUMAN);
+        this(thread, sender, content, DmMessageKind.HUMAN, null);
     }
 
     public DmMessage(DmThread thread, UserAccount sender, String content, DmMessageKind kind) {
+        this(thread, sender, content, kind, null);
+    }
+
+    public DmMessage(DmThread thread, UserAccount sender, String content, DmMessageKind kind, DmMessage triggerMessage) {
         this.thread = thread;
         this.sender = sender;
         this.content = content;
         this.kind = kind == null ? DmMessageKind.HUMAN : kind;
+        this.triggerMessage = triggerMessage;
     }
 
     @PrePersist
@@ -74,6 +83,10 @@ public class DmMessage {
 
     public String getContent() {
         return content;
+    }
+
+    public DmMessage getTriggerMessage() {
+        return triggerMessage;
     }
 
     public DmMessageKind getKind() {

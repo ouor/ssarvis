@@ -17,6 +17,8 @@ import com.ssarvis.backend.openai.OpenAiClient;
 import com.ssarvis.backend.openai.OpenAiContextAssembler;
 import com.ssarvis.backend.prompt.PromptGenerationLog;
 import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import com.ssarvis.backend.voice.VoiceService;
+import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +46,9 @@ class DmServiceTest {
     private FollowRepository followRepository;
 
     @Mock
+    private DmHiddenBundleRepository dmHiddenBundleRepository;
+
+    @Mock
     private PromptGenerationLogRepository promptGenerationLogRepository;
 
     @Mock
@@ -51,6 +56,9 @@ class DmServiceTest {
 
     @Mock
     private OpenAiClient openAiClient;
+
+    @Mock
+    private VoiceService voiceService;
 
     private DmService dmService;
 
@@ -61,12 +69,14 @@ class DmServiceTest {
         dmService = new DmService(
                 dmThreadRepository,
                 dmMessageRepository,
+                dmHiddenBundleRepository,
                 authService,
                 followRepository,
                 promptGenerationLogRepository,
                 openAiContextAssembler,
                 openAiClient,
-                appProperties
+                appProperties,
+                voiceService
         );
     }
 
@@ -89,6 +99,7 @@ class DmServiceTest {
         assertThat(response.threadId()).isEqualTo(11L);
         assertThat(response.otherParticipant().userId()).isEqualTo(2L);
         assertThat(response.messages()).isEmpty();
+        assertThat(response.hiddenBundleMessageIds()).isEmpty();
     }
 
     @Test
@@ -129,6 +140,7 @@ class DmServiceTest {
         assertThat(response.messageId()).isEqualTo(31L);
         assertThat(response.senderUserId()).isEqualTo(1L);
         assertThat(response.aiGenerated()).isFalse();
+        assertThat(response.bundleRootMessageId()).isNull();
         assertThat(response.content()).isEqualTo("안녕!");
     }
 
@@ -202,6 +214,47 @@ class DmServiceTest {
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).latestMessagePreview()).isEqualTo("최근 메시지");
+    }
+
+    @Test
+    void hideBundleStoresViewerScopedVisibility() {
+        UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
+        UserAccount target = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
+        DmThread thread = reflectId(new DmThread(me, target), 41L);
+        DmMessage humanMessage = reflectId(new DmMessage(thread, me, "AI를 부른 메시지"), 51L);
+
+        given(authService.getActiveUserAccount(1L)).willReturn(me);
+        given(dmThreadRepository.findWithParticipantsById(41L)).willReturn(Optional.of(thread));
+        given(dmMessageRepository.findByIdAndThreadId(51L, 41L)).willReturn(Optional.of(humanMessage));
+        given(dmMessageRepository.existsByThreadIdAndKindAndTriggerMessageId(41L, DmMessageKind.AI_PROXY, 51L)).willReturn(true);
+        given(dmHiddenBundleRepository.existsByViewerIdAndBundleRootMessageId(1L, 51L)).willReturn(false);
+
+        DmBundleVisibilityResponse response = dmService.hideBundle(1L, 41L, 51L);
+
+        assertThat(response.bundleRootMessageId()).isEqualTo(51L);
+        assertThat(response.hidden()).isTrue();
+        verify(dmHiddenBundleRepository).save(any(DmHiddenBundle.class));
+    }
+
+    @Test
+    void synthesizeMessageAudioUsesSenderRepresentativeVoice() {
+        UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
+        UserAccount target = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
+        DmThread thread = reflectId(new DmThread(me, target), 41L);
+        DmMessage aiMessage = reflectId(new DmMessage(thread, target, "음성으로 들려줄게", DmMessageKind.AI_PROXY), 61L);
+
+        given(authService.getActiveUserAccount(1L)).willReturn(me);
+        given(dmMessageRepository.findById(61L)).willReturn(Optional.of(aiMessage));
+        given(voiceService.synthesizeDirectMessageText("음성으로 들려줄게", 2L)).willReturn(
+                new VoiceSynthesisResult("voice-2", "audio/wav", "UklGRg==", null)
+        );
+
+        DmMessageAudioResponse response = dmService.synthesizeMessageAudio(1L, 61L);
+
+        assertThat(response.messageId()).isEqualTo(61L);
+        assertThat(response.voiceId()).isEqualTo("voice-2");
+        assertThat(response.audioMimeType()).isEqualTo("audio/wav");
+        assertThat(response.audioBase64()).isEqualTo("UklGRg==");
     }
 
     private UserAccount reflectId(UserAccount userAccount, Long id) {

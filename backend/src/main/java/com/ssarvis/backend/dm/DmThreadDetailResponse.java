@@ -7,6 +7,7 @@ public record DmThreadDetailResponse(
         Long threadId,
         DmParticipantResponse otherParticipant,
         Instant createdAt,
-        List<DmMessageResponse> messages
+        List<DmMessageResponse> messages,
+        List<Long> hiddenBundleMessageIds
 ) {
 }
