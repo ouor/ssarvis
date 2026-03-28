@@ -44,6 +44,7 @@ public class WebConfig implements WebMvcConfigurer {
                             "/api/auth/me",
                             "/api/friends/**",
                             "/api/follows/**",
+                            "/api/posts/**",
                             "/api/profiles/**",
                             "/api/clones",
                             "/api/clones/**",

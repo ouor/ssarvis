@@ -419,6 +419,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
         return jsonResponse([])
       }
 
+      if (url.endsWith('/api/posts/feed')) {
+        return jsonResponse([])
+      }
+
       throw new Error(`Unhandled request: ${url}`)
     })
 
@@ -438,7 +442,8 @@ describe('CloneStudioPage user-scoped data flow', () => {
     await user.click(screen.getByRole('button', { name: 'Home' }))
     expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('피드와 게시물 경험을 위한 자리입니다.')).toBeInTheDocument()
-    expect(screen.getByText('이 화면은 기반 정리 단계에서 정보 구조와 진입 흐름을 먼저 고정하기 위해 추가된 플레이스홀더입니다.')).toBeInTheDocument()
+    expect(await screen.findByText('새 게시물')).toBeInTheDocument()
+    expect(screen.getByText('피드에 표시할 게시물이 아직 없습니다.')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Profile' }))
     expect(screen.getByRole('button', { name: 'Profile' })).toHaveAttribute('aria-pressed', 'true')
@@ -535,6 +540,93 @@ describe('CloneStudioPage user-scoped data flow', () => {
 
     await user.click(screen.getByRole('button', { name: '팔로우' }))
     expect((await screen.findAllByRole('button', { name: '언팔로우' })).length).toBe(2)
+  })
+
+  it('creates a post in Home and loads my posts from Profile', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/posts/feed')) {
+        return jsonResponse([
+          {
+            postId: 91,
+            ownerUserId: 40,
+            ownerUsername: 'miso40',
+            ownerDisplayName: '미소40',
+            ownerVisibility: 'PUBLIC',
+            content: '피드에서 먼저 보이는 게시물',
+            createdAt: '2026-03-28T00:00:00.000Z',
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/posts') && init?.method === 'POST') {
+        expect(String(init.body)).toContain('새로 추가한 게시물')
+        return jsonResponse({
+          postId: 92,
+          ownerUserId: 15,
+          ownerUsername: 'user15',
+          ownerDisplayName: '사용자15',
+          ownerVisibility: 'PUBLIC',
+          content: '새로 추가한 게시물',
+          createdAt: '2026-03-28T00:10:00.000Z',
+        })
+      }
+
+      if (url.endsWith('/api/profiles/me/posts')) {
+        return jsonResponse([
+          {
+            postId: 101,
+            ownerUserId: 15,
+            ownerUsername: 'user15',
+            ownerDisplayName: '사용자15',
+            ownerVisibility: 'PUBLIC',
+            content: '프로필에서 불러온 내 게시물',
+            createdAt: '2026-03-28T00:20:00.000Z',
+          },
+        ])
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 15, username: 'user15', displayName: '사용자15', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Home' }))
+    expect(await screen.findByText('피드에서 먼저 보이는 게시물')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('오늘 공유하고 싶은 생각을 적어보세요'), '새로 추가한 게시물')
+    await user.click(screen.getByRole('button', { name: '게시하기' }))
+    expect(await screen.findByText('새로 추가한 게시물')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Profile' }))
+    await user.click(screen.getByRole('button', { name: '내 게시물 불러오기' }))
+    expect(await screen.findByText('프로필에서 불러온 내 게시물')).toBeInTheDocument()
   })
 
   it('streams a chat reply through the live session flow', async () => {

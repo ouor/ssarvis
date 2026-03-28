@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { apiBaseUrl, apiFetch, fetchJsonOrThrow, readErrorMessage } from '../clone-studio/api'
 import type { CurrentUser } from '../clone-studio/types'
@@ -22,6 +22,16 @@ type UserProfile = {
   visibility: AccountVisibility
   me: boolean
   following: boolean
+}
+
+type PostSummary = {
+  postId: number
+  ownerUserId: number
+  ownerUsername: string
+  ownerDisplayName: string
+  ownerVisibility: AccountVisibility
+  content: string
+  createdAt: string
 }
 
 type SnsShellProps = {
@@ -87,8 +97,54 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [followActionUserId, setFollowActionUserId] = useState<number | null>(null)
+  const [feedPosts, setFeedPosts] = useState<PostSummary[]>([])
+  const [feedLoading, setFeedLoading] = useState(false)
+  const [feedError, setFeedError] = useState('')
+  const [hasLoadedFeed, setHasLoadedFeed] = useState(false)
+  const [myPosts, setMyPosts] = useState<PostSummary[]>([])
+  const [myPostsLoading, setMyPostsLoading] = useState(false)
+  const [myPostsError, setMyPostsError] = useState('')
+  const [postDraft, setPostDraft] = useState('')
+  const [postSubmitting, setPostSubmitting] = useState(false)
 
   const activeShellTab = shellTabs.find((tab) => tab.id === activeTab) ?? shellTabs[0]
+
+  useEffect(() => {
+    if (activeTab !== 'home' || hasLoadedFeed) {
+      return
+    }
+
+    void loadFeedPosts()
+  }, [activeTab, hasLoadedFeed])
+
+  async function loadFeedPosts() {
+    setFeedLoading(true)
+    setFeedError('')
+
+    try {
+      const data = await fetchJsonOrThrow<PostSummary[]>(`${apiBaseUrl}/api/posts/feed`, '피드를 불러오지 못했습니다.')
+      setFeedPosts(data)
+      setHasLoadedFeed(true)
+    } catch (error) {
+      setFeedError(error instanceof Error ? error.message : '피드를 불러오지 못했습니다.')
+    } finally {
+      setFeedLoading(false)
+    }
+  }
+
+  async function loadMyPosts() {
+    setMyPostsLoading(true)
+    setMyPostsError('')
+
+    try {
+      const data = await fetchJsonOrThrow<PostSummary[]>(`${apiBaseUrl}/api/profiles/me/posts`, '내 게시물을 불러오지 못했습니다.')
+      setMyPosts(data)
+    } catch (error) {
+      setMyPostsError(error instanceof Error ? error.message : '내 게시물을 불러오지 못했습니다.')
+    } finally {
+      setMyPostsLoading(false)
+    }
+  }
 
   async function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -169,6 +225,43 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
     }
   }
 
+  async function handlePostSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const normalizedDraft = postDraft.trim()
+    if (!normalizedDraft) {
+      return
+    }
+
+    setPostSubmitting(true)
+    setFeedError('')
+    setMyPostsError('')
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/posts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: normalizedDraft }),
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '게시물을 올리지 못했습니다.'))
+      }
+
+      const createdPost: PostSummary = await response.json()
+      setPostDraft('')
+      setFeedPosts((current) => [createdPost, ...current.filter((post) => post.postId !== createdPost.postId)])
+      setMyPosts((current) => [createdPost, ...current.filter((post) => post.postId !== createdPost.postId)])
+      setHasLoadedFeed(true)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '게시물을 올리지 못했습니다.'
+      setFeedError(message)
+      setMyPostsError(message)
+    } finally {
+      setPostSubmitting(false)
+    }
+  }
+
   return (
     <main className="sns-shell">
       <section className="sns-shell-header">
@@ -246,8 +339,63 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                 </button>
               </div>
             </section>
+            <section className="sns-shell-post-panel">
+              <header className="sns-shell-post-header">
+                <div>
+                  <strong>내 게시물</strong>
+                  <p>프로필 영역에서 내 게시물을 직접 확인하며 공개/비공개 정책이 어떻게 적용될지 검증합니다.</p>
+                </div>
+                <button className="secondary-button" disabled={myPostsLoading} onClick={() => void loadMyPosts()} type="button">
+                  {myPostsLoading ? '불러오는 중...' : '내 게시물 불러오기'}
+                </button>
+              </header>
+              {myPostsError ? <p className="auth-error">{myPostsError}</p> : null}
+              {myPosts.map((post) => (
+                <article className="sns-shell-post-card" key={post.postId}>
+                  <strong>{post.content}</strong>
+                  <span>@{post.ownerUsername}</span>
+                </article>
+              ))}
+              {!myPostsLoading && myPosts.length === 0 ? <p className="sns-shell-muted">아직 불러온 게시물이 없습니다.</p> : null}
+            </section>
             {profileContent}
           </>
+        ) : null}
+
+        {activeTab === 'home' ? (
+          <section className="sns-shell-post-panel">
+            <form className="sns-shell-post-form" onSubmit={(event) => void handlePostSubmit(event)}>
+              <label className="auth-field">
+                <span>새 게시물</span>
+                <textarea
+                  onChange={(event) => setPostDraft(event.target.value)}
+                  placeholder="오늘 공유하고 싶은 생각을 적어보세요"
+                  rows={4}
+                  value={postDraft}
+                />
+              </label>
+              <button className="auth-submit" disabled={postSubmitting} type="submit">
+                {postSubmitting ? '게시 중...' : '게시하기'}
+              </button>
+            </form>
+
+            {feedError ? <p className="auth-error">{feedError}</p> : null}
+            {feedLoading ? <p className="sns-shell-muted">피드를 불러오는 중입니다.</p> : null}
+
+            <section className="sns-shell-post-list">
+              {feedPosts.map((post) => (
+                <article className="sns-shell-post-card" key={post.postId}>
+                  <div>
+                    <strong>{post.ownerDisplayName}</strong>
+                    <span>@{post.ownerUsername}</span>
+                  </div>
+                  <p>{post.content}</p>
+                </article>
+              ))}
+            </section>
+
+            {!feedLoading && feedPosts.length === 0 ? <p className="sns-shell-muted">피드에 표시할 게시물이 아직 없습니다.</p> : null}
+          </section>
         ) : null}
 
         {activeTab === 'search' ? (
