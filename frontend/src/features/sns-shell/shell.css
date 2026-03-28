@@ -1,0 +1,135 @@
+.sns-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+}
+
+.sns-shell-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.9fr);
+  gap: 18px;
+}
+
+.sns-shell-copy,
+.sns-account-bar,
+.sns-shell-nav,
+.sns-shell-stage,
+.sns-shell-placeholder {
+  border: 1px solid rgba(117, 93, 58, 0.12);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 24px 60px rgba(92, 67, 54, 0.08);
+}
+
+.sns-shell-copy,
+.sns-account-bar,
+.sns-shell-stage {
+  padding: 24px;
+}
+
+.sns-shell-copy {
+  background:
+    radial-gradient(circle at top left, rgba(255, 198, 130, 0.32), transparent 28%),
+    rgba(255, 255, 255, 0.88);
+}
+
+.sns-shell-copy > p:last-child,
+.sns-shell-stage-copy > p:last-child,
+.sns-shell-placeholder p {
+  color: var(--muted);
+}
+
+.sns-shell-kicker {
+  margin-bottom: 10px;
+  color: #c86657;
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.sns-account-bar {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.sns-account-bar strong {
+  display: block;
+  color: var(--text-strong);
+}
+
+.sns-account-bar span {
+  color: var(--muted);
+}
+
+.sns-account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sns-shell-nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+}
+
+.sns-shell-tab {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(244, 237, 226, 0.95);
+  color: var(--text-strong);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.sns-shell-tab-active {
+  background: linear-gradient(135deg, #f27d68, #ff9f7e);
+  color: white;
+}
+
+.sns-shell-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sns-shell-stage-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sns-shell-placeholder {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.sns-shell-placeholder div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 247, 238, 0.92);
+}
+
+@media (max-width: 960px) {
+  .sns-shell-header {
+    grid-template-columns: 1fr;
+  }
+
+  .sns-shell-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sns-shell-placeholder {
+    grid-template-columns: 1fr;
+  }
+}

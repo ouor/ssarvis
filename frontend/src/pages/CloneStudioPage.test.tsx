@@ -398,6 +398,53 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(onDeactivate).toHaveBeenCalledTimes(1)
   })
 
+  it('renders the new SNS shell scaffold and keeps the legacy studio inside Profile', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 14, username: 'user14', displayName: '사용자14' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    expect(await screen.findByRole('button', { name: 'Profile' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('기존 스튜디오 기능은 우선 프로필 하위 작업 공간에서 유지합니다.')).toBeInTheDocument()
+    expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Home' }))
+    expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('피드와 게시물 경험을 위한 자리입니다.')).toBeInTheDocument()
+    expect(screen.getByText('이 화면은 기반 정리 단계에서 정보 구조와 진입 흐름을 먼저 고정하기 위해 추가된 플레이스홀더입니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Profile' }))
+    expect(screen.getByRole('button', { name: 'Profile' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
+  })
+
   it('streams a chat reply through the live session flow', async () => {
     const user = userEvent.setup()
     window.localStorage.setItem('ssarvis.access-token', 'chat-token')

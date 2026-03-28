@@ -9,6 +9,7 @@ import CreateCloneModal from '../features/clone-studio/components/modals/CreateC
 import DebateSetupModal from '../features/clone-studio/components/modals/DebateSetupModal'
 import VoicePickerModal from '../features/clone-studio/components/modals/VoicePickerModal'
 import { useCloneStudio } from '../features/clone-studio/hooks/useCloneStudio'
+import SnsShell from '../features/sns-shell/SnsShell'
 import '../features/clone-studio/styles/layout.css'
 import '../features/clone-studio/styles/panels.css'
 import '../features/clone-studio/styles/modals.css'
@@ -22,24 +23,10 @@ type CloneStudioPageProps = {
 
 function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: CloneStudioPageProps) {
   const studio = useCloneStudio(currentUser)
+  const selectedClone = studio.selectedClone
 
-  return (
-    <main className="studio-shell">
-      <section className="studio-account-bar">
-        <div>
-          <p className="studio-kicker">Signed In</p>
-          <strong>{currentUser.displayName}</strong>
-          <span>@{currentUser.username}</span>
-        </div>
-        <div className="studio-account-actions">
-          <button className="secondary-button" disabled={deactivating} onClick={onLogout} type="button">
-            로그아웃
-          </button>
-          <button className="secondary-button" disabled={deactivating} onClick={() => void onDeactivate()} type="button">
-            {deactivating ? '탈퇴 처리 중...' : '회원 탈퇴'}
-          </button>
-        </div>
-      </section>
+  const profileWorkspace = (
+    <>
       <StudioHero
         activeTab={studio.activeTab}
         cloneCount={studio.clones.length}
@@ -113,22 +100,22 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
         />
       ) : null}
 
-      {studio.modalState?.type === 'clone-actions' && studio.selectedClone ? (
+      {studio.modalState?.type === 'clone-actions' && selectedClone ? (
         <CloneActionsModal
-          canManageVisibility={studio.mineClones.some((clone) => clone.cloneId === studio.selectedClone!.cloneId)}
-          clone={studio.selectedClone}
+          canManageVisibility={studio.mineClones.some((clone) => clone.cloneId === selectedClone.cloneId)}
+          clone={selectedClone}
           currentUserDisplayName={currentUser.displayName}
           onChatSelect={studio.openVoicePicker}
           onClose={studio.closeModal}
           onDebateSelect={studio.openDebateSetup}
-          onToggleVisibility={() => studio.toggleCloneVisibility(studio.selectedClone!)}
-          visibilityUpdating={studio.cloneVisibilityUpdatingId === studio.selectedClone!.cloneId}
+          onToggleVisibility={() => studio.toggleCloneVisibility(selectedClone)}
+          visibilityUpdating={studio.cloneVisibilityUpdatingId === selectedClone.cloneId}
         />
       ) : null}
 
-      {studio.modalState?.type === 'voice-picker' && studio.selectedClone ? (
+      {studio.modalState?.type === 'voice-picker' && selectedClone ? (
         <VoicePickerModal
-          clone={studio.selectedClone}
+          clone={selectedClone}
           currentUserDisplayName={currentUser.displayName}
           friendVoices={studio.friendVoices}
           mineVoices={studio.mineVoices}
@@ -141,8 +128,8 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
           onVoiceRegister={studio.handleVoiceRegister}
           onVoiceSelect={studio.setSelectedVoiceId}
           publicVoices={studio.publicVoices}
-          voiceAlias={studio.voiceAlias}
           selectedVoiceId={studio.selectedVoiceId}
+          voiceAlias={studio.voiceAlias}
           voiceLoadError={studio.voiceLoadError}
           voiceRegisterError={studio.voiceRegisterError}
           voiceRegistering={studio.voiceRegistering}
@@ -150,11 +137,11 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
         />
       ) : null}
 
-      {studio.modalState?.type === 'debate-setup' && studio.selectedClone ? (
+      {studio.modalState?.type === 'debate-setup' && selectedClone ? (
         <DebateSetupModal
           availableClones={studio.clones}
           availableVoices={studio.voices}
-          clone={studio.selectedClone}
+          clone={selectedClone}
           cloneLoadError={studio.cloneLoadError}
           debateOpponent={studio.debateOpponent}
           debateOpponentId={studio.debateOpponentId}
@@ -172,7 +159,17 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
           voiceLoadError={studio.voiceLoadError}
         />
       ) : null}
-    </main>
+    </>
+  )
+
+  return (
+    <SnsShell
+      currentUser={currentUser}
+      deactivating={deactivating}
+      onDeactivate={onDeactivate}
+      onLogout={onLogout}
+      profileContent={profileWorkspace}
+    />
   )
 }
 
