@@ -13,12 +13,14 @@ type CloneGridSectionProps = {
 }
 
 function CloneGridSection({ mineClones, friendClones, publicClones, currentUser, loadError, onCreateClone, onCloneSelect }: CloneGridSectionProps) {
+  const hasManagedClone = mineClones.length > 0
+
   return (
     <section className="studio-grid">
       <button className="create-clone-card" onClick={onCreateClone} type="button">
         <span className="create-clone-icon">+</span>
-        <strong>새 클론 만들기</strong>
-        <p>문답을 시작해서 새로운 성격과 말투를 가진 클론을 추가합니다.</p>
+        <strong>{hasManagedClone ? '내 클론 다시 만들기' : '내 클론 만들기'}</strong>
+        <p>{hasManagedClone ? '새 설문 답변으로 내 프로필 전용 클론을 갱신합니다.' : '문답을 시작해서 내 프로필을 대리할 클론을 만듭니다.'}</p>
       </button>
 
       <div className="clone-section-stack">
@@ -59,7 +61,7 @@ function CloneGridSection({ mineClones, friendClones, publicClones, currentUser,
             {mineClones.length === 0 ? (
               <article className="empty-card">
                 <strong>{currentUser.displayName}님 계정에는 아직 클론이 없습니다.</strong>
-                <p>첫 번째 문답을 시작해서 내 계정 전용 클론을 만들거나, 아래 공개 클론을 바로 사용해보세요.</p>
+                <p>첫 번째 문답을 시작해서 내 계정을 대리할 클론을 만들어보세요.</p>
               </article>
             ) : null}
           </div>

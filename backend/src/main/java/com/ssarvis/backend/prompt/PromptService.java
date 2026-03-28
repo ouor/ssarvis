@@ -91,14 +91,25 @@ public class PromptService {
             GeneratedCloneProfile profile
     ) throws IOException {
         String answersJson = objectMapper.writeValueAsString(answers);
-        PromptGenerationLog log = new PromptGenerationLog(
-                user,
-                appProperties.getOpenai().getModel(),
-                answersJson,
-                profile.systemPrompt(),
-                profile.alias(),
-                profile.shortDescription()
-        );
+        PromptGenerationLog log = promptGenerationLogRepository.findTopByUserIdOrderByIdDesc(user.getId())
+                .map(existingLog -> {
+                    existingLog.updateProfile(
+                            appProperties.getOpenai().getModel(),
+                            answersJson,
+                            profile.systemPrompt(),
+                            profile.alias(),
+                            profile.shortDescription()
+                    );
+                    return existingLog;
+                })
+                .orElseGet(() -> new PromptGenerationLog(
+                        user,
+                        appProperties.getOpenai().getModel(),
+                        answersJson,
+                        profile.systemPrompt(),
+                        profile.alias(),
+                        profile.shortDescription()
+                ));
         return promptGenerationLogRepository.save(log);
     }
 
@@ -106,7 +117,9 @@ public class PromptService {
     public List<CloneSummaryResponse> listClones(Long userId, AssetListScope scope) {
         authService.getActiveUserAccount(userId);
         List<PromptGenerationLog> logs = switch (scope) {
-            case MINE -> promptGenerationLogRepository.findAllByUserIdOrderByIdDesc(userId);
+            case MINE -> promptGenerationLogRepository.findTopByUserIdOrderByIdDesc(userId)
+                    .map(List::of)
+                    .orElseGet(List::of);
             case FRIEND -> listFriendClones(userId);
             case PUBLIC -> promptGenerationLogRepository.findAllByIsPublicTrueOrderByIdDesc();
         };

@@ -114,6 +114,15 @@ public class PromptGenerationLog {
         return isPublic;
     }
 
+    public void updateProfile(String model, String answersJson, String systemPrompt, String alias, String shortDescription) {
+        this.model = model;
+        this.answersJson = answersJson;
+        this.systemPrompt = systemPrompt;
+        this.alias = alias;
+        this.shortDescription = shortDescription;
+        this.isPublic = false;
+    }
+
     public void updateVisibility(boolean isPublic) {
         this.isPublic = isPublic;
     }

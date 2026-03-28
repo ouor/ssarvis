@@ -181,6 +181,8 @@ describe('CloneStudioPage user-scoped data flow', () => {
     )
 
     expect(await screen.findByText('Alpha', { selector: 'h2' })).toBeInTheDocument()
+    expect(screen.getByText('내 AI 프로필 자산')).toBeInTheDocument()
+    expect(screen.getByText('사용자당 1개만 유지되며, 새로 만들면 기존 자산을 갱신합니다.')).toBeInTheDocument()
     expect(
       screen.getByText('사용자1님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.'),
     ).toBeInTheDocument()
@@ -200,6 +202,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
     await waitFor(() => {
       expect(screen.queryByText('Alpha', { selector: 'h2' })).not.toBeInTheDocument()
     })
+    expect(screen.getByText('사용자당 1개만 유지되며, 새로 만들면 기존 자산을 갱신합니다.')).toBeInTheDocument()
     expect(
       screen.getByText('사용자2님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.'),
     ).toBeInTheDocument()
@@ -1240,7 +1243,10 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(screen.getByText('작성자 다른 사용자')).toBeInTheDocument()
     expect(screen.getByText('작성자 친구 사용자')).toBeInTheDocument()
 
-    const mineCloneButton = screen.getByText('내가 만든 클론').closest('button')
+    const mineCloneButton = screen
+      .getAllByText('내가 만든 클론')
+      .map((element) => element.closest('button'))
+      .find((element): element is HTMLButtonElement => element instanceof HTMLButtonElement)
     if (!mineCloneButton) {
       throw new Error('Owned clone card button not found.')
     }

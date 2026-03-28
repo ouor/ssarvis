@@ -2,6 +2,7 @@ package com.ssarvis.backend.voice;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -11,12 +12,14 @@ import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.friend.FriendRelationshipService;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,6 +78,48 @@ class VoiceServiceTest {
         assertThat(voices.get(0).registeredVoiceId()).isEqualTo(10L);
         assertThat(voices.get(0).voiceId()).isEqualTo("voice-new");
         assertThat(voices.get(0).displayName()).isEqualTo("하루 보이스");
+    }
+
+    @Test
+    void registerVoiceReusesExistingUserVoice() throws Exception {
+        UserAccount user = assignId(new UserAccount("haru", "hashed", "하루"), 1L);
+        RegisteredVoice existingVoice = assignId(
+                new RegisteredVoice(user, "voice-old", "current-model", "oldvoice", "예전 보이스", "old.wav", "audio/wav"),
+                14L
+        );
+        existingVoice.updateVisibility(true);
+        MockMultipartFile sample = new MockMultipartFile("sample", "fresh.wav", "audio/wav", new byte[] {1, 2, 3});
+
+        given(authService.getActiveUserAccount(1L)).willReturn(user);
+        given(dashscopeVoiceClient.registerVoice(any(), any(), any())).willReturn("voice-new");
+        given(registeredVoiceRepository.findTopByUserIdOrderByIdDesc(1L)).willReturn(Optional.of(existingVoice));
+        given(registeredVoiceRepository.save(any(RegisteredVoice.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        RegisteredVoice savedVoice = voiceService.registerVoice(1L, sample, "새 보이스");
+
+        assertThat(savedVoice.getId()).isEqualTo(14L);
+        assertThat(savedVoice.getProviderVoiceId()).isEqualTo("voice-new");
+        assertThat(savedVoice.getDisplayName()).isEqualTo("새 보이스");
+        assertThat(savedVoice.getOriginalFilename()).isEqualTo("fresh.wav");
+        assertThat(savedVoice.isPublic()).isFalse();
+    }
+
+    @Test
+    void listVoicesMineReturnsOnlyLatestRegisteredVoice() {
+        UserAccount user = assignId(new UserAccount("haru", "hashed", "하루"), 1L);
+        RegisteredVoice latestVoice = assignId(
+                new RegisteredVoice(user, "voice-latest", "current-model", "latestvoice", "최신 보이스", "latest.wav", "audio/wav"),
+                16L
+        );
+
+        given(authService.getActiveUserAccount(1L)).willReturn(user);
+        given(registeredVoiceRepository.findTopByUserIdOrderByIdDesc(1L)).willReturn(Optional.of(latestVoice));
+
+        List<VoiceSummaryResponse> voices = voiceService.listVoices(1L, com.ssarvis.backend.access.AssetListScope.MINE);
+
+        assertThat(voices).hasSize(1);
+        assertThat(voices.get(0).registeredVoiceId()).isEqualTo(16L);
+        assertThat(voices.get(0).displayName()).isEqualTo("최신 보이스");
     }
 
     @Test

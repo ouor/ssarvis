@@ -63,15 +63,29 @@ public class VoiceService {
             String preferredName = buildPreferredName(displayName, sampleFile.getOriginalFilename());
             String providerVoiceId = dashscopeVoiceClient.registerVoice(dashscope, sampleFile, preferredName);
 
-            return registeredVoiceRepository.save(new RegisteredVoice(
-                    user,
-                    providerVoiceId,
-                    dashscope.getTtsModel(),
-                    preferredName,
-                    displayName,
-                    sampleFile.getOriginalFilename() != null ? sampleFile.getOriginalFilename() : "voice-sample",
-                    sampleFile.getContentType()
-            ));
+            RegisteredVoice voice = registeredVoiceRepository.findTopByUserIdOrderByIdDesc(userId)
+                    .map(existingVoice -> {
+                        existingVoice.updateRegistration(
+                                providerVoiceId,
+                                dashscope.getTtsModel(),
+                                preferredName,
+                                displayName,
+                                sampleFile.getOriginalFilename() != null ? sampleFile.getOriginalFilename() : "voice-sample",
+                                sampleFile.getContentType()
+                        );
+                        return existingVoice;
+                    })
+                    .orElseGet(() -> new RegisteredVoice(
+                            user,
+                            providerVoiceId,
+                            dashscope.getTtsModel(),
+                            preferredName,
+                            displayName,
+                            sampleFile.getOriginalFilename() != null ? sampleFile.getOriginalFilename() : "voice-sample",
+                            sampleFile.getContentType()
+                    ));
+
+            return registeredVoiceRepository.save(voice);
         } catch (IOException exception) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read the uploaded voice sample.", exception);
         } catch (InterruptedException exception) {
@@ -86,6 +100,7 @@ public class VoiceService {
         String currentTtsModel = appProperties.getDashscope().getTtsModel();
         return registeredVoiceRepository.findAllByUserIdOrderByIdDesc(userId).stream()
                 .filter(voice -> currentTtsModel.equals(voice.getTargetModel()))
+                .limit(1)
                 .map(voice -> new VoiceSummaryResponse(
                         voice.getId(),
                         voice.getProviderVoiceId(),
@@ -105,7 +120,9 @@ public class VoiceService {
         authService.getActiveUserAccount(userId);
         String currentTtsModel = appProperties.getDashscope().getTtsModel();
         List<RegisteredVoice> voices = switch (scope) {
-            case MINE -> registeredVoiceRepository.findAllByUserIdOrderByIdDesc(userId);
+            case MINE -> registeredVoiceRepository.findTopByUserIdOrderByIdDesc(userId)
+                    .map(List::of)
+                    .orElseGet(List::of);
             case FRIEND -> listFriendVoices(userId);
             case PUBLIC -> registeredVoiceRepository.findAllByIsPublicTrueOrderByIdDesc();
         };

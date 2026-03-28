@@ -127,6 +127,23 @@ public class RegisteredVoice {
         return isPublic;
     }
 
+    public void updateRegistration(
+            String providerVoiceId,
+            String targetModel,
+            String preferredName,
+            String displayName,
+            String originalFilename,
+            String audioMimeType
+    ) {
+        this.providerVoiceId = providerVoiceId;
+        this.targetModel = targetModel;
+        this.preferredName = preferredName;
+        this.displayName = displayName;
+        this.originalFilename = originalFilename;
+        this.audioMimeType = audioMimeType;
+        this.isPublic = false;
+    }
+
     public void updateVisibility(boolean isPublic) {
         this.isPublic = isPublic;
     }

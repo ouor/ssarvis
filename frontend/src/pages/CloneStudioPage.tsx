@@ -24,9 +24,39 @@ type CloneStudioPageProps = {
 function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: CloneStudioPageProps) {
   const studio = useCloneStudio(currentUser)
   const selectedClone = studio.selectedClone
+  const managedClone = studio.mineClones[0] ?? null
+  const managedVoice = studio.mineVoices[0] ?? null
 
   const profileWorkspace = (
     <>
+      <section className="sns-shell-persona-panel">
+        <header className="sns-shell-post-header">
+          <div>
+            <strong>내 AI 프로필 자산</strong>
+            <p>이 단계부터 클론과 보이스는 독립 캐릭터가 아니라 내 계정을 대리하는 1:1 자산으로 다룹니다.</p>
+          </div>
+          <button className="secondary-button" onClick={() => studio.setActiveTab('clones')} type="button">
+            프로필 작업공간 열기
+          </button>
+        </header>
+
+        <div className="sns-shell-persona-grid">
+          <article className="sns-shell-persona-card">
+            <p className="sns-shell-kicker">Clone</p>
+            <strong>{managedClone ? managedClone.alias : '아직 클론이 없습니다.'}</strong>
+            <p>{managedClone ? managedClone.shortDescription : '설문 기반으로 내 프로필을 대리할 클론을 먼저 만들어야 합니다.'}</p>
+            <span>{managedClone ? '사용자당 1개만 유지되며, 새로 만들면 기존 자산을 갱신합니다.' : '프로필 작업공간에서 생성할 수 있습니다.'}</span>
+          </article>
+
+          <article className="sns-shell-persona-card">
+            <p className="sns-shell-kicker">Voice</p>
+            <strong>{managedVoice ? managedVoice.displayName : '아직 보이스가 없습니다.'}</strong>
+            <p>{managedVoice ? `${managedVoice.voiceId} · ${managedVoice.originalFilename}` : '클론 음성 응답에 사용할 대표 보이스를 하나 등록할 수 있습니다.'}</p>
+            <span>{managedVoice ? '사용자당 1개만 유지되며, 새 등록은 내 대표 보이스를 교체합니다.' : '프로필 작업공간에서 등록할 수 있습니다.'}</span>
+          </article>
+        </div>
+      </section>
+
       <StudioHero
         activeTab={studio.activeTab}
         cloneCount={studio.clones.length}
