@@ -83,6 +83,16 @@ public class AuthService {
         userAccountRepository.save(userAccount);
     }
 
+    public void updateDisplayName(Long userId, String displayName) {
+        UserAccount userAccount = getActiveUserAccount(userId);
+        String normalizedDisplayName = normalize(displayName);
+        if (!StringUtils.hasText(normalizedDisplayName)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "displayName must not be blank.");
+        }
+        userAccount.updateDisplayName(normalizedDisplayName);
+        userAccountRepository.save(userAccount);
+    }
+
     public AutoReplySettingsResponse getAutoReplySettings(Long userId) {
         UserAccount userAccount = getActiveUserAccount(userId);
         return new AutoReplySettingsResponse(userAccount.getAutoReplyMode(), userAccount.getLastActivityAt());

@@ -143,6 +143,18 @@ class AuthServiceTest {
     }
 
     @Test
+    void updateDisplayNamePersistsNormalizedValue() {
+        UserAccount userAccount = reflectId(new UserAccount("nara", passwordEncoder.encode("pass1234"), "나라"), 4L);
+        given(userAccountRepository.findByIdAndDeletedAtIsNull(4L)).willReturn(Optional.of(userAccount));
+        given(userAccountRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+        authService.updateDisplayName(4L, "  새 이름  ");
+
+        assertThat(userAccount.getDisplayName()).isEqualTo("새 이름");
+        verify(userAccountRepository).save(userAccount);
+    }
+
+    @Test
     void getAuthenticatedUserRejectsSoftDeletedUser() {
         given(userAccountRepository.findByIdAndDeletedAtIsNull(9L)).willReturn(Optional.empty());
 

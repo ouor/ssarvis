@@ -133,6 +133,8 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
     following: false,
   })
   const [profileError, setProfileError] = useState('')
+  const [profileDraft, setProfileDraft] = useState(currentUser.displayName)
+  const [profileSaving, setProfileSaving] = useState(false)
   const [visibilityUpdating, setVisibilityUpdating] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<FollowUserSummary[]>([])
@@ -168,6 +170,18 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
   const [autoReplyError, setAutoReplyError] = useState('')
 
   const activeShellTab = shellTabs.find((tab) => tab.id === activeTab) ?? shellTabs[0]
+
+  useEffect(() => {
+    setProfile({
+      userId: currentUser.userId,
+      username: currentUser.username,
+      displayName: currentUser.displayName,
+      visibility: currentUser.visibility ?? 'PUBLIC',
+      me: true,
+      following: false,
+    })
+    setProfileDraft(currentUser.displayName)
+  }, [currentUser.displayName, currentUser.userId, currentUser.username, currentUser.visibility])
 
   useEffect(() => {
     if (activeTab !== 'home' || hasLoadedFeed) {
@@ -564,6 +578,38 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
     }
   }
 
+  async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const normalizedDisplayName = profileDraft.trim()
+    if (!normalizedDisplayName || normalizedDisplayName === profile.displayName) {
+      return
+    }
+
+    setProfileSaving(true)
+    setProfileError('')
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/profiles/me`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: normalizedDisplayName }),
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '프로필을 저장하지 못했습니다.'))
+      }
+
+      const updatedProfile: UserProfile = await response.json()
+      setProfile(updatedProfile)
+      setProfileDraft(updatedProfile.displayName)
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : '프로필을 저장하지 못했습니다.')
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
   async function handlePostSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -699,8 +745,8 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
         <section className="sns-account-bar">
           <div>
             <p className="sns-shell-kicker">Signed In</p>
-            <strong>{currentUser.displayName}</strong>
-            <span>@{currentUser.username}</span>
+            <strong>{profile.displayName}</strong>
+            <span>@{profile.username}</span>
           </div>
           <div className="sns-account-actions">
             <button className="secondary-button" disabled={deactivating} onClick={onLogout} type="button">
@@ -737,11 +783,37 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
         {activeTab === 'profile' ? (
           <>
             <section className="sns-shell-profile-card">
+              <header className="sns-shell-post-header">
+                <div>
+                  <strong>프로필 편집</strong>
+                  <p>표시 이름은 SNS 전반과 사람 간 DM에서 보이는 내 대표 이름입니다. 아이디는 현재 MVP에서 고정됩니다.</p>
+                </div>
+              </header>
+              {profileError ? <p className="auth-error">{profileError}</p> : null}
+              <form className="sns-shell-profile-form" onSubmit={(event) => void handleProfileSubmit(event)}>
+                <label className="auth-field">
+                  <span>표시 이름</span>
+                  <input
+                    maxLength={100}
+                    onChange={(event) => setProfileDraft(event.target.value)}
+                    placeholder="표시 이름을 입력하세요"
+                    value={profileDraft}
+                  />
+                </label>
+                <label className="auth-field">
+                  <span>아이디</span>
+                  <input disabled value={`@${profile.username}`} />
+                </label>
+                <button className="auth-submit" disabled={profileSaving || !profileDraft.trim() || profileDraft.trim() === profile.displayName} type="submit">
+                  {profileSaving ? '저장 중...' : '프로필 저장'}
+                </button>
+              </form>
+            </section>
+            <section className="sns-shell-profile-card">
               <div>
                 <strong>계정 공개성</strong>
                 <p>공개 계정은 누구나 DM 가능하고 검색할 수 있습니다. 비공개 계정은 기존 팔로워만 접근할 수 있습니다.</p>
               </div>
-              {profileError ? <p className="auth-error">{profileError}</p> : null}
               <div className="sns-shell-visibility-row">
                 <button
                   className={`sns-visibility-button ${profile.visibility === 'PUBLIC' ? 'sns-visibility-button-active' : ''}`}

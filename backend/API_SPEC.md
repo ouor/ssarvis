@@ -159,6 +159,39 @@ Authorization: Bearer <access-token>
 }
 ```
 
+## PATCH `/api/profiles/me`
+
+내 프로필 기본 정보를 수정한다.
+
+현재 MVP에서 수정 가능한 값
+- `displayName`
+
+### Request Body
+
+```json
+{
+  "displayName": "새 하루"
+}
+```
+
+### Success Response
+
+```json
+{
+  "userId": 1,
+  "username": "haru",
+  "displayName": "새 하루",
+  "visibility": "PRIVATE",
+  "me": true,
+  "following": false
+}
+```
+
+규칙
+- `displayName`은 비어 있을 수 없다.
+- `displayName`은 최대 100자다.
+- `username`은 현재 MVP에서 수정 대상이 아니다.
+
 ## PATCH `/api/profiles/me/visibility`
 
 내 계정 공개성을 바꾼다.
@@ -207,19 +240,6 @@ Authorization: Bearer <access-token>
 {
   "mode": "ALWAYS",
   "lastActivityAt": "2026-03-28T00:00:00Z"
-}
-```
-
-### Success Response
-
-```json
-{
-  "userId": 1,
-  "username": "haru",
-  "displayName": "하루",
-  "visibility": "PRIVATE",
-  "me": true,
-  "following": false
 }
 ```
 

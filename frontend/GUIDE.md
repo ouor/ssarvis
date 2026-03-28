@@ -24,6 +24,7 @@
   - 사람 간 DM 목록
   - 사람 간 DM 상세
 - `Profile`
+  - 프로필 편집
   - 계정 공개성
   - 내 게시물
   - 내 AI 프로필 자산 요약
@@ -47,6 +48,7 @@
   - 회원 탈퇴
 - `SnsShell.tsx`
   - SNS 메인 탭 상태
+  - 프로필 편집 draft
   - 프로필 공개성
   - 자동응답 설정
   - 사용자 검색
@@ -110,7 +112,7 @@
 
 현재 연결된 SNS API
 - `GET /api/profiles/me`
-  - 현재는 초기 상태를 `currentUser`에서 받고, 공개성 변경은 PATCH만 사용
+- `PATCH /api/profiles/me`
 - `PATCH /api/profiles/me/visibility`
 - `GET /api/profiles/me/auto-reply`
 - `PATCH /api/profiles/me/auto-reply`
@@ -145,6 +147,7 @@
 `Profile` 탭은 두 부분으로 나뉜다.
 
 1. 새 제품 기준 영역
+- 프로필 편집 카드
 - 계정 공개성 카드
 - 내 게시물 패널
 - `내 AI 프로필 자산` 패널
@@ -163,6 +166,11 @@
 주의
 - 프로필 탭에서 보이는 “내 AI 프로필 자산” 요약과 아래 스튜디오 카드가 같은 내용을 중복해서 보여줄 수 있다.
 - 테스트나 선택자 구현 시 텍스트 중복을 고려해야 한다.
+
+프로필 편집 카드 의미
+- 현재 MVP에서 사용자가 직접 바꿀 수 있는 프로필 필드는 `displayName`이다.
+- `username`은 노출만 하고 수정은 허용하지 않는다.
+- 저장이 끝나면 `SnsShell` 내부 `profile` 상태가 갱신되어 상단 계정 바와 프로필 카드에 즉시 반영된다.
 
 ## 6. 클론/보이스의 단일 자산 정책
 
@@ -279,8 +287,12 @@ DM 응답에서 꼭 알아둘 필드
 - `handlePostSubmit(event)`
 - `handleVisibilityChange(nextVisibility)`
 
+프로필 편집 관련 함수
+- `handleProfileSubmit(event)`
+
 동작 요약
 - `Home` 탭 첫 진입 시 피드를 1회 로드한다.
+- `Profile` 탭에서 `PATCH /api/profiles/me`로 표시 이름을 저장한다.
 - `Profile` 탭에서 `내 게시물 불러오기` 버튼으로 내 게시물을 가져온다.
 - 게시물 작성 성공 시
   - `feedPosts` 앞에 prepend
@@ -359,6 +371,7 @@ DM 응답에서 꼭 알아둘 필드
   - `/api/posts/feed`
   - `/api/posts`
   - `/api/profiles/me/posts`
+  - `/api/profiles/me`
   - `/api/profiles/me/visibility`
   - `/api/profiles/me/auto-reply`
   - `/api/dms/threads`

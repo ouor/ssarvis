@@ -453,6 +453,66 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
   })
 
+  it('updates the display name from the profile edit card', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (
+        url.includes('/api/clones?scope=mine')
+        || url.includes('/api/clones?scope=friend')
+        || url.includes('/api/clones?scope=public')
+        || url.includes('/api/voices?scope=mine')
+        || url.includes('/api/voices?scope=friend')
+        || url.includes('/api/voices?scope=public')
+      ) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/profiles/me') && init?.method === 'PATCH') {
+        expect(String(init.body)).toContain('"displayName":"새 이름"')
+        return jsonResponse({
+          userId: 14,
+          username: 'user14',
+          displayName: '새 이름',
+          visibility: 'PUBLIC',
+          me: true,
+          following: false,
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 14, username: 'user14', displayName: '사용자14', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    expect(await screen.findByDisplayValue('사용자14')).toBeInTheDocument()
+
+    const displayNameInput = screen.getByLabelText('표시 이름')
+    await user.clear(displayNameInput)
+    await user.type(displayNameInput, '새 이름')
+    await user.click(screen.getByRole('button', { name: '프로필 저장' }))
+
+    expect(await screen.findByText('새 이름', { selector: '.sns-account-bar strong' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('새 이름')).toBeInTheDocument()
+  })
+
   it('opens debate setup directly from the profile persona panel', async () => {
     const user = userEvent.setup()
 

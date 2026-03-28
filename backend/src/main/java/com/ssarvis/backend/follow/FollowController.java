@@ -4,6 +4,7 @@ import com.ssarvis.backend.auth.AuthenticatedUser;
 import com.ssarvis.backend.auth.AutoReplySettingsRequest;
 import com.ssarvis.backend.auth.AutoReplySettingsResponse;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -66,10 +67,18 @@ public class FollowController {
         return followService.getMyProfile(user.userId());
     }
 
+    @PatchMapping("/api/profiles/me")
+    public UserProfileResponse updateMyProfile(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @Valid @RequestBody ProfileUpdateRequest request
+    ) {
+        return followService.updateMyProfile(user.userId(), request);
+    }
+
     @PatchMapping("/api/profiles/me/visibility")
     public UserProfileResponse updateVisibility(
             @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
-            @RequestBody VisibilityUpdateRequest request
+            @Valid @RequestBody VisibilityUpdateRequest request
     ) {
         return followService.updateMyVisibility(user.userId(), request);
     }
@@ -92,7 +101,7 @@ public class FollowController {
     @PatchMapping("/api/profiles/me/auto-reply")
     public AutoReplySettingsResponse updateAutoReplySettings(
             @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
-            @RequestBody AutoReplySettingsRequest request
+            @Valid @RequestBody AutoReplySettingsRequest request
     ) {
         return followService.updateAutoReplySettings(user.userId(), request);
     }

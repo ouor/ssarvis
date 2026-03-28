@@ -169,6 +169,13 @@
   align-items: end;
 }
 
+.sns-shell-profile-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
 .sns-shell-post-form {
   display: flex;
   flex-direction: column;
@@ -402,6 +409,10 @@
 
   .sns-shell-search-form {
     align-items: stretch;
+  }
+
+  .sns-shell-profile-form {
+    grid-template-columns: 1fr;
   }
 
   .sns-shell-search-card {

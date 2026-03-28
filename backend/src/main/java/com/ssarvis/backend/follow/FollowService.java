@@ -90,6 +90,25 @@ public class FollowService {
         );
     }
 
+    @Transactional
+    public UserProfileResponse updateMyProfile(Long currentUserId, ProfileUpdateRequest request) {
+        if (request == null || !StringUtils.hasText(request.displayName())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "displayName is required.");
+        }
+
+        UserAccount me = authService.getActiveUserAccount(currentUserId);
+        String normalizedDisplayName = request.displayName().trim();
+        authService.updateDisplayName(currentUserId, normalizedDisplayName);
+        return new UserProfileResponse(
+                me.getId(),
+                me.getUsername(),
+                normalizedDisplayName,
+                me.getVisibility(),
+                true,
+                false
+        );
+    }
+
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(Long currentUserId, Long profileUserId) {
         UserAccount viewer = authService.getActiveUserAccount(currentUserId);

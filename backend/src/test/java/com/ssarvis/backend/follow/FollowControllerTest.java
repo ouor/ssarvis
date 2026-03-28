@@ -93,6 +93,23 @@ class FollowControllerTest {
     }
 
     @Test
+    void updateMyProfileReturnsUpdatedDisplayName() throws Exception {
+        given(followService.updateMyProfile(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
+                .willReturn(new UserProfileResponse(1L, "haru", "새 하루", AccountVisibility.PUBLIC, true, false));
+
+        mockMvc.perform(patch("/api/profiles/me")
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, authUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "displayName": "새 하루"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.displayName").value("새 하루"));
+    }
+
+    @Test
     void updateVisibilityReturnsUpdatedProfile() throws Exception {
         given(followService.updateMyVisibility(1L, new VisibilityUpdateRequest(AccountVisibility.PRIVATE)))
                 .willReturn(new UserProfileResponse(1L, "haru", "하루", AccountVisibility.PRIVATE, true, false));

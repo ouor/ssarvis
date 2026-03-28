@@ -68,6 +68,10 @@ public class UserAccount {
         this.visibility = visibility == null ? AccountVisibility.PUBLIC : visibility;
     }
 
+    public void updateDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
     public void updateAutoReplyMode(AutoReplyMode autoReplyMode) {
         this.autoReplyMode = autoReplyMode == null ? AutoReplyMode.OFF : autoReplyMode;
     }
