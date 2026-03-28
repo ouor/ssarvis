@@ -8,6 +8,9 @@ public record DmMessageResponse(
         String senderDisplayName,
         boolean aiGenerated,
         Long bundleRootMessageId,
+        String format,
+        String audioMimeType,
+        String audioBase64,
         String content,
         Instant createdAt
 ) {

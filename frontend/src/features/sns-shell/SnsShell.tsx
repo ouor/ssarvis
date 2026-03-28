@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
+import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { apiBaseUrl, apiFetch, fetchJsonOrThrow, readErrorMessage } from '../clone-studio/api'
 import type { CurrentUser } from '../clone-studio/types'
 import './shell.css'
@@ -56,6 +56,9 @@ type DmMessage = {
   senderDisplayName: string
   aiGenerated: boolean
   bundleRootMessageId?: number | null
+  format?: 'TEXT' | 'VOICE'
+  audioMimeType?: string | null
+  audioBase64?: string | null
   content: string
   createdAt: string
 }
@@ -152,6 +155,8 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
   const [selectedThreadLoading, setSelectedThreadLoading] = useState(false)
   const [dmDraft, setDmDraft] = useState('')
   const [dmSubmitting, setDmSubmitting] = useState(false)
+  const [dmComposerMode, setDmComposerMode] = useState<'text' | 'voice'>('text')
+  const [dmVoiceFile, setDmVoiceFile] = useState<File | null>(null)
   const [dmActionUserId, setDmActionUserId] = useState<number | null>(null)
   const [dmBundleUpdatingId, setDmBundleUpdatingId] = useState<number | null>(null)
   const [dmAudioLoadingMessageId, setDmAudioLoadingMessageId] = useState<number | null>(null)
@@ -314,6 +319,8 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
       const thread: DmThreadDetail = await response.json()
       setSelectedThread(thread)
       setDmDraft('')
+      setDmVoiceFile(null)
+      setDmComposerMode('text')
       setDmAudioSources({})
       setDmAudioError('')
       setActiveTab('dm')
@@ -333,6 +340,7 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
       const data = await fetchJsonOrThrow<DmThreadDetail>(`${apiBaseUrl}/api/dms/threads/${threadId}`, 'DM을 불러오지 못했습니다.')
       setSelectedThread(data)
       setDmDraft('')
+      setDmVoiceFile(null)
       setDmAudioError('')
     } catch (error) {
       setDmError(error instanceof Error ? error.message : 'DM을 불러오지 못했습니다.')
@@ -372,11 +380,60 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
           : current,
       )
       setDmDraft('')
+      setDmVoiceFile(null)
+      setDmComposerMode('text')
       setDmAudioError('')
       await handleOpenThread(selectedThread.threadId)
       await loadDmThreads()
     } catch (error) {
       setDmError(error instanceof Error ? error.message : '메시지를 보내지 못했습니다.')
+    } finally {
+      setDmSubmitting(false)
+    }
+  }
+
+  function handleDmVoiceFileChange(event: ChangeEvent<HTMLInputElement>) {
+    setDmVoiceFile(event.target.files?.[0] ?? null)
+  }
+
+  async function handleDmVoiceSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedThread || !dmVoiceFile) {
+      return
+    }
+
+    setDmSubmitting(true)
+    setDmError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('audio', dmVoiceFile)
+
+      const response = await apiFetch(`${apiBaseUrl}/api/dms/threads/${selectedThread.threadId}/voice-messages`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '음성 메시지를 보내지 못했습니다.'))
+      }
+
+      const message: DmMessage = await response.json()
+      setSelectedThread((current) =>
+        current
+          ? {
+              ...current,
+              messages: [...current.messages, message],
+            }
+          : current,
+      )
+      setDmVoiceFile(null)
+      setDmAudioError('')
+      await handleOpenThread(selectedThread.threadId)
+      await loadDmThreads()
+    } catch (error) {
+      setDmError(error instanceof Error ? error.message : '음성 메시지를 보내지 못했습니다.')
     } finally {
       setDmSubmitting(false)
     }
@@ -546,6 +603,10 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
 
   function renderDmMessage(message: DmMessage) {
     const audioSource = dmAudioSources[message.messageId]
+    const inlineAudioSource =
+      message.format === 'VOICE' && message.audioMimeType && message.audioBase64
+        ? `data:${message.audioMimeType};base64,${message.audioBase64}`
+        : null
 
     return (
       <article
@@ -556,14 +617,16 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
           <strong>{message.senderDisplayName}</strong>
           <div className="sns-shell-dm-message-tools">
             {message.aiGenerated ? <span className="sns-shell-ai-badge">AI</span> : null}
-            <button
-              className="secondary-button"
-              disabled={dmAudioLoadingMessageId === message.messageId}
-              onClick={() => void handlePlayMessageAudio(message)}
-              type="button"
-            >
-              {dmAudioLoadingMessageId === message.messageId ? '음성 준비 중...' : '음성으로 듣기'}
-            </button>
+            {message.format !== 'VOICE' ? (
+              <button
+                className="secondary-button"
+                disabled={dmAudioLoadingMessageId === message.messageId}
+                onClick={() => void handlePlayMessageAudio(message)}
+                type="button"
+              >
+                {dmAudioLoadingMessageId === message.messageId ? '음성 준비 중...' : '음성으로 듣기'}
+              </button>
+            ) : null}
             {message.aiGenerated && message.bundleRootMessageId ? (
               <button
                 className="secondary-button"
@@ -576,8 +639,9 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
             ) : null}
           </div>
         </div>
-        <p>{message.content}</p>
-        {audioSource ? <audio controls src={audioSource} /> : null}
+        {message.format !== 'VOICE' || message.aiGenerated ? <p>{message.content}</p> : null}
+        {inlineAudioSource ? <audio controls src={inlineAudioSource} /> : null}
+        {!inlineAudioSource && audioSource ? <audio controls src={audioSource} /> : null}
       </article>
     )
   }
@@ -854,20 +918,51 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                       {renderDmTimeline(selectedThread)}
                       {selectedThread.messages.length === 0 ? <p className="sns-shell-muted">아직 메시지가 없습니다. 첫 메시지를 보내보세요.</p> : null}
                     </section>
-                    <form className="sns-shell-dm-form" onSubmit={(event) => void handleDmSubmit(event)}>
-                      <label className="auth-field">
-                        <span>메시지</span>
-                        <textarea
-                          onChange={(event) => setDmDraft(event.target.value)}
-                          placeholder="메시지를 입력하세요"
-                          rows={3}
-                          value={dmDraft}
-                        />
-                      </label>
-                      <button className="auth-submit" disabled={dmSubmitting} type="submit">
-                        {dmSubmitting ? '전송 중...' : '보내기'}
+                    <section className="sns-shell-dm-composer-switch">
+                      <button
+                        className={`sns-visibility-button ${dmComposerMode === 'text' ? 'sns-visibility-button-active' : ''}`}
+                        onClick={() => setDmComposerMode('text')}
+                        type="button"
+                      >
+                        텍스트
                       </button>
-                    </form>
+                      <button
+                        className={`sns-visibility-button ${dmComposerMode === 'voice' ? 'sns-visibility-button-active' : ''}`}
+                        onClick={() => setDmComposerMode('voice')}
+                        type="button"
+                      >
+                        음성 메시지
+                      </button>
+                    </section>
+                    {dmComposerMode === 'text' ? (
+                      <form className="sns-shell-dm-form" onSubmit={(event) => void handleDmSubmit(event)}>
+                        <label className="auth-field">
+                          <span>메시지</span>
+                          <textarea
+                            onChange={(event) => setDmDraft(event.target.value)}
+                            placeholder="메시지를 입력하세요"
+                            rows={3}
+                            value={dmDraft}
+                          />
+                        </label>
+                        <button className="auth-submit" disabled={dmSubmitting} type="submit">
+                          {dmSubmitting ? '전송 중...' : '보내기'}
+                        </button>
+                      </form>
+                    ) : (
+                      <form className="sns-shell-dm-form" onSubmit={(event) => void handleDmVoiceSubmit(event)}>
+                        <label className="auth-field">
+                          <span>음성 메시지 파일</span>
+                          <input accept="audio/*" onChange={handleDmVoiceFileChange} type="file" />
+                        </label>
+                        <p className="sns-shell-muted">
+                          음성 메시지 모드에서는 파일 기반으로 음성을 보내고, 자동응답 AI도 가능하면 음성으로 답합니다.
+                        </p>
+                        <button className="auth-submit" disabled={dmSubmitting || !dmVoiceFile} type="submit">
+                          {dmSubmitting ? '전송 중...' : '음성 보내기'}
+                        </button>
+                      </form>
+                    )}
                   </>
                 ) : (
                   <p className="sns-shell-muted">검색 탭에서 상대를 찾아 DM을 시작하거나, 왼쪽 목록에서 기존 대화를 선택하세요.</p>

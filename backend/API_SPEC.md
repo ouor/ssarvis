@@ -57,7 +57,7 @@ Authorization: Bearer <access-token>
 - 공개 계정은 검색 가능하고 누구나 DM 시작 가능하다.
 - 비공개 계정은 신규 팔로우가 불가능하다.
 - 비공개 계정은 이미 팔로우 중인 사용자만 게시물 조회 및 DM 가능하다.
-- 사람 간 DM이 기본이며, 자동응답은 텍스트 DM에 먼저 붙어 있다.
+- 사람 간 DM이 기본이며, 텍스트/음성 메시지 모두를 지원한다.
 - 클론과 보이스는 현재 구현상 `사용자당 1개 대표 자산`으로 운용된다.
   - `/api/system-prompt`는 내 최신 클론을 새로 추가하지 않고 갱신한다.
   - `/api/voices` 등록은 내 최신 보이스를 새로 추가하지 않고 갱신한다.
@@ -458,6 +458,9 @@ Query Parameter
       "senderDisplayName": "하루",
       "aiGenerated": false,
       "bundleRootMessageId": null,
+      "format": "TEXT",
+      "audioMimeType": null,
+      "audioBase64": null,
       "content": "안녕!",
       "createdAt": "2026-03-28T00:01:00Z"
     }
@@ -487,6 +490,9 @@ Query Parameter
   "senderDisplayName": "하루",
   "aiGenerated": false,
   "bundleRootMessageId": null,
+  "format": "TEXT",
+  "audioMimeType": null,
+  "audioBase64": null,
   "content": "안녕!",
   "createdAt": "2026-03-28T00:01:00Z"
 }
@@ -497,6 +503,8 @@ Query Parameter
 - 자동응답 조건은 `ALWAYS` 또는 `AWAY(마지막 활동 시각 기준 3분 초과)`다.
 - 상대 사용자의 대표 클론이 없으면 자동응답은 생략된다.
 - AI가 생성한 메시지는 다시 자동응답을 유발하지 않는다.
+- 음성 메시지를 보내면 서버는 음성 payload를 그대로 저장한다.
+- 음성 메시지가 자동응답을 유발한 경우, 대표 보이스가 있으면 AI 응답도 음성 메시지로 저장한다.
 
 `GET /api/dms/threads/{threadId}` 메시지 응답 예시
 
@@ -507,6 +515,9 @@ Query Parameter
   "senderDisplayName": "미소",
   "aiGenerated": true,
   "bundleRootMessageId": 29,
+  "format": "VOICE",
+  "audioMimeType": "audio/wav",
+  "audioBase64": "UklGRg==",
   "content": "지금은 잠깐 자리를 비웠어요.",
   "createdAt": "2026-03-28T00:01:10Z"
 }
@@ -521,6 +532,40 @@ Query Parameter
   - 해당 AI 응답은 그 사람 메시지의 `messageId`
 - `hiddenBundleMessageIds`
   - 현재 로그인한 사용자 기준으로 숨겨 둔 AI 응답 묶음 루트 메시지 id 목록이다.
+- `format`
+  - `TEXT` 또는 `VOICE`
+- `audioMimeType`, `audioBase64`
+  - `VOICE` 메시지일 때 인라인 재생에 필요한 음성 payload다.
+
+## POST `/api/dms/threads/{threadId}/voice-messages`
+
+음성 파일을 업로드해 음성 메시지를 DM 스레드에 추가한다.
+
+Request
+- `multipart/form-data`
+- field name: `audio`
+
+### Success Response
+
+```json
+{
+  "messageId": 31,
+  "senderUserId": 1,
+  "senderDisplayName": "하루",
+  "aiGenerated": false,
+  "bundleRootMessageId": null,
+  "format": "VOICE",
+  "audioMimeType": "audio/webm",
+  "audioBase64": "AQID",
+  "content": "음성 메시지",
+  "createdAt": "2026-03-28T00:01:00Z"
+}
+```
+
+규칙
+- `audio/*` MIME 타입 파일만 허용한다.
+- 음성 메시지도 일반 DM과 동일한 스레드에 저장된다.
+- 상대가 자동응답 대상이고 대표 보이스가 있으면 AI 응답도 음성 메시지로 내려올 수 있다.
 
 ## POST `/api/dms/threads/{threadId}/bundles/{bundleRootMessageId}/hide`
 
@@ -555,7 +600,7 @@ Query Parameter
 
 ## POST `/api/dms/messages/{messageId}/tts`
 
-지정한 DM 텍스트 메시지를 발화자의 대표 보이스로 합성한다.
+지정한 DM 메시지를 재생 가능한 음성 payload로 반환한다.
 
 ### Success Response
 
@@ -570,8 +615,9 @@ Query Parameter
 
 규칙
 - DM 참여자만 해당 메시지 음성에 접근할 수 있다.
-- 발화자에게 대표 보이스가 없으면 `404 Not Found`가 반환될 수 있다.
-- 이 API는 텍스트 DM 청취용이며, 메시지 원문 자체는 수정하지 않는다.
+- 텍스트 메시지는 발화자의 대표 보이스로 즉석 합성한다.
+- 이미 `VOICE` 형식으로 저장된 메시지는 저장된 음성 payload를 그대로 반환한다.
+- 발화자에게 대표 보이스가 없는 텍스트 메시지는 `404 Not Found`가 반환될 수 있다.
 
 ## 8. Clone APIs For Profile Workspace
 

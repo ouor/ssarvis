@@ -453,6 +453,77 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
   })
 
+  it('opens debate setup directly from the profile persona panel', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine')) {
+        return jsonResponse([
+          {
+            cloneId: 201,
+            createdAt: '2026-03-26T00:00:00.000Z',
+            alias: '내 클론',
+            shortDescription: '프로필에서 바로 논쟁시킬 내 대표 클론',
+            isPublic: false,
+            ownerDisplayName: '사용자14',
+          },
+        ])
+      }
+
+      if (url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine')) {
+        return jsonResponse([
+          {
+            registeredVoiceId: 71,
+            voiceId: 'voice-71',
+            displayName: '대표 음성',
+            preferredName: 'mainvoice',
+            originalFilename: 'main.wav',
+            audioMimeType: 'audio/wav',
+            isPublic: false,
+            ownerDisplayName: '사용자14',
+          },
+        ])
+      }
+
+      if (url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/posts/feed')) {
+        return jsonResponse([])
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 14, username: 'user14', displayName: '사용자14', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    expect(await screen.findByText('내 클론')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '프로필에서 논쟁하기' }))
+    expect(await screen.findByText('내 클론 논쟁 설정')).toBeInTheDocument()
+  })
+
   it('searches public accounts and updates account visibility from the profile shell', async () => {
     const user = userEvent.setup()
 
@@ -709,6 +780,9 @@ describe('CloneStudioPage user-scoped data flow', () => {
           senderDisplayName: '사용자16',
           aiGenerated: false,
           bundleRootMessageId: null,
+          format: 'TEXT',
+          audioMimeType: null,
+          audioBase64: null,
           content: '안녕하세요, 처음 메시지예요',
           createdAt: '2026-03-28T00:01:00.000Z',
         })
@@ -755,6 +829,9 @@ describe('CloneStudioPage user-scoped data flow', () => {
                   senderDisplayName: '사용자16',
                   aiGenerated: false,
                   bundleRootMessageId: 401,
+                  format: 'TEXT',
+                  audioMimeType: null,
+                  audioBase64: null,
                   content: '안녕하세요, 처음 메시지예요',
                   createdAt: '2026-03-28T00:01:00.000Z',
                 },
@@ -764,6 +841,9 @@ describe('CloneStudioPage user-scoped data flow', () => {
                   senderDisplayName: '대화 상대',
                   aiGenerated: true,
                   bundleRootMessageId: 401,
+                  format: 'TEXT',
+                  audioMimeType: null,
+                  audioBase64: null,
                   content: '지금 자리를 비워서 AI가 대신 답장하고 있어요.',
                   createdAt: '2026-03-28T00:01:10.000Z',
                 },
@@ -815,6 +895,170 @@ describe('CloneStudioPage user-scoped data flow', () => {
     await user.click(screen.getByRole('button', { name: '다시 보기' }))
     expect(await screen.findByText('안녕하세요, 처음 메시지예요')).toBeInTheDocument()
     expect(screen.getByText('지금 자리를 비워서 AI가 대신 답장하고 있어요.')).toBeInTheDocument()
+  })
+
+  it('sends a voice DM and renders an AI voice reply in voice mode', async () => {
+    const user = userEvent.setup()
+    const voiceFile = new File([new Uint8Array([1, 2, 3])], 'voice.webm', { type: 'audio/webm' })
+    let voiceMessagePosted = false
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/follows/users/search')) {
+        return jsonResponse([
+          {
+            userId: 62,
+            username: 'voice62',
+            displayName: '음성 상대',
+            visibility: 'PUBLIC',
+            following: false,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/dms/threads') && init?.method === 'POST') {
+        return jsonResponse({
+          threadId: 302,
+          otherParticipant: {
+            userId: 62,
+            username: 'voice62',
+            displayName: '음성 상대',
+            visibility: 'PUBLIC',
+          },
+          createdAt: '2026-03-28T00:00:00.000Z',
+          messages: [],
+          hiddenBundleMessageIds: [],
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads')) {
+        return jsonResponse([
+          {
+            threadId: 302,
+            otherParticipant: {
+              userId: 62,
+              username: 'voice62',
+              displayName: '음성 상대',
+              visibility: 'PUBLIC',
+            },
+            createdAt: '2026-03-28T00:00:00.000Z',
+            latestMessagePreview: '음성 메시지',
+            latestMessageCreatedAt: '2026-03-28T00:01:00.000Z',
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/dms/threads/302/voice-messages') && init?.method === 'POST') {
+        expect(init?.body).toBeInstanceOf(FormData)
+        voiceMessagePosted = true
+        return jsonResponse({
+          messageId: 501,
+          senderUserId: 17,
+          senderDisplayName: '사용자17',
+          aiGenerated: false,
+          bundleRootMessageId: null,
+          format: 'VOICE',
+          audioMimeType: 'audio/webm',
+          audioBase64: 'AQID',
+          content: '음성 메시지',
+          createdAt: '2026-03-28T00:01:00.000Z',
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads/302')) {
+        return jsonResponse({
+          threadId: 302,
+          otherParticipant: {
+            userId: 62,
+            username: 'voice62',
+            displayName: '음성 상대',
+            visibility: 'PUBLIC',
+          },
+          createdAt: '2026-03-28T00:00:00.000Z',
+          messages: voiceMessagePosted
+            ? [
+                {
+                  messageId: 501,
+                  senderUserId: 17,
+                  senderDisplayName: '사용자17',
+                  aiGenerated: false,
+                  bundleRootMessageId: 501,
+                  format: 'VOICE',
+                  audioMimeType: 'audio/webm',
+                  audioBase64: 'AQID',
+                  content: '음성 메시지',
+                  createdAt: '2026-03-28T00:01:00.000Z',
+                },
+                {
+                  messageId: 502,
+                  senderUserId: 62,
+                  senderDisplayName: '음성 상대',
+                  aiGenerated: true,
+                  bundleRootMessageId: 501,
+                  format: 'VOICE',
+                  audioMimeType: 'audio/wav',
+                  audioBase64: 'UklGRg==',
+                  content: '지금은 음성으로 답장하고 있어요.',
+                  createdAt: '2026-03-28T00:01:10.000Z',
+                },
+              ]
+            : [],
+          hiddenBundleMessageIds: [],
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads/302/bundles/501/hide') && init?.method === 'POST') {
+        return jsonResponse({
+          bundleRootMessageId: 501,
+          hidden: true,
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 17, username: 'user17', displayName: '사용자17', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Search' }))
+    await user.type(screen.getByPlaceholderText('표시명 또는 아이디를 입력하세요'), '음성')
+    await user.click(screen.getByRole('button', { name: '검색' }))
+    await user.click(screen.getByRole('button', { name: 'DM 시작' }))
+
+    await user.click(screen.getByRole('button', { name: '음성 메시지' }))
+    await user.upload(screen.getByLabelText('음성 메시지 파일'), voiceFile)
+    await user.click(screen.getByRole('button', { name: '음성 보내기' }))
+
+    expect(await screen.findByText('지금은 음성으로 답장하고 있어요.')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(document.querySelectorAll('audio').length).toBeGreaterThan(1)
+    })
+
+    await user.click(screen.getByRole('button', { name: 'AI 묶음 숨기기' }))
+    expect(await screen.findByText('숨긴 AI 응답 묶음')).toBeInTheDocument()
   })
 
   it('loads and updates auto reply settings in the Settings tab', async () => {

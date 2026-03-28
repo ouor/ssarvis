@@ -14,6 +14,7 @@ import com.ssarvis.backend.voice.VoiceService;
 import com.ssarvis.backend.voice.VoiceSynthesisResult;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -115,6 +117,35 @@ public class DmService {
     }
 
     @Transactional
+    public DmMessageResponse sendVoiceMessage(Long currentUserId, Long threadId, MultipartFile audioFile) {
+        if (audioFile == null || audioFile.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "audio file is required.");
+        }
+        if (!StringUtils.hasText(audioFile.getContentType()) || !audioFile.getContentType().startsWith("audio/")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "audio content type is required.");
+        }
+
+        try {
+            UserAccount sender = authService.getActiveUserAccount(currentUserId);
+            DmThread thread = getAccessibleThread(currentUserId, threadId);
+            DmMessage message = dmMessageRepository.save(new DmMessage(
+                    thread,
+                    sender,
+                    "음성 메시지",
+                    DmMessageKind.HUMAN,
+                    null,
+                    DmMessageFormat.VOICE,
+                    audioFile.getContentType(),
+                    Base64.getEncoder().encodeToString(audioFile.getBytes())
+            ));
+            maybeCreateAutoReply(thread, sender, message);
+            return toMessage(message);
+        } catch (java.io.IOException exception) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read the uploaded voice message.", exception);
+        }
+    }
+
+    @Transactional
     public DmBundleVisibilityResponse hideBundle(Long currentUserId, Long threadId, Long bundleRootMessageId) {
         UserAccount viewer = authService.getActiveUserAccount(currentUserId);
         DmThread thread = getAccessibleThread(currentUserId, threadId);
@@ -143,6 +174,10 @@ public class DmService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DM message not found."));
         if (!message.getThread().involves(currentUserId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot access this DM message.");
+        }
+
+        if (message.getFormat() == DmMessageFormat.VOICE && StringUtils.hasText(message.getAudioBase64())) {
+            return new DmMessageAudioResponse(message.getId(), null, message.getAudioMimeType(), message.getAudioBase64());
         }
 
         VoiceSynthesisResult result = voiceService.synthesizeDirectMessageText(message.getContent(), message.getSender().getId());
@@ -224,6 +259,9 @@ public class DmService {
                 message.getSender().getDisplayName(),
                 message.getKind() == DmMessageKind.AI_PROXY,
                 bundleRootMessageId,
+                message.getFormat().name(),
+                message.getAudioMimeType(),
+                message.getAudioBase64(),
                 message.getContent(),
                 message.getCreatedAt()
         );
@@ -251,6 +289,23 @@ public class DmService {
         );
         if (!StringUtils.hasText(reply)) {
             return;
+        }
+
+        if (triggeringMessage.getFormat() == DmMessageFormat.VOICE) {
+            VoiceSynthesisResult voiceReply = voiceService.synthesizeDirectMessageText(reply.trim(), recipient.getId());
+            if (voiceReply != null && StringUtils.hasText(voiceReply.audioBase64())) {
+                dmMessageRepository.save(new DmMessage(
+                        thread,
+                        recipient,
+                        reply.trim(),
+                        DmMessageKind.AI_PROXY,
+                        triggeringMessage,
+                        DmMessageFormat.VOICE,
+                        voiceReply.audioMimeType(),
+                        voiceReply.audioBase64()
+                ));
+                return;
+            }
         }
 
         dmMessageRepository.save(new DmMessage(thread, recipient, reply.trim(), DmMessageKind.AI_PROXY, triggeringMessage));

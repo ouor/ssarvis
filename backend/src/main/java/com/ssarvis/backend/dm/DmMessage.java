@@ -38,9 +38,20 @@ public class DmMessage {
     @Column(nullable = false, length = 20)
     private DmMessageKind kind;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private DmMessageFormat format;
+
     @Lob
     @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String content;
+
+    @Column(length = 100)
+    private String audioMimeType;
+
+    @Lob
+    @Column(columnDefinition = "LONGTEXT")
+    private String audioBase64;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -49,19 +60,35 @@ public class DmMessage {
     }
 
     public DmMessage(DmThread thread, UserAccount sender, String content) {
-        this(thread, sender, content, DmMessageKind.HUMAN, null);
+        this(thread, sender, content, DmMessageKind.HUMAN, null, DmMessageFormat.TEXT, null, null);
     }
 
     public DmMessage(DmThread thread, UserAccount sender, String content, DmMessageKind kind) {
-        this(thread, sender, content, kind, null);
+        this(thread, sender, content, kind, null, DmMessageFormat.TEXT, null, null);
     }
 
     public DmMessage(DmThread thread, UserAccount sender, String content, DmMessageKind kind, DmMessage triggerMessage) {
+        this(thread, sender, content, kind, triggerMessage, DmMessageFormat.TEXT, null, null);
+    }
+
+    public DmMessage(
+            DmThread thread,
+            UserAccount sender,
+            String content,
+            DmMessageKind kind,
+            DmMessage triggerMessage,
+            DmMessageFormat format,
+            String audioMimeType,
+            String audioBase64
+    ) {
         this.thread = thread;
         this.sender = sender;
         this.content = content;
         this.kind = kind == null ? DmMessageKind.HUMAN : kind;
         this.triggerMessage = triggerMessage;
+        this.format = format == null ? DmMessageFormat.TEXT : format;
+        this.audioMimeType = audioMimeType;
+        this.audioBase64 = audioBase64;
     }
 
     @PrePersist
@@ -91,6 +118,18 @@ public class DmMessage {
 
     public DmMessageKind getKind() {
         return kind;
+    }
+
+    public DmMessageFormat getFormat() {
+        return format;
+    }
+
+    public String getAudioMimeType() {
+        return audioMimeType;
+    }
+
+    public String getAudioBase64() {
+        return audioBase64;
     }
 
     public Instant getCreatedAt() {

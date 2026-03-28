@@ -35,9 +35,19 @@ function CloneStudioPage({ currentUser, deactivating, onDeactivate, onLogout }: 
             <strong>내 AI 프로필 자산</strong>
             <p>이 단계부터 클론과 보이스는 독립 캐릭터가 아니라 내 계정을 대리하는 1:1 자산으로 다룹니다.</p>
           </div>
-          <button className="secondary-button" onClick={() => studio.setActiveTab('clones')} type="button">
-            프로필 작업공간 열기
-          </button>
+          <div className="sns-shell-persona-actions">
+            <button className="secondary-button" onClick={() => studio.setActiveTab('clones')} type="button">
+              프로필 작업공간 열기
+            </button>
+            <button
+              className="secondary-button"
+              disabled={!managedClone}
+              onClick={() => managedClone ? studio.openDebateSetupForClone(managedClone) : undefined}
+              type="button"
+            >
+              프로필에서 논쟁하기
+            </button>
+          </div>
         </header>
 
         <div className="sns-shell-persona-grid">

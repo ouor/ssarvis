@@ -392,6 +392,15 @@ export function useCloneStudio(currentUser: CurrentUser) {
     }
   }
 
+  function openDebateSetupForClone(clone: CloneOption) {
+    setDebateOpponentId('')
+    setDebateTopic('')
+    setDebateSetupError('')
+    setDebateVoiceAId(mineVoices[0] ? String(mineVoices[0].registeredVoiceId) : '')
+    setDebateVoiceBId(mineVoices[0] ? String(mineVoices[0].registeredVoiceId) : '')
+    setModalState({ type: 'debate-setup', clone })
+  }
+
   function goBackToCloneActions() {
     if (selectedClone) {
       setModalState({ type: 'clone-actions', clone: selectedClone })
@@ -1105,6 +1114,7 @@ export function useCloneStudio(currentUser: CurrentUser) {
     openCloneActions,
     openVoicePicker,
     openDebateSetup,
+    openDebateSetupForClone,
     goBackToCloneActions,
     handleQuestionAnswer,
     handleCloneCreate,

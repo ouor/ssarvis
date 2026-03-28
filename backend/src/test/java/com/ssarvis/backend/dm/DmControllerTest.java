@@ -1,6 +1,7 @@
 package com.ssarvis.backend.dm;
 
 import static org.mockito.BDDMockito.given;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -19,6 +20,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(DmController.class)
@@ -71,7 +73,7 @@ class DmControllerTest {
     @Test
     void sendMessageReturnsCreatedMessage() throws Exception {
         given(dmService.sendMessage(1L, 10L, new DmSendMessageRequest("안녕!"))).willReturn(
-                new DmMessageResponse(30L, 1L, "하루", false, null, "안녕!", Instant.parse("2026-03-28T00:01:00Z"))
+                new DmMessageResponse(30L, 1L, "하루", false, null, "TEXT", null, null, "안녕!", Instant.parse("2026-03-28T00:01:00Z"))
         );
 
         mockMvc.perform(post("/api/dms/threads/10/messages")
@@ -85,7 +87,25 @@ class DmControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messageId").value(30))
                 .andExpect(jsonPath("$.senderUserId").value(1))
-                .andExpect(jsonPath("$.aiGenerated").value(false));
+                .andExpect(jsonPath("$.aiGenerated").value(false))
+                .andExpect(jsonPath("$.format").value("TEXT"));
+    }
+
+    @Test
+    void sendVoiceMessageReturnsCreatedVoiceMessage() throws Exception {
+        MockMultipartFile audio = new MockMultipartFile("audio", "voice.wav", "audio/wav", new byte[] {1, 2, 3});
+        given(dmService.sendVoiceMessage(1L, 10L, audio)).willReturn(
+                new DmMessageResponse(31L, 1L, "하루", false, null, "VOICE", "audio/wav", "AQID", "음성 메시지", Instant.parse("2026-03-28T00:01:00Z"))
+        );
+
+        mockMvc.perform(multipart("/api/dms/threads/10/voice-messages")
+                        .file(audio)
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, authUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.messageId").value(31))
+                .andExpect(jsonPath("$.format").value("VOICE"))
+                .andExpect(jsonPath("$.audioMimeType").value("audio/wav"))
+                .andExpect(jsonPath("$.audioBase64").value("AQID"));
     }
 
     @Test
@@ -141,7 +161,7 @@ class DmControllerTest {
                 10L,
                 new DmParticipantResponse(2L, "miso", "미소", AccountVisibility.PUBLIC),
                 Instant.parse("2026-03-28T00:00:00Z"),
-                List.of(new DmMessageResponse(30L, 1L, "하루", false, null, "안녕!", Instant.parse("2026-03-28T00:01:00Z"))),
+                List.of(new DmMessageResponse(30L, 1L, "하루", false, null, "TEXT", null, null, "안녕!", Instant.parse("2026-03-28T00:01:00Z"))),
                 List.of()
         );
     }

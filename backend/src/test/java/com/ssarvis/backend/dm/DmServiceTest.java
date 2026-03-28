@@ -28,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
@@ -141,6 +142,7 @@ class DmServiceTest {
         assertThat(response.senderUserId()).isEqualTo(1L);
         assertThat(response.aiGenerated()).isFalse();
         assertThat(response.bundleRootMessageId()).isNull();
+        assertThat(response.format()).isEqualTo("TEXT");
         assertThat(response.content()).isEqualTo("안녕!");
     }
 
@@ -217,6 +219,43 @@ class DmServiceTest {
     }
 
     @Test
+    void sendVoiceMessageCreatesVoicePayloadAndVoiceAiReply() {
+        UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
+        UserAccount target = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
+        target.updateAutoReplyMode(AutoReplyMode.ALWAYS);
+        DmThread thread = reflectId(new DmThread(me, target), 21L);
+        reflectCreatedAt(thread, Instant.parse("2026-03-28T00:00:00Z"));
+        PromptGenerationLog clone = reflectId(new PromptGenerationLog(target, "gpt-5", "[]", "system prompt", "미소", "설명"), 91L);
+        MockMultipartFile audioFile = new MockMultipartFile("audio", "voice.wav", "audio/wav", new byte[] {1, 2, 3});
+
+        given(authService.getActiveUserAccount(1L)).willReturn(me);
+        given(dmThreadRepository.findWithParticipantsById(21L)).willReturn(Optional.of(thread));
+        given(dmMessageRepository.save(any())).willAnswer(invocation -> {
+            DmMessage message = invocation.getArgument(0);
+            reflectId(message, message.getKind() == DmMessageKind.AI_PROXY ? 32L : 31L);
+            reflectCreatedAt(message, Instant.parse("2026-03-28T00:01:00Z"));
+            return message;
+        });
+        given(promptGenerationLogRepository.findTopByUserIdOrderByIdDesc(2L)).willReturn(Optional.of(clone));
+        given(dmMessageRepository.findByThreadIdOrderByCreatedAtAsc(21L)).willReturn(List.of(
+                reflectId(new DmMessage(thread, me, "음성 메시지", DmMessageKind.HUMAN, null, DmMessageFormat.VOICE, "audio/wav", "AQID"), 31L)
+        ));
+        given(openAiContextAssembler.buildDmAutoReplyMessages(any(), any(), any(), any(Integer.class))).willReturn(List.of());
+        given(openAiClient.requestChatCompletion(any())).willReturn("음성으로 답장할게요.");
+        given(voiceService.synthesizeDirectMessageText("음성으로 답장할게요.", 2L)).willReturn(
+                new VoiceSynthesisResult("voice-2", "audio/wav", "UklGRg==", null)
+        );
+
+        DmMessageResponse response = dmService.sendVoiceMessage(1L, 21L, audioFile);
+
+        assertThat(response.aiGenerated()).isFalse();
+        assertThat(response.format()).isEqualTo("VOICE");
+        assertThat(response.audioMimeType()).isEqualTo("audio/wav");
+        assertThat(response.audioBase64()).isNotBlank();
+        verify(dmMessageRepository, times(2)).save(any());
+    }
+
+    @Test
     void hideBundleStoresViewerScopedVisibility() {
         UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
         UserAccount target = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
@@ -255,6 +294,22 @@ class DmServiceTest {
         assertThat(response.voiceId()).isEqualTo("voice-2");
         assertThat(response.audioMimeType()).isEqualTo("audio/wav");
         assertThat(response.audioBase64()).isEqualTo("UklGRg==");
+    }
+
+    @Test
+    void synthesizeMessageAudioReturnsStoredVoicePayloadWithoutTts() {
+        UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
+        UserAccount target = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
+        DmThread thread = reflectId(new DmThread(me, target), 41L);
+        DmMessage voiceMessage = reflectId(new DmMessage(thread, target, "음성 메시지", DmMessageKind.HUMAN, null, DmMessageFormat.VOICE, "audio/webm", "AAAA"), 62L);
+
+        given(authService.getActiveUserAccount(1L)).willReturn(me);
+        given(dmMessageRepository.findById(62L)).willReturn(Optional.of(voiceMessage));
+
+        DmMessageAudioResponse response = dmService.synthesizeMessageAudio(1L, 62L);
+
+        assertThat(response.audioMimeType()).isEqualTo("audio/webm");
+        assertThat(response.audioBase64()).isEqualTo("AAAA");
     }
 
     private UserAccount reflectId(UserAccount userAccount, Long id) {

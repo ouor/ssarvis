@@ -118,6 +118,12 @@
   gap: 14px;
 }
 
+.sns-shell-persona-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .sns-shell-persona-card {
   display: flex;
   flex-direction: column;
@@ -319,6 +325,12 @@
 .sns-shell-dm-form {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.sns-shell-dm-composer-switch {
+  display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 

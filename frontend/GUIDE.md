@@ -27,6 +27,7 @@
   - 계정 공개성
   - 내 게시물
   - 내 AI 프로필 자산 요약
+  - 프로필 기반 논쟁 진입
   - 레거시 클론 스튜디오 작업공간
 - `Settings`
   - 자동응답 설정
@@ -103,6 +104,7 @@
 - `dmThreads`, `dmThreadsLoading`, `dmError`
 - `selectedThread`, `selectedThreadLoading`
 - `dmDraft`, `dmSubmitting`
+- `dmComposerMode`, `dmVoiceFile`
 - `dmBundleUpdatingId`
 - `dmAudioLoadingMessageId`, `dmAudioError`, `dmAudioSources`
 
@@ -122,6 +124,7 @@
 - `POST /api/dms/threads`
 - `GET /api/dms/threads/{threadId}`
 - `POST /api/dms/threads/{threadId}/messages`
+- `POST /api/dms/threads/{threadId}/voice-messages`
 - `POST /api/dms/threads/{threadId}/bundles/{bundleRootMessageId}/hide`
 - `DELETE /api/dms/threads/{threadId}/bundles/{bundleRootMessageId}/hide`
 - `POST /api/dms/messages/{messageId}/tts`
@@ -132,6 +135,7 @@
 - 서버가 조건을 만족하면 `DM` 탭 메시지 사이에 AI 프록시 응답이 함께 내려온다.
 - AI 묶음 숨김은 `selectedThread.hiddenBundleMessageIds`를 기준으로 현재 사용자 화면에만 적용한다.
 - 텍스트 DM은 클릭 시 개별 메시지 기준으로 TTS를 가져와 `<audio>`로 재생한다.
+- `음성 메시지` 모드에서는 파일 업로드 기반으로 음성을 보내고, `VOICE` 메시지는 인라인 `<audio>`로 바로 재생한다.
 
 ## 5. Profile 탭의 이중 구조
 
@@ -154,6 +158,7 @@
 `내 AI 프로필 자산` 패널 의미
 - 클론과 보이스가 이제 독립 캐릭터가 아니라 내 계정의 대표 자산이라는 사실을 상단에서 명시한다.
 - `mineClones[0]`, `mineVoices[0]`만 대표 자산처럼 보여준다.
+- 여기서 `프로필에서 논쟁하기` 버튼으로 대표 클론 기준 논쟁 설정 모달을 바로 열 수 있다.
 
 주의
 - 프로필 탭에서 보이는 “내 AI 프로필 자산” 요약과 아래 스튜디오 카드가 같은 내용을 중복해서 보여줄 수 있다.
@@ -190,6 +195,7 @@
 - `handleStartDm(targetUserId)`
 - `handleOpenThread(threadId)`
 - `handleDmSubmit(event)`
+- `handleDmVoiceSubmit(event)`
 
 동작 요약
 - `Search` 탭에서 `DM 시작`
@@ -206,6 +212,10 @@
   - 보낸 사람 메시지를 먼저 detail에 반영
   - 이어서 thread detail을 다시 불러와 AI 자동응답까지 함께 반영
   - 목록 재조회
+- 음성 메시지 전송 시
+  - `POST /api/dms/threads/{threadId}/voice-messages`
+  - multipart로 파일 업로드
+  - 이어서 thread detail을 다시 불러와 AI 음성 자동응답까지 함께 반영
 
 주의
 - 같은 이름이 DM 목록과 상세 헤더에 동시에 나타날 수 있다.
@@ -224,6 +234,10 @@ DM 응답에서 꼭 알아둘 필드
   - AI 묶음에 속하지 않으면 `null`
   - 유발한 사람 메시지는 자기 자신의 `messageId`
   - 해당 AI 응답은 그 사람 메시지의 `messageId`
+- `format`
+  - `TEXT` 또는 `VOICE`
+- `audioMimeType`, `audioBase64`
+  - `VOICE` 메시지에서 바로 재생할 인라인 음성 데이터
 - `hiddenBundleMessageIds`
   - 현재 사용자 기준으로 숨긴 묶음 루트 id 목록
 
@@ -293,6 +307,7 @@ DM 응답에서 꼭 알아둘 필드
 - 라이브 논쟁 스트림
 - 음성 입력 훅 연결
 - 레거시 친구 워크스페이스 연결
+- 프로필에서 여는 논쟁 설정 모달 진입
 
 현재 로딩 API
 - `/api/clones?scope=mine|friend|public`
@@ -304,6 +319,7 @@ DM 응답에서 꼭 알아둘 필드
 - 이 훅은 이미 크다.
 - 새 SNS 기능을 여기에 더 추가하지 않는다.
 - 앞으로 DM 자동응답을 붙일 때도 `SnsShell`과 별도 훅으로 나누는 편이 안전하다.
+- 예외적으로 `프로필에서 논쟁하기`는 기존 논쟁 자산을 재사용하기 위해 이 훅 진입점을 그대로 쓴다.
 
 ## 11. 스트리밍 오디오와 음성 입력
 
@@ -348,6 +364,7 @@ DM 응답에서 꼭 알아둘 필드
   - `/api/dms/threads`
   - `/api/dms/threads/{id}`
   - `/api/dms/threads/{id}/messages`
+  - `/api/dms/threads/{id}/voice-messages`
   - `/api/dms/threads/{id}/bundles/{bundleRootMessageId}/hide`
   - `/api/dms/messages/{id}/tts`
 
@@ -393,5 +410,11 @@ DM 응답에서 꼭 알아둘 필드
 - DM 메시지 음성이 안 들린다
   - `/api/dms/messages/{id}/tts` 응답이 `audioBase64`를 주는지 확인
   - 발화자 대표 보이스가 없는 메시지인지 확인
+- 음성 메시지 전송이 안 된다
+  - `FormData`로 `audio` 필드가 들어가는지 확인
+  - 업로드 파일 MIME 타입이 `audio/*`인지 확인
+- 프로필에서 논쟁 버튼이 안 열린다
+  - `mineClones[0]`가 실제로 로드됐는지 먼저 확인
+  - `openDebateSetupForClone(...)`로 모달 상태가 바뀌는지 확인
 - 테스트가 텍스트 중복으로 깨진다
   - `getByText` 대신 `getAllByText`로 바꿀 후보인지 먼저 확인
