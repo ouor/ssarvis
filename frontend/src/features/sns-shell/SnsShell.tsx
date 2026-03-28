@@ -34,6 +34,36 @@ type PostSummary = {
   createdAt: string
 }
 
+type DmParticipant = {
+  userId: number
+  username: string
+  displayName: string
+  visibility: AccountVisibility
+}
+
+type DmThreadSummary = {
+  threadId: number
+  otherParticipant: DmParticipant
+  createdAt: string
+  latestMessagePreview: string
+  latestMessageCreatedAt?: string | null
+}
+
+type DmMessage = {
+  messageId: number
+  senderUserId: number
+  senderDisplayName: string
+  content: string
+  createdAt: string
+}
+
+type DmThreadDetail = {
+  threadId: number
+  otherParticipant: DmParticipant
+  createdAt: string
+  messages: DmMessage[]
+}
+
 type SnsShellProps = {
   currentUser: CurrentUser
   deactivating: boolean
@@ -106,6 +136,14 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
   const [myPostsError, setMyPostsError] = useState('')
   const [postDraft, setPostDraft] = useState('')
   const [postSubmitting, setPostSubmitting] = useState(false)
+  const [dmThreads, setDmThreads] = useState<DmThreadSummary[]>([])
+  const [dmThreadsLoading, setDmThreadsLoading] = useState(false)
+  const [dmError, setDmError] = useState('')
+  const [selectedThread, setSelectedThread] = useState<DmThreadDetail | null>(null)
+  const [selectedThreadLoading, setSelectedThreadLoading] = useState(false)
+  const [dmDraft, setDmDraft] = useState('')
+  const [dmSubmitting, setDmSubmitting] = useState(false)
+  const [dmActionUserId, setDmActionUserId] = useState<number | null>(null)
 
   const activeShellTab = shellTabs.find((tab) => tab.id === activeTab) ?? shellTabs[0]
 
@@ -116,6 +154,14 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
 
     void loadFeedPosts()
   }, [activeTab, hasLoadedFeed])
+
+  useEffect(() => {
+    if (activeTab !== 'dm') {
+      return
+    }
+
+    void loadDmThreads()
+  }, [activeTab])
 
   async function loadFeedPosts() {
     setFeedLoading(true)
@@ -143,6 +189,20 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
       setMyPostsError(error instanceof Error ? error.message : '내 게시물을 불러오지 못했습니다.')
     } finally {
       setMyPostsLoading(false)
+    }
+  }
+
+  async function loadDmThreads() {
+    setDmThreadsLoading(true)
+    setDmError('')
+
+    try {
+      const data = await fetchJsonOrThrow<DmThreadSummary[]>(`${apiBaseUrl}/api/dms/threads`, 'DM 목록을 불러오지 못했습니다.')
+      setDmThreads(data)
+    } catch (error) {
+      setDmError(error instanceof Error ? error.message : 'DM 목록을 불러오지 못했습니다.')
+    } finally {
+      setDmThreadsLoading(false)
     }
   }
 
@@ -194,6 +254,87 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
       setSearchError(error instanceof Error ? error.message : '팔로우 상태를 변경하지 못했습니다.')
     } finally {
       setFollowActionUserId(null)
+    }
+  }
+
+  async function handleStartDm(targetUserId: number) {
+    setDmActionUserId(targetUserId)
+    setDmError('')
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/dms/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserId }),
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'DM을 시작하지 못했습니다.'))
+      }
+
+      const thread: DmThreadDetail = await response.json()
+      setSelectedThread(thread)
+      setDmDraft('')
+      setActiveTab('dm')
+      await loadDmThreads()
+    } catch (error) {
+      setDmError(error instanceof Error ? error.message : 'DM을 시작하지 못했습니다.')
+    } finally {
+      setDmActionUserId(null)
+    }
+  }
+
+  async function handleOpenThread(threadId: number) {
+    setSelectedThreadLoading(true)
+    setDmError('')
+
+    try {
+      const data = await fetchJsonOrThrow<DmThreadDetail>(`${apiBaseUrl}/api/dms/threads/${threadId}`, 'DM을 불러오지 못했습니다.')
+      setSelectedThread(data)
+      setDmDraft('')
+    } catch (error) {
+      setDmError(error instanceof Error ? error.message : 'DM을 불러오지 못했습니다.')
+    } finally {
+      setSelectedThreadLoading(false)
+    }
+  }
+
+  async function handleDmSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    if (!selectedThread || !dmDraft.trim()) {
+      return
+    }
+
+    setDmSubmitting(true)
+    setDmError('')
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/dms/threads/${selectedThread.threadId}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: dmDraft.trim() }),
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '메시지를 보내지 못했습니다.'))
+      }
+
+      const message: DmMessage = await response.json()
+      setSelectedThread((current) =>
+        current
+          ? {
+              ...current,
+              messages: [...current.messages, message],
+            }
+          : current,
+      )
+      setDmDraft('')
+      await loadDmThreads()
+    } catch (error) {
+      setDmError(error instanceof Error ? error.message : '메시지를 보내지 못했습니다.')
+    } finally {
+      setDmSubmitting(false)
     }
   }
 
@@ -424,14 +565,24 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                     <span>@{result.username}</span>
                     <p>{result.visibility === 'PUBLIC' ? '공개 계정' : '비공개 계정'}</p>
                   </div>
-                  <button
-                    className="secondary-button"
-                    disabled={followActionUserId === result.userId || result.visibility === 'PRIVATE' && !result.following}
-                    onClick={() => void handleFollowToggle(result)}
-                    type="button"
-                  >
-                    {result.following ? '언팔로우' : result.visibility === 'PRIVATE' ? '팔로우 불가' : '팔로우'}
-                  </button>
+                  <div className="sns-shell-search-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={followActionUserId === result.userId || result.visibility === 'PRIVATE' && !result.following}
+                      onClick={() => void handleFollowToggle(result)}
+                      type="button"
+                    >
+                      {result.following ? '언팔로우' : result.visibility === 'PRIVATE' ? '팔로우 불가' : '팔로우'}
+                    </button>
+                    <button
+                      className="secondary-button"
+                      disabled={dmActionUserId === result.userId}
+                      onClick={() => void handleStartDm(result.userId)}
+                      type="button"
+                    >
+                      {dmActionUserId === result.userId ? 'DM 여는 중...' : 'DM 시작'}
+                    </button>
+                  </div>
                 </article>
               ))}
 
@@ -442,7 +593,81 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
           </section>
         ) : null}
 
-        {activeTab !== 'profile' && activeTab !== 'search' ? (
+        {activeTab === 'dm' ? (
+          <section className="sns-shell-dm-panel">
+            <header className="sns-shell-post-header">
+              <div>
+                <strong>사람 간 DM</strong>
+                <p>이번 단계에서는 클론 채팅과 분리된 1:1 사람 간 DM 구조를 먼저 검증합니다.</p>
+              </div>
+              <button className="secondary-button" disabled={dmThreadsLoading} onClick={() => void loadDmThreads()} type="button">
+                {dmThreadsLoading ? '불러오는 중...' : 'DM 새로고침'}
+              </button>
+            </header>
+
+            {dmError ? <p className="auth-error">{dmError}</p> : null}
+
+            <div className="sns-shell-dm-layout">
+              <section className="sns-shell-dm-list">
+                {dmThreads.map((thread) => (
+                  <button
+                    className={`sns-shell-dm-thread ${selectedThread?.threadId === thread.threadId ? 'sns-shell-dm-thread-active' : ''}`}
+                    key={thread.threadId}
+                    onClick={() => void handleOpenThread(thread.threadId)}
+                    type="button"
+                  >
+                    <strong>{thread.otherParticipant.displayName}</strong>
+                    <span>@{thread.otherParticipant.username}</span>
+                    <p>{thread.latestMessagePreview || '아직 주고받은 메시지가 없습니다.'}</p>
+                  </button>
+                ))}
+                {!dmThreadsLoading && dmThreads.length === 0 ? <p className="sns-shell-muted">아직 시작한 DM이 없습니다.</p> : null}
+              </section>
+
+              <section className="sns-shell-dm-detail">
+                {selectedThreadLoading ? <p className="sns-shell-muted">대화를 불러오는 중입니다.</p> : null}
+                {selectedThread ? (
+                  <>
+                    <header className="sns-shell-dm-detail-header">
+                      <strong>{selectedThread.otherParticipant.displayName}</strong>
+                      <span>@{selectedThread.otherParticipant.username}</span>
+                    </header>
+                    <section className="sns-shell-dm-messages">
+                      {selectedThread.messages.map((message) => (
+                        <article
+                          className={`sns-shell-dm-message ${message.senderUserId === currentUser.userId ? 'sns-shell-dm-message-mine' : ''}`}
+                          key={message.messageId}
+                        >
+                          <strong>{message.senderDisplayName}</strong>
+                          <p>{message.content}</p>
+                        </article>
+                      ))}
+                      {selectedThread.messages.length === 0 ? <p className="sns-shell-muted">아직 메시지가 없습니다. 첫 메시지를 보내보세요.</p> : null}
+                    </section>
+                    <form className="sns-shell-dm-form" onSubmit={(event) => void handleDmSubmit(event)}>
+                      <label className="auth-field">
+                        <span>메시지</span>
+                        <textarea
+                          onChange={(event) => setDmDraft(event.target.value)}
+                          placeholder="메시지를 입력하세요"
+                          rows={3}
+                          value={dmDraft}
+                        />
+                      </label>
+                      <button className="auth-submit" disabled={dmSubmitting} type="submit">
+                        {dmSubmitting ? '전송 중...' : '보내기'}
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <p className="sns-shell-muted">검색 탭에서 상대를 찾아 DM을 시작하거나, 왼쪽 목록에서 기존 대화를 선택하세요.</p>
+                )}
+              </section>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab !== 'profile' && activeTab !== 'search' && activeTab !== 'dm' ? (
           <section className="sns-shell-placeholder">
             <div>
               <strong>{activeShellTab.label}</strong>

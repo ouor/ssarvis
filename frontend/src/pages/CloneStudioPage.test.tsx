@@ -629,6 +629,110 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(await screen.findByText('프로필에서 불러온 내 게시물')).toBeInTheDocument()
   })
 
+  it('starts a human DM from Search and sends a message in the DM tab', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/follows/users/search')) {
+        return jsonResponse([
+          {
+            userId: 61,
+            username: 'public61',
+            displayName: '대화 상대',
+            visibility: 'PUBLIC',
+            following: false,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/dms/threads') && init?.method === 'POST') {
+        expect(String(init.body)).toContain('"targetUserId":61')
+        return jsonResponse({
+          threadId: 301,
+          otherParticipant: {
+            userId: 61,
+            username: 'public61',
+            displayName: '대화 상대',
+            visibility: 'PUBLIC',
+          },
+          createdAt: '2026-03-28T00:00:00.000Z',
+          messages: [],
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads')) {
+        return jsonResponse([
+          {
+            threadId: 301,
+            otherParticipant: {
+              userId: 61,
+              username: 'public61',
+              displayName: '대화 상대',
+              visibility: 'PUBLIC',
+            },
+            createdAt: '2026-03-28T00:00:00.000Z',
+            latestMessagePreview: '',
+            latestMessageCreatedAt: null,
+          },
+        ])
+      }
+
+      if (url.endsWith('/api/dms/threads/301/messages') && init?.method === 'POST') {
+        expect(String(init.body)).toContain('안녕하세요, 처음 메시지예요')
+        return jsonResponse({
+          messageId: 401,
+          senderUserId: 16,
+          senderDisplayName: '사용자16',
+          content: '안녕하세요, 처음 메시지예요',
+          createdAt: '2026-03-28T00:01:00.000Z',
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 16, username: 'user16', displayName: '사용자16', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Search' }))
+    await user.type(screen.getByPlaceholderText('표시명 또는 아이디를 입력하세요'), '대화')
+    await user.click(screen.getByRole('button', { name: '검색' }))
+    expect(await screen.findByText('대화 상대')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'DM 시작' }))
+    expect(await screen.findByRole('button', { name: 'DM' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findAllByText('대화 상대')).toHaveLength(2)
+    expect(screen.getByText('아직 메시지가 없습니다. 첫 메시지를 보내보세요.')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('메시지를 입력하세요'), '안녕하세요, 처음 메시지예요')
+    await user.click(screen.getByRole('button', { name: '보내기' }))
+    expect(await screen.findByText('안녕하세요, 처음 메시지예요')).toBeInTheDocument()
+  })
+
   it('streams a chat reply through the live session flow', async () => {
     const user = userEvent.setup()
     window.localStorage.setItem('ssarvis.access-token', 'chat-token')

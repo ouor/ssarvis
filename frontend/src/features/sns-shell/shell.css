@@ -170,6 +170,91 @@
   background: rgba(255, 247, 238, 0.92);
 }
 
+.sns-shell-search-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sns-shell-dm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid rgba(117, 93, 58, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.sns-shell-dm-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+
+.sns-shell-dm-list,
+.sns-shell-dm-detail,
+.sns-shell-dm-thread,
+.sns-shell-dm-message {
+  border-radius: 20px;
+}
+
+.sns-shell-dm-list,
+.sns-shell-dm-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 247, 238, 0.92);
+}
+
+.sns-shell-dm-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-strong);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sns-shell-dm-thread-active {
+  outline: 2px solid rgba(242, 125, 104, 0.5);
+}
+
+.sns-shell-dm-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sns-shell-dm-detail-header span,
+.sns-shell-dm-thread span {
+  color: var(--muted);
+}
+
+.sns-shell-dm-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sns-shell-dm-message {
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.sns-shell-dm-message-mine {
+  background: rgba(255, 232, 214, 0.92);
+}
+
+.sns-shell-dm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .sns-shell-post-card div {
   display: flex;
   flex-direction: column;
@@ -248,5 +333,9 @@
   .sns-shell-post-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .sns-shell-dm-layout {
+    grid-template-columns: 1fr;
   }
 }
