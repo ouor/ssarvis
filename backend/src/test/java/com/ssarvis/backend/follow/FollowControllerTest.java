@@ -12,7 +12,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ssarvis.backend.api.GlobalExceptionHandler;
 import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthenticatedUser;
+import com.ssarvis.backend.auth.AutoReplyMode;
+import com.ssarvis.backend.auth.AutoReplySettingsResponse;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -115,6 +118,33 @@ class FollowControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(2))
                 .andExpect(jsonPath("$.following").value(true));
+    }
+
+    @Test
+    void autoReplySettingsReturnsCurrentMode() throws Exception {
+        given(followService.getAutoReplySettings(1L)).willReturn(new AutoReplySettingsResponse(AutoReplyMode.AWAY, Instant.parse("2026-03-28T00:00:00Z")));
+
+        mockMvc.perform(get("/api/profiles/me/auto-reply")
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, authUser()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode").value("AWAY"));
+    }
+
+    @Test
+    void updateAutoReplySettingsReturnsUpdatedMode() throws Exception {
+        given(followService.updateAutoReplySettings(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
+                .willReturn(new AutoReplySettingsResponse(AutoReplyMode.ALWAYS, Instant.parse("2026-03-28T00:00:00Z")));
+
+        mockMvc.perform(patch("/api/profiles/me/auto-reply")
+                        .requestAttr(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE, authUser())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "mode": "ALWAYS"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mode").value("ALWAYS"));
     }
 
     private AuthenticatedUser authUser() {

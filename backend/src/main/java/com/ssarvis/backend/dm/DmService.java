@@ -2,10 +2,19 @@ package com.ssarvis.backend.dm;
 
 import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthService;
+import com.ssarvis.backend.auth.AutoReplyMode;
 import com.ssarvis.backend.auth.UserAccount;
+import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.follow.FollowRepository;
+import com.ssarvis.backend.openai.OpenAiClient;
+import com.ssarvis.backend.openai.OpenAiContextAssembler;
+import com.ssarvis.backend.prompt.PromptGenerationLog;
+import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,22 +23,35 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class DmService {
+    private static final Duration AWAY_THRESHOLD = Duration.ofMinutes(3);
 
     private final DmThreadRepository dmThreadRepository;
     private final DmMessageRepository dmMessageRepository;
     private final AuthService authService;
     private final FollowRepository followRepository;
+    private final PromptGenerationLogRepository promptGenerationLogRepository;
+    private final OpenAiContextAssembler openAiContextAssembler;
+    private final OpenAiClient openAiClient;
+    private final AppProperties appProperties;
 
     public DmService(
             DmThreadRepository dmThreadRepository,
             DmMessageRepository dmMessageRepository,
             AuthService authService,
-            FollowRepository followRepository
+            FollowRepository followRepository,
+            PromptGenerationLogRepository promptGenerationLogRepository,
+            OpenAiContextAssembler openAiContextAssembler,
+            OpenAiClient openAiClient,
+            AppProperties appProperties
     ) {
         this.dmThreadRepository = dmThreadRepository;
         this.dmMessageRepository = dmMessageRepository;
         this.authService = authService;
         this.followRepository = followRepository;
+        this.promptGenerationLogRepository = promptGenerationLogRepository;
+        this.openAiContextAssembler = openAiContextAssembler;
+        this.openAiClient = openAiClient;
+        this.appProperties = appProperties;
     }
 
     @Transactional
@@ -79,6 +101,7 @@ public class DmService {
         UserAccount sender = authService.getActiveUserAccount(currentUserId);
         DmThread thread = getAccessibleThread(currentUserId, threadId);
         DmMessage message = dmMessageRepository.save(new DmMessage(thread, sender, request.content().trim()));
+        maybeCreateAutoReply(thread, sender);
         return toMessage(message);
     }
 
@@ -130,9 +153,54 @@ public class DmService {
                 message.getId(),
                 message.getSender().getId(),
                 message.getSender().getDisplayName(),
+                message.getKind() == DmMessageKind.AI_PROXY,
                 message.getContent(),
                 message.getCreatedAt()
         );
+    }
+
+    private void maybeCreateAutoReply(DmThread thread, UserAccount sender) {
+        UserAccount recipient = thread.otherParticipant(sender.getId());
+        if (!shouldAutoReply(recipient)) {
+            return;
+        }
+
+        PromptGenerationLog clone = promptGenerationLogRepository.findTopByUserIdOrderByIdDesc(recipient.getId()).orElse(null);
+        if (clone == null || !StringUtils.hasText(clone.getSystemPrompt())) {
+            return;
+        }
+
+        List<DmMessage> history = dmMessageRepository.findByThreadIdOrderByCreatedAtAsc(thread.getId());
+        String reply = openAiClient.requestChatCompletion(
+                openAiContextAssembler.buildDmAutoReplyMessages(
+                        recipient.getId(),
+                        clone.getSystemPrompt(),
+                        history,
+                        appProperties.getOpenai().getChatHistoryTurns()
+                )
+        );
+        if (!StringUtils.hasText(reply)) {
+            return;
+        }
+
+        dmMessageRepository.save(new DmMessage(thread, recipient, reply.trim(), DmMessageKind.AI_PROXY));
+    }
+
+    private boolean shouldAutoReply(UserAccount recipient) {
+        AutoReplyMode mode = recipient.getAutoReplyMode();
+        if (mode == null || mode == AutoReplyMode.OFF) {
+            return false;
+        }
+        if (mode == AutoReplyMode.ALWAYS) {
+            return true;
+        }
+
+        Instant lastActivityAt = recipient.getLastActivityAt();
+        if (lastActivityAt == null) {
+            return true;
+        }
+
+        return lastActivityAt.isBefore(Instant.now().minus(AWAY_THRESHOLD));
     }
 
     private DmParticipantResponse toParticipant(UserAccount user) {

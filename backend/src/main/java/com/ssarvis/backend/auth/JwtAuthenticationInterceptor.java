@@ -37,7 +37,7 @@ public class JwtAuthenticationInterceptor implements HandlerInterceptor {
         }
 
         Long userId = jwtTokenService.parseUserId(token);
-        request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, authService.getAuthenticatedUser(userId));
+        request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, authService.touchActivityAndGetAuthenticatedUser(userId));
         return true;
     }
 }

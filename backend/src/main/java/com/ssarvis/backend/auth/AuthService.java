@@ -65,10 +65,34 @@ public class AuthService {
         );
     }
 
+    public AuthenticatedUser touchActivityAndGetAuthenticatedUser(Long userId) {
+        UserAccount userAccount = getActiveUserAccount(userId);
+        userAccount.touchActivity();
+        userAccountRepository.save(userAccount);
+        return new AuthenticatedUser(
+                userAccount.getId(),
+                userAccount.getUsername(),
+                userAccount.getDisplayName(),
+                userAccount.getVisibility()
+        );
+    }
+
     public void updateVisibility(Long userId, AccountVisibility visibility) {
         UserAccount userAccount = getActiveUserAccount(userId);
         userAccount.updateVisibility(visibility);
         userAccountRepository.save(userAccount);
+    }
+
+    public AutoReplySettingsResponse getAutoReplySettings(Long userId) {
+        UserAccount userAccount = getActiveUserAccount(userId);
+        return new AutoReplySettingsResponse(userAccount.getAutoReplyMode(), userAccount.getLastActivityAt());
+    }
+
+    public AutoReplySettingsResponse updateAutoReplySettings(Long userId, AutoReplyMode autoReplyMode) {
+        UserAccount userAccount = getActiveUserAccount(userId);
+        userAccount.updateAutoReplyMode(autoReplyMode);
+        userAccountRepository.save(userAccount);
+        return new AutoReplySettingsResponse(userAccount.getAutoReplyMode(), userAccount.getLastActivityAt());
     }
 
     public void deactivate(Long userId) {

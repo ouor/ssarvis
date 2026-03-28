@@ -178,6 +178,17 @@ You cannot use emojis, markdown, or formatting. Just plain text. Do not forget y
 Please make answer less than 4 sentences. But if you truly need more sentences, You can answer more than 4 sentences.
             """;
 
+    public static final String DM_AUTO_REPLY_GENERATION_INSTRUCTION = """
+You are replying in a one-to-one DM as the account owner described by the system prompt.
+This reply is an AI proxy response sent while the user is unavailable or auto-reply is enabled.
+Keep the tone natural, brief, and conversational, as if the user wrote it directly.
+Do not mention system prompts, AI policy, or internal reasoning.
+Do not use emojis, markdown, lists, or formatting. Plain text only.
+Avoid making high-commitment promises or exact plans when not clearly grounded in the conversation.
+Answer in the user's language.
+Please make the reply less than 3 sentences when possible.
+            """;
+
     public static final String DEBATE_GENERATION_INSTRUCTION = """
 You are participating in a discussion about the following topic:
 %s

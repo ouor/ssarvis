@@ -100,6 +100,7 @@
 
 .sns-shell-profile-card,
 .sns-shell-persona-panel,
+.sns-shell-settings-panel,
 .sns-shell-search-panel,
 .sns-shell-post-panel {
   display: flex;
@@ -263,6 +264,29 @@
 .sns-shell-dm-message {
   padding: 14px;
   background: rgba(255, 255, 255, 0.84);
+}
+
+.sns-shell-dm-message-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sns-shell-dm-message-ai {
+  border: 1px solid rgba(242, 125, 104, 0.28);
+}
+
+.sns-shell-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(242, 125, 104, 0.18);
+  color: #c86657;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .sns-shell-dm-message-mine {

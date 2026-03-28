@@ -1,6 +1,7 @@
 package com.ssarvis.backend.openai;
 
 import com.ssarvis.backend.chat.ChatMessage;
+import com.ssarvis.backend.dm.DmMessage;
 import com.ssarvis.backend.prompt.PromptGenerateRequest;
 import com.ssarvis.backend.prompt.PromptTemplates;
 import java.util.ArrayList;
@@ -82,6 +83,24 @@ public class OpenAiContextAssembler {
         return messages;
     }
 
+    public List<OpenAiMessage> buildDmAutoReplyMessages(
+            Long accountOwnerUserId,
+            String systemPrompt,
+            List<DmMessage> history,
+            int maxTurns
+    ) {
+        List<OpenAiMessage> messages = new ArrayList<>();
+        messages.add(new OpenAiMessage("system", systemPrompt));
+
+        for (DmMessage message : limitDmHistoryToRecentTurns(history, maxTurns)) {
+            String role = message.getSender().getId().equals(accountOwnerUserId) ? "assistant" : "user";
+            messages.add(new OpenAiMessage(role, message.getContent()));
+        }
+
+        messages.add(new OpenAiMessage("system", PromptTemplates.DM_AUTO_REPLY_GENERATION_INSTRUCTION));
+        return messages;
+    }
+
     private List<ChatMessage> limitHistoryToRecentTurns(List<ChatMessage> history, int maxTurns) {
         int normalizedMaxTurns = Math.max(maxTurns, 0);
         if (normalizedMaxTurns == 0 || history.isEmpty()) {
@@ -97,6 +116,20 @@ public class OpenAiContextAssembler {
     }
 
     private List<DebateHistoryMessage> limitDebateHistoryToRecentTurns(List<DebateHistoryMessage> history, int maxTurns) {
+        int normalizedMaxTurns = Math.max(maxTurns, 0);
+        if (normalizedMaxTurns == 0 || history.isEmpty()) {
+            return List.of();
+        }
+
+        int maxMessages = normalizedMaxTurns * 2;
+        if (history.size() <= maxMessages) {
+            return history;
+        }
+
+        return history.subList(history.size() - maxMessages, history.size());
+    }
+
+    private List<DmMessage> limitDmHistoryToRecentTurns(List<DmMessage> history, int maxTurns) {
         int normalizedMaxTurns = Math.max(maxTurns, 0);
         if (normalizedMaxTurns == 0 || history.isEmpty()) {
             return List.of();

@@ -4,11 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthService;
+import com.ssarvis.backend.auth.AutoReplyMode;
 import com.ssarvis.backend.auth.UserAccount;
+import com.ssarvis.backend.config.AppProperties;
 import com.ssarvis.backend.follow.FollowRepository;
+import com.ssarvis.backend.openai.OpenAiClient;
+import com.ssarvis.backend.openai.OpenAiContextAssembler;
+import com.ssarvis.backend.prompt.PromptGenerationLog;
+import com.ssarvis.backend.prompt.PromptGenerationLogRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -35,11 +43,31 @@ class DmServiceTest {
     @Mock
     private FollowRepository followRepository;
 
+    @Mock
+    private PromptGenerationLogRepository promptGenerationLogRepository;
+
+    @Mock
+    private OpenAiContextAssembler openAiContextAssembler;
+
+    @Mock
+    private OpenAiClient openAiClient;
+
     private DmService dmService;
 
     @BeforeEach
     void setUp() {
-        dmService = new DmService(dmThreadRepository, dmMessageRepository, authService, followRepository);
+        AppProperties appProperties = new AppProperties();
+        appProperties.getOpenai().setChatHistoryTurns(10);
+        dmService = new DmService(
+                dmThreadRepository,
+                dmMessageRepository,
+                authService,
+                followRepository,
+                promptGenerationLogRepository,
+                openAiContextAssembler,
+                openAiClient,
+                appProperties
+        );
     }
 
     @Test
@@ -100,7 +128,62 @@ class DmServiceTest {
 
         assertThat(response.messageId()).isEqualTo(31L);
         assertThat(response.senderUserId()).isEqualTo(1L);
+        assertThat(response.aiGenerated()).isFalse();
         assertThat(response.content()).isEqualTo("안녕!");
+    }
+
+    @Test
+    void sendMessageCreatesAiProxyReplyWhenRecipientIsAway() {
+        UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
+        UserAccount target = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
+        target.updateAutoReplyMode(AutoReplyMode.AWAY);
+        reflectLastActivityAt(target, Instant.now().minusSeconds(240));
+
+        DmThread thread = reflectId(new DmThread(me, target), 21L);
+        reflectCreatedAt(thread, Instant.parse("2026-03-28T00:00:00Z"));
+        PromptGenerationLog clone = reflectId(new PromptGenerationLog(target, "gpt-5", "[]", "system prompt", "미소", "설명"), 91L);
+
+        given(authService.getActiveUserAccount(1L)).willReturn(me);
+        given(dmThreadRepository.findWithParticipantsById(21L)).willReturn(Optional.of(thread));
+        given(dmMessageRepository.save(any())).willAnswer(invocation -> {
+            DmMessage message = invocation.getArgument(0);
+            reflectId(message, message.getKind() == DmMessageKind.AI_PROXY ? 32L : 31L);
+            reflectCreatedAt(message, Instant.parse("2026-03-28T00:01:00Z"));
+            return message;
+        });
+        given(promptGenerationLogRepository.findTopByUserIdOrderByIdDesc(2L)).willReturn(Optional.of(clone));
+        given(dmMessageRepository.findByThreadIdOrderByCreatedAtAsc(21L)).willReturn(List.of(
+                reflectId(new DmMessage(thread, me, "안녕!"), 31L)
+        ));
+        given(openAiContextAssembler.buildDmAutoReplyMessages(any(), any(), any(), any(Integer.class))).willReturn(List.of());
+        given(openAiClient.requestChatCompletion(any())).willReturn("지금은 잠깐 자리를 비웠어요.");
+
+        DmMessageResponse response = dmService.sendMessage(1L, 21L, new DmSendMessageRequest("안녕!"));
+
+        assertThat(response.aiGenerated()).isFalse();
+        verify(dmMessageRepository, times(2)).save(any());
+    }
+
+    @Test
+    void sendMessageSkipsAiProxyReplyWhenRecipientAutoReplyIsOff() {
+        UserAccount me = reflectId(new UserAccount("haru", "hashed", "하루"), 1L);
+        UserAccount target = reflectId(new UserAccount("miso", "hashed", "미소"), 2L);
+        target.updateAutoReplyMode(AutoReplyMode.OFF);
+        DmThread thread = reflectId(new DmThread(me, target), 21L);
+        reflectCreatedAt(thread, Instant.parse("2026-03-28T00:00:00Z"));
+
+        given(authService.getActiveUserAccount(1L)).willReturn(me);
+        given(dmThreadRepository.findWithParticipantsById(21L)).willReturn(Optional.of(thread));
+        given(dmMessageRepository.save(any())).willAnswer(invocation -> {
+            DmMessage message = invocation.getArgument(0);
+            reflectId(message, 31L);
+            reflectCreatedAt(message, Instant.parse("2026-03-28T00:01:00Z"));
+            return message;
+        });
+
+        dmService.sendMessage(1L, 21L, new DmSendMessageRequest("안녕!"));
+
+        verify(dmMessageRepository, times(1)).save(any());
     }
 
     @Test
@@ -154,6 +237,17 @@ class DmServiceTest {
         }
     }
 
+    private PromptGenerationLog reflectId(PromptGenerationLog clone, Long id) {
+        try {
+            java.lang.reflect.Field idField = PromptGenerationLog.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            idField.set(clone, id);
+            return clone;
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Failed to assign test id.", exception);
+        }
+    }
+
     private void reflectCreatedAt(DmThread thread, Instant createdAt) {
         try {
             java.lang.reflect.Field createdAtField = DmThread.class.getDeclaredField("createdAt");
@@ -171,6 +265,16 @@ class DmServiceTest {
             createdAtField.set(message, createdAt);
         } catch (ReflectiveOperationException exception) {
             throw new IllegalStateException("Failed to assign createdAt.", exception);
+        }
+    }
+
+    private void reflectLastActivityAt(UserAccount userAccount, Instant lastActivityAt) {
+        try {
+            java.lang.reflect.Field lastActivityAtField = UserAccount.class.getDeclaredField("lastActivityAt");
+            lastActivityAtField.setAccessible(true);
+            lastActivityAtField.set(userAccount, lastActivityAt);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Failed to assign lastActivityAt.", exception);
         }
     }
 }

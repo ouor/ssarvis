@@ -1,6 +1,8 @@
 package com.ssarvis.backend.follow;
 
 import com.ssarvis.backend.auth.AuthenticatedUser;
+import com.ssarvis.backend.auth.AutoReplySettingsRequest;
+import com.ssarvis.backend.auth.AutoReplySettingsResponse;
 import com.ssarvis.backend.auth.JwtAuthenticationInterceptor;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -78,5 +80,20 @@ public class FollowController {
             @PathVariable Long profileUserId
     ) {
         return followService.getProfile(user.userId(), profileUserId);
+    }
+
+    @GetMapping("/api/profiles/me/auto-reply")
+    public AutoReplySettingsResponse autoReplySettings(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user
+    ) {
+        return followService.getAutoReplySettings(user.userId());
+    }
+
+    @PatchMapping("/api/profiles/me/auto-reply")
+    public AutoReplySettingsResponse updateAutoReplySettings(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @RequestBody AutoReplySettingsRequest request
+    ) {
+        return followService.updateAutoReplySettings(user.userId(), request);
     }
 }

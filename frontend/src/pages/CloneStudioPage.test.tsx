@@ -632,8 +632,9 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(await screen.findByText('프로필에서 불러온 내 게시물')).toBeInTheDocument()
   })
 
-  it('starts a human DM from Search and sends a message in the DM tab', async () => {
+  it('starts a human DM from Search and receives an AI-marked auto reply in the DM tab', async () => {
     const user = userEvent.setup()
+    let messagePosted = false
 
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
@@ -700,12 +701,47 @@ describe('CloneStudioPage user-scoped data flow', () => {
 
       if (url.endsWith('/api/dms/threads/301/messages') && init?.method === 'POST') {
         expect(String(init.body)).toContain('안녕하세요, 처음 메시지예요')
+        messagePosted = true
         return jsonResponse({
           messageId: 401,
           senderUserId: 16,
           senderDisplayName: '사용자16',
+          aiGenerated: false,
           content: '안녕하세요, 처음 메시지예요',
           createdAt: '2026-03-28T00:01:00.000Z',
+        })
+      }
+
+      if (url.endsWith('/api/dms/threads/301')) {
+        return jsonResponse({
+          threadId: 301,
+          otherParticipant: {
+            userId: 61,
+            username: 'public61',
+            displayName: '대화 상대',
+            visibility: 'PUBLIC',
+          },
+          createdAt: '2026-03-28T00:00:00.000Z',
+          messages: messagePosted
+            ? [
+                {
+                  messageId: 401,
+                  senderUserId: 16,
+                  senderDisplayName: '사용자16',
+                  aiGenerated: false,
+                  content: '안녕하세요, 처음 메시지예요',
+                  createdAt: '2026-03-28T00:01:00.000Z',
+                },
+                {
+                  messageId: 402,
+                  senderUserId: 61,
+                  senderDisplayName: '대화 상대',
+                  aiGenerated: true,
+                  content: '지금 자리를 비워서 AI가 대신 답장하고 있어요.',
+                  createdAt: '2026-03-28T00:01:10.000Z',
+                },
+              ]
+            : [],
         })
       }
 
@@ -734,6 +770,63 @@ describe('CloneStudioPage user-scoped data flow', () => {
     await user.type(screen.getByPlaceholderText('메시지를 입력하세요'), '안녕하세요, 처음 메시지예요')
     await user.click(screen.getByRole('button', { name: '보내기' }))
     expect(await screen.findByText('안녕하세요, 처음 메시지예요')).toBeInTheDocument()
+    expect(await screen.findByText('지금 자리를 비워서 AI가 대신 답장하고 있어요.')).toBeInTheDocument()
+    expect(screen.getByText('AI')).toBeInTheDocument()
+  })
+
+  it('loads and updates auto reply settings in the Settings tab', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (url.includes('/api/clones?scope=mine') || url.includes('/api/clones?scope=friend') || url.includes('/api/clones?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.includes('/api/voices?scope=mine') || url.includes('/api/voices?scope=friend') || url.includes('/api/voices?scope=public')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/profiles/me/auto-reply') && !init?.method) {
+        return jsonResponse({
+          mode: 'AWAY',
+          lastActivityAt: '2026-03-28T00:00:00.000Z',
+        })
+      }
+
+      if (url.endsWith('/api/profiles/me/auto-reply') && init?.method === 'PATCH') {
+        expect(String(init.body)).toContain('"mode":"ALWAYS"')
+        return jsonResponse({
+          mode: 'ALWAYS',
+          lastActivityAt: '2026-03-28T00:00:00.000Z',
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 16, username: 'user16', displayName: '사용자16', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Settings' }))
+    expect(await screen.findByRole('button', { name: '부재중일 때만' })).toHaveAttribute('class', expect.stringContaining('sns-visibility-button-active'))
+    await user.click(screen.getByRole('button', { name: '항상' }))
+    expect(await screen.findByRole('button', { name: '항상' })).toHaveAttribute('class', expect.stringContaining('sns-visibility-button-active'))
   })
 
   it('streams a chat reply through the live session flow', async () => {

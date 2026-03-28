@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -111,6 +112,34 @@ class AuthServiceTest {
         assertThat(authenticatedUser.userId()).isEqualTo(3L);
         assertThat(authenticatedUser.username()).isEqualTo("dami");
         assertThat(authenticatedUser.displayName()).isEqualTo("다미");
+    }
+
+    @Test
+    void touchActivityAndGetAuthenticatedUserUpdatesLastActivity() {
+        UserAccount userAccount = reflectId(new UserAccount("dami", passwordEncoder.encode("pass1234"), "다미"), 3L);
+        given(userAccountRepository.findByIdAndDeletedAtIsNull(3L)).willReturn(Optional.of(userAccount));
+        given(userAccountRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+        Instant before = Instant.now();
+        AuthenticatedUser authenticatedUser = authService.touchActivityAndGetAuthenticatedUser(3L);
+
+        assertThat(authenticatedUser.userId()).isEqualTo(3L);
+        assertThat(userAccount.getLastActivityAt()).isNotNull();
+        assertThat(userAccount.getLastActivityAt()).isAfterOrEqualTo(before);
+        verify(userAccountRepository).save(userAccount);
+    }
+
+    @Test
+    void updateAutoReplySettingsPersistsMode() {
+        UserAccount userAccount = reflectId(new UserAccount("nara", passwordEncoder.encode("pass1234"), "나라"), 4L);
+        given(userAccountRepository.findByIdAndDeletedAtIsNull(4L)).willReturn(Optional.of(userAccount));
+        given(userAccountRepository.save(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+        AutoReplySettingsResponse response = authService.updateAutoReplySettings(4L, AutoReplyMode.AWAY);
+
+        assertThat(response.mode()).isEqualTo(AutoReplyMode.AWAY);
+        assertThat(userAccount.getAutoReplyMode()).isEqualTo(AutoReplyMode.AWAY);
+        verify(userAccountRepository).save(userAccount);
     }
 
     @Test

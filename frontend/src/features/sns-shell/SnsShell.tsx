@@ -6,6 +6,7 @@ import './shell.css'
 
 export type SnsShellTab = 'home' | 'search' | 'dm' | 'profile' | 'settings'
 type AccountVisibility = 'PUBLIC' | 'PRIVATE'
+type AutoReplyMode = 'ALWAYS' | 'AWAY' | 'OFF'
 
 type FollowUserSummary = {
   userId: number
@@ -53,6 +54,7 @@ type DmMessage = {
   messageId: number
   senderUserId: number
   senderDisplayName: string
+  aiGenerated: boolean
   content: string
   createdAt: string
 }
@@ -70,6 +72,11 @@ type SnsShellProps = {
   onDeactivate: () => Promise<void>
   onLogout: () => void
   profileContent: ReactNode
+}
+
+type AutoReplySettings = {
+  mode: AutoReplyMode
+  lastActivityAt?: string | null
 }
 
 const shellTabs: Array<{ id: SnsShellTab; label: string; eyebrow: string; title: string; description: string }> = [
@@ -144,6 +151,10 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
   const [dmDraft, setDmDraft] = useState('')
   const [dmSubmitting, setDmSubmitting] = useState(false)
   const [dmActionUserId, setDmActionUserId] = useState<number | null>(null)
+  const [autoReplySettings, setAutoReplySettings] = useState<AutoReplySettings>({ mode: 'OFF', lastActivityAt: null })
+  const [autoReplyLoading, setAutoReplyLoading] = useState(false)
+  const [autoReplyUpdating, setAutoReplyUpdating] = useState(false)
+  const [autoReplyError, setAutoReplyError] = useState('')
 
   const activeShellTab = shellTabs.find((tab) => tab.id === activeTab) ?? shellTabs[0]
 
@@ -161,6 +172,14 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
     }
 
     void loadDmThreads()
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'settings') {
+      return
+    }
+
+    void loadAutoReplySettings()
   }, [activeTab])
 
   async function loadFeedPosts() {
@@ -203,6 +222,20 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
       setDmError(error instanceof Error ? error.message : 'DM 목록을 불러오지 못했습니다.')
     } finally {
       setDmThreadsLoading(false)
+    }
+  }
+
+  async function loadAutoReplySettings() {
+    setAutoReplyLoading(true)
+    setAutoReplyError('')
+
+    try {
+      const data = await fetchJsonOrThrow<AutoReplySettings>(`${apiBaseUrl}/api/profiles/me/auto-reply`, '자동응답 설정을 불러오지 못했습니다.')
+      setAutoReplySettings(data)
+    } catch (error) {
+      setAutoReplyError(error instanceof Error ? error.message : '자동응답 설정을 불러오지 못했습니다.')
+    } finally {
+      setAutoReplyLoading(false)
     }
   }
 
@@ -330,11 +363,40 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
           : current,
       )
       setDmDraft('')
+      await handleOpenThread(selectedThread.threadId)
       await loadDmThreads()
     } catch (error) {
       setDmError(error instanceof Error ? error.message : '메시지를 보내지 못했습니다.')
     } finally {
       setDmSubmitting(false)
+    }
+  }
+
+  async function handleAutoReplyModeChange(mode: AutoReplyMode) {
+    if (autoReplySettings.mode === mode) {
+      return
+    }
+
+    setAutoReplyUpdating(true)
+    setAutoReplyError('')
+
+    try {
+      const response = await apiFetch(`${apiBaseUrl}/api/profiles/me/auto-reply`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      })
+
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '자동응답 설정을 저장하지 못했습니다.'))
+      }
+
+      const data: AutoReplySettings = await response.json()
+      setAutoReplySettings(data)
+    } catch (error) {
+      setAutoReplyError(error instanceof Error ? error.message : '자동응답 설정을 저장하지 못했습니다.')
+    } finally {
+      setAutoReplyUpdating(false)
     }
   }
 
@@ -635,10 +697,13 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                     <section className="sns-shell-dm-messages">
                       {selectedThread.messages.map((message) => (
                         <article
-                          className={`sns-shell-dm-message ${message.senderUserId === currentUser.userId ? 'sns-shell-dm-message-mine' : ''}`}
+                          className={`sns-shell-dm-message ${message.senderUserId === currentUser.userId ? 'sns-shell-dm-message-mine' : ''} ${message.aiGenerated ? 'sns-shell-dm-message-ai' : ''}`}
                           key={message.messageId}
                         >
-                          <strong>{message.senderDisplayName}</strong>
+                          <div className="sns-shell-dm-message-header">
+                            <strong>{message.senderDisplayName}</strong>
+                            {message.aiGenerated ? <span className="sns-shell-ai-badge">AI</span> : null}
+                          </div>
                           <p>{message.content}</p>
                         </article>
                       ))}
@@ -667,7 +732,52 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
           </section>
         ) : null}
 
-        {activeTab !== 'profile' && activeTab !== 'search' && activeTab !== 'dm' ? (
+        {activeTab === 'settings' ? (
+          <section className="sns-shell-settings-panel">
+            <header className="sns-shell-post-header">
+              <div>
+                <strong>자동응답 설정</strong>
+                <p>텍스트 DM에서 내 클론이 언제 대신 답장할지 정합니다. 부재중 기준은 마지막 API 요청 후 3분입니다.</p>
+              </div>
+            </header>
+            {autoReplyError ? <p className="auth-error">{autoReplyError}</p> : null}
+            {autoReplyLoading ? <p className="sns-shell-muted">설정을 불러오는 중입니다.</p> : null}
+            {!autoReplyLoading ? (
+              <div className="sns-shell-visibility-row">
+                <button
+                  className={`sns-visibility-button ${autoReplySettings.mode === 'ALWAYS' ? 'sns-visibility-button-active' : ''}`}
+                  disabled={autoReplyUpdating}
+                  onClick={() => void handleAutoReplyModeChange('ALWAYS')}
+                  type="button"
+                >
+                  항상
+                </button>
+                <button
+                  className={`sns-visibility-button ${autoReplySettings.mode === 'AWAY' ? 'sns-visibility-button-active' : ''}`}
+                  disabled={autoReplyUpdating}
+                  onClick={() => void handleAutoReplyModeChange('AWAY')}
+                  type="button"
+                >
+                  부재중일 때만
+                </button>
+                <button
+                  className={`sns-visibility-button ${autoReplySettings.mode === 'OFF' ? 'sns-visibility-button-active' : ''}`}
+                  disabled={autoReplyUpdating}
+                  onClick={() => void handleAutoReplyModeChange('OFF')}
+                  type="button"
+                >
+                  사용 안함
+                </button>
+              </div>
+            ) : null}
+            <p className="sns-shell-muted">
+              마지막 활동 시각:{' '}
+              {autoReplySettings.lastActivityAt ? new Date(autoReplySettings.lastActivityAt).toLocaleString('ko-KR') : '아직 기록 없음'}
+            </p>
+          </section>
+        ) : null}
+
+        {activeTab !== 'profile' && activeTab !== 'search' && activeTab !== 'dm' && activeTab !== 'settings' ? (
           <section className="sns-shell-placeholder">
             <div>
               <strong>{activeShellTab.label}</strong>

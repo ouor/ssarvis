@@ -47,6 +47,7 @@
 - `SnsShell.tsx`
   - SNS 메인 탭 상태
   - 프로필 공개성
+  - 자동응답 설정
   - 사용자 검색
   - 팔로우 액션
   - 게시물 작성/피드
@@ -107,6 +108,8 @@
 - `GET /api/profiles/me`
   - 현재는 초기 상태를 `currentUser`에서 받고, 공개성 변경은 PATCH만 사용
 - `PATCH /api/profiles/me/visibility`
+- `GET /api/profiles/me/auto-reply`
+- `PATCH /api/profiles/me/auto-reply`
 - `GET /api/follows/users/search`
 - `POST /api/follows/{targetUserId}`
 - `DELETE /api/follows/{targetUserId}`
@@ -121,7 +124,7 @@
 중요 포인트
 - `Search`에서 `DM 시작`을 누르면 즉시 `DM` 탭으로 이동한다.
 - `DM` 탭은 사람 간 DM 전용이다.
-- 아직 AI 자동응답은 `DM` 탭에 붙지 않았다.
+- 서버가 조건을 만족하면 `DM` 탭 메시지 사이에 AI 프록시 응답이 함께 내려온다.
 
 ## 5. Profile 탭의 이중 구조
 
@@ -193,14 +196,43 @@
   - `GET /api/dms/threads/{threadId}`
 - 메시지 전송 시
   - `POST /api/dms/threads/{threadId}/messages`
-  - 성공 메시지를 현재 detail에 append
+  - 보낸 사람 메시지를 먼저 detail에 반영
+  - 이어서 thread detail을 다시 불러와 AI 자동응답까지 함께 반영
   - 목록 재조회
 
 주의
 - 같은 이름이 DM 목록과 상세 헤더에 동시에 나타날 수 있다.
 - 테스트에서 `getByText`보다 `getAllByText`가 더 안전한 경우가 있다.
+- AI 응답은 `aiGenerated` 플래그로 구분하고, UI에서는 `AI` 배지를 붙인다.
 
-## 8. 게시물과 공개성 구현 포인트
+## 8. Settings 탭과 자동응답
+
+관련 파일
+- [SnsShell.tsx](./src/features/sns-shell/SnsShell.tsx)
+
+현재 로컬 상태
+- `autoReplySettings`
+- `autoReplyLoading`
+- `autoReplyUpdating`
+- `autoReplyError`
+
+주요 함수
+- `loadAutoReplySettings()`
+- `handleAutoReplyModeChange(mode)`
+
+현재 동작
+- `Settings` 탭 진입 시 `GET /api/profiles/me/auto-reply`
+- 버튼 선택 시 `PATCH /api/profiles/me/auto-reply`
+- 모드 값은 다음처럼 쓴다.
+  - `ALWAYS`
+  - `AWAY`
+  - `OFF`
+
+주의
+- 부재중 판정은 프론트 타이머가 아니라 서버의 `lastActivityAt` 기준이다.
+- 프론트는 마지막 활동 시각을 표시만 하고 판정하지 않는다.
+
+## 9. 게시물과 공개성 구현 포인트
 
 관련 파일
 - [SnsShell.tsx](./src/features/sns-shell/SnsShell.tsx)
@@ -223,7 +255,7 @@
 - 공개/비공개 규칙은 프론트가 아니라 서버가 최종 판정한다.
 - 프론트는 UI 힌트만 준다.
 
-## 9. 레거시 클론 스튜디오 오케스트레이션
+## 10. 레거시 클론 스튜디오 오케스트레이션
 
 관련 파일
 - [useCloneStudio.ts](./src/features/clone-studio/hooks/useCloneStudio.ts)
@@ -251,7 +283,7 @@
 - 새 SNS 기능을 여기에 더 추가하지 않는다.
 - 앞으로 DM 자동응답을 붙일 때도 `SnsShell`과 별도 훅으로 나누는 편이 안전하다.
 
-## 10. 스트리밍 오디오와 음성 입력
+## 11. 스트리밍 오디오와 음성 입력
 
 관련 파일
 - [PcmStreamPlayer.ts](./src/utils/PcmStreamPlayer.ts)
@@ -268,7 +300,7 @@
 - `pagehide`에서 정리한다.
 - `HTMLMediaElement.pause()`는 jsdom에서 경고만 나고 테스트 실패 원인은 아니다.
 
-## 11. 테스트할 때 꼭 알아둘 점
+## 12. 테스트할 때 꼭 알아둘 점
 
 관련 파일
 - [CloneStudioPage.test.tsx](./src/pages/CloneStudioPage.test.tsx)
@@ -290,6 +322,7 @@
   - `/api/posts`
   - `/api/profiles/me/posts`
   - `/api/profiles/me/visibility`
+  - `/api/profiles/me/auto-reply`
   - `/api/dms/threads`
   - `/api/dms/threads/{id}`
   - `/api/dms/threads/{id}/messages`
@@ -299,21 +332,26 @@
 - 같은 이름이 DM 목록과 DM 상세 헤더에 동시에 보일 수 있다.
 - 이런 경우 `getAllByText(...)`, `findAllByText(...)`, 더 좁은 `closest(...)` 사용이 안전하다.
 
-## 12. 유지보수 원칙
+## 13. 유지보수 원칙
 
 - 새 SNS 기능은 `SnsShell` 기준으로 추가한다.
 - 레거시 기능 확장은 꼭 필요한 경우만 `useCloneStudio`에 넣는다.
 - 인증과 공통 에러 처리는 `api.ts`에 모은다.
 - 사람이 주체인 DM과 클론 체험용 채팅은 도메인을 섞지 않는다.
 - “내 대표 클론/보이스 1개” 정책을 깨는 UI는 만들지 않는다.
+- 자동응답 판정은 프론트가 아니라 서버 정책에 맡긴다.
 - 문서와 테스트에서 메인 제품 흐름과 레거시 작업공간을 명시적으로 구분한다.
 
-## 13. 빠른 체크리스트
+## 14. 빠른 체크리스트
 
 - 검색은 되는데 DM 시작이 실패한다
   - 대상 계정이 비공개인지
   - 이미 팔로우 중인지
   - `/api/dms/threads` 응답 코드를 확인
+- DM은 보내졌는데 AI 답장이 안 온다
+  - 상대 사용자의 자동응답 모드가 `ALWAYS` 또는 `AWAY`인지 확인
+  - 상대 사용자의 대표 클론이 있는지 확인
+  - 상대 사용자의 마지막 활동 시각이 최근 3분 이내인지 확인
 - 프로필에서 클론/보이스가 여러 개처럼 보인다
   - `mineClones[0]`, `mineVoices[0]` 요약 패널과 아래 레거시 카드가 중복 표시되는지 먼저 확인
   - 서버 `scope=mine` 응답이 1개만 오는지 확인
@@ -321,5 +359,7 @@
   - `handlePostSubmit`에서 `feedPosts`, `myPosts` 둘 다 갱신하는지 확인
 - 공개성 토글 후 UI가 안 바뀐다
   - `PATCH /api/profiles/me/visibility` 응답이 `profile` 상태에 반영되는지 확인
+- 자동응답 토글 후 UI가 안 바뀐다
+  - `PATCH /api/profiles/me/auto-reply` 응답이 `autoReplySettings` 상태에 반영되는지 확인
 - 테스트가 텍스트 중복으로 깨진다
   - `getByText` 대신 `getAllByText`로 바꿀 후보인지 먼저 확인

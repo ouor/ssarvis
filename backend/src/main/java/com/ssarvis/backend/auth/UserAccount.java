@@ -32,8 +32,15 @@ public class UserAccount {
     @Column(nullable = false, length = 20)
     private AccountVisibility visibility = AccountVisibility.PUBLIC;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AutoReplyMode autoReplyMode = AutoReplyMode.OFF;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Column
+    private Instant lastActivityAt;
 
     @Column
     private Instant deletedAt;
@@ -50,6 +57,7 @@ public class UserAccount {
     @PrePersist
     void onCreate() {
         createdAt = Instant.now();
+        lastActivityAt = createdAt;
     }
 
     public void softDelete() {
@@ -58,6 +66,14 @@ public class UserAccount {
 
     public void updateVisibility(AccountVisibility visibility) {
         this.visibility = visibility == null ? AccountVisibility.PUBLIC : visibility;
+    }
+
+    public void updateAutoReplyMode(AutoReplyMode autoReplyMode) {
+        this.autoReplyMode = autoReplyMode == null ? AutoReplyMode.OFF : autoReplyMode;
+    }
+
+    public void touchActivity() {
+        this.lastActivityAt = Instant.now();
     }
 
     public Long getId() {
@@ -82,6 +98,14 @@ public class UserAccount {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public AutoReplyMode getAutoReplyMode() {
+        return autoReplyMode;
+    }
+
+    public Instant getLastActivityAt() {
+        return lastActivityAt;
     }
 
     public Instant getDeletedAt() {

@@ -2,6 +2,9 @@ package com.ssarvis.backend.follow;
 
 import com.ssarvis.backend.auth.AccountVisibility;
 import com.ssarvis.backend.auth.AuthService;
+import com.ssarvis.backend.auth.AutoReplyMode;
+import com.ssarvis.backend.auth.AutoReplySettingsRequest;
+import com.ssarvis.backend.auth.AutoReplySettingsResponse;
 import com.ssarvis.backend.auth.UserAccount;
 import java.util.List;
 import org.springframework.data.domain.PageRequest;
@@ -126,6 +129,19 @@ public class FollowService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public AutoReplySettingsResponse getAutoReplySettings(Long currentUserId) {
+        return authService.getAutoReplySettings(currentUserId);
+    }
+
+    @Transactional
+    public AutoReplySettingsResponse updateAutoReplySettings(Long currentUserId, AutoReplySettingsRequest request) {
+        if (request == null || request.mode() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "mode is required.");
+        }
+        return authService.updateAutoReplySettings(currentUserId, normalizeMode(request.mode()));
+    }
+
     private FollowUserSummaryResponse toSummary(UserAccount user, boolean following) {
         return new FollowUserSummaryResponse(
                 user.getId(),
@@ -134,5 +150,9 @@ public class FollowService {
                 user.getVisibility(),
                 following
         );
+    }
+
+    private AutoReplyMode normalizeMode(AutoReplyMode mode) {
+        return mode == null ? AutoReplyMode.OFF : mode;
     }
 }

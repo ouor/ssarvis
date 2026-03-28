@@ -30,6 +30,10 @@ public class DmMessage {
     @JoinColumn(name = "sender_user_id", nullable = false)
     private UserAccount sender;
 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private DmMessageKind kind;
+
     @Lob
     @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String content;
@@ -41,9 +45,14 @@ public class DmMessage {
     }
 
     public DmMessage(DmThread thread, UserAccount sender, String content) {
+        this(thread, sender, content, DmMessageKind.HUMAN);
+    }
+
+    public DmMessage(DmThread thread, UserAccount sender, String content, DmMessageKind kind) {
         this.thread = thread;
         this.sender = sender;
         this.content = content;
+        this.kind = kind == null ? DmMessageKind.HUMAN : kind;
     }
 
     @PrePersist
@@ -65,6 +74,10 @@ public class DmMessage {
 
     public String getContent() {
         return content;
+    }
+
+    public DmMessageKind getKind() {
+        return kind;
     }
 
     public Instant getCreatedAt() {

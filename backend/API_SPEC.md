@@ -57,11 +57,12 @@ Authorization: Bearer <access-token>
 - 공개 계정은 검색 가능하고 누구나 DM 시작 가능하다.
 - 비공개 계정은 신규 팔로우가 불가능하다.
 - 비공개 계정은 이미 팔로우 중인 사용자만 게시물 조회 및 DM 가능하다.
-- 사람 간 DM이 기본이며, AI 자동응답은 아직 백엔드 메인 DM 도메인에 붙지 않았다.
+- 사람 간 DM이 기본이며, 자동응답은 텍스트 DM에 먼저 붙어 있다.
 - 클론과 보이스는 현재 구현상 `사용자당 1개 대표 자산`으로 운용된다.
   - `/api/system-prompt`는 내 최신 클론을 새로 추가하지 않고 갱신한다.
   - `/api/voices` 등록은 내 최신 보이스를 새로 추가하지 않고 갱신한다.
 - 친구 기반 자산 공유 API는 레거시 워크스페이스용으로 아직 남아 있다.
+- 모든 보호 API 요청은 서버가 현재 사용자의 `lastActivityAt`을 갱신한다.
 
 ## 4. Auth APIs
 
@@ -167,6 +168,45 @@ Authorization: Bearer <access-token>
 ```json
 {
   "visibility": "PRIVATE"
+}
+```
+
+## GET `/api/profiles/me/auto-reply`
+
+내 자동응답 설정과 마지막 활동 시각을 반환한다.
+
+### Success Response
+
+```json
+{
+  "mode": "AWAY",
+  "lastActivityAt": "2026-03-28T00:00:00Z"
+}
+```
+
+`mode` 값
+- `ALWAYS`
+- `AWAY`
+- `OFF`
+
+## PATCH `/api/profiles/me/auto-reply`
+
+내 자동응답 설정을 변경한다.
+
+### Request Body
+
+```json
+{
+  "mode": "ALWAYS"
+}
+```
+
+### Success Response
+
+```json
+{
+  "mode": "ALWAYS",
+  "lastActivityAt": "2026-03-28T00:00:00Z"
 }
 ```
 
@@ -447,8 +487,23 @@ Query Parameter
 ```
 
 현재 상태
-- AI 자동응답은 아직 `/api/dms/**`에 연결되지 않았다.
-- 지금 DM 도메인은 사람 메시지 저장과 조회까지만 담당한다.
+- 사람이 보낸 DM은 서버가 상대 사용자의 자동응답 설정을 평가한 뒤, 필요하면 같은 스레드에 AI 프록시 응답을 추가 저장한다.
+- 자동응답 조건은 `ALWAYS` 또는 `AWAY(마지막 활동 시각 기준 3분 초과)`다.
+- 상대 사용자의 대표 클론이 없으면 자동응답은 생략된다.
+- AI가 생성한 메시지는 다시 자동응답을 유발하지 않는다.
+
+`GET /api/dms/threads/{threadId}` 메시지 응답 예시
+
+```json
+{
+  "messageId": 30,
+  "senderUserId": 2,
+  "senderDisplayName": "미소",
+  "aiGenerated": true,
+  "content": "지금은 잠깐 자리를 비웠어요.",
+  "createdAt": "2026-03-28T00:01:10Z"
+}
+```
 
 ## 8. Clone APIs For Profile Workspace
 
