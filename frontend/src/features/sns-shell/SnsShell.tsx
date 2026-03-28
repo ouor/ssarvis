@@ -115,15 +115,15 @@ const shellTabs: Array<{ id: SnsShellTab; label: string; eyebrow: string; title:
     id: 'profile',
     label: 'Profile',
     eyebrow: 'Sprint 2 Result',
-    title: '기존 스튜디오를 유지하면서 계정 공개성을 먼저 고정합니다.',
-    description: '이번 단계에서는 프로필 상단에서 공개/비공개 설정을 제어하고, 하위 작업 공간에서 기존 기능을 계속 유지합니다.',
+    title: '내 프로필과 AI 자산 작업공간을 함께 관리합니다.',
+    description: '프로필 편집, 내 게시물 확인, 대표 클론/보이스 요약과 레거시 작업공간을 이 탭에서 이어서 다룹니다.',
   },
   {
     id: 'settings',
     label: 'Settings',
-    eyebrow: 'Sprint 6 Preview',
-    title: '자동응답과 AI 가시성 설정이 들어올 자리입니다.',
-    description: '나중에는 자동응답 모드, AI 응답 숨김, 공개성 관련 개인 설정이 이 화면에 모입니다.',
+    eyebrow: 'Sprint 6 Result',
+    title: '계정 공개성, 자동응답, AI 가시성 정책을 한곳에서 관리합니다.',
+    description: 'PRD 기준으로 개인 설정에 해당하는 항목을 Settings에 모아 두고, DM 안의 AI 숨김 정책도 이곳에서 안내합니다.',
   },
 ]
 
@@ -859,30 +859,6 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
                 </button>
               </form>
             </section>
-            <section className="sns-shell-profile-card">
-              <div>
-                <strong>계정 공개성</strong>
-                <p>공개 계정은 누구나 DM 가능하고 검색할 수 있습니다. 비공개 계정은 기존 팔로워만 접근할 수 있습니다.</p>
-              </div>
-              <div className="sns-shell-visibility-row">
-                <button
-                  className={`sns-visibility-button ${profile.visibility === 'PUBLIC' ? 'sns-visibility-button-active' : ''}`}
-                  disabled={visibilityUpdating}
-                  onClick={() => void handleVisibilityChange('PUBLIC')}
-                  type="button"
-                >
-                  공개 계정
-                </button>
-                <button
-                  className={`sns-visibility-button ${profile.visibility === 'PRIVATE' ? 'sns-visibility-button-active' : ''}`}
-                  disabled={visibilityUpdating}
-                  onClick={() => void handleVisibilityChange('PRIVATE')}
-                  type="button"
-                >
-                  비공개 계정
-                </button>
-              </div>
-            </section>
             <section className="sns-shell-post-panel">
               <header className="sns-shell-post-header">
                 <div>
@@ -1177,48 +1153,104 @@ function SnsShell({ currentUser, deactivating, onDeactivate, onLogout, profileCo
         ) : null}
 
         {activeTab === 'settings' ? (
-          <section className="sns-shell-settings-panel">
-            <header className="sns-shell-post-header">
-              <div>
-                <strong>자동응답 설정</strong>
-                <p>텍스트 DM에서 내 클론이 언제 대신 답장할지 정합니다. 부재중 기준은 마지막 API 요청 후 3분입니다.</p>
-              </div>
-            </header>
-            {autoReplyError ? <p className="auth-error">{autoReplyError}</p> : null}
-            {autoReplyLoading ? <p className="sns-shell-muted">설정을 불러오는 중입니다.</p> : null}
-            {!autoReplyLoading ? (
+          <>
+            <section className="sns-shell-settings-panel">
+              <header className="sns-shell-post-header">
+                <div>
+                  <strong>계정 공개성</strong>
+                  <p>공개 계정은 누구나 DM 가능하고 검색할 수 있습니다. 비공개 계정은 기존 팔로워만 접근할 수 있습니다.</p>
+                </div>
+              </header>
+              {profileError ? <p className="auth-error">{profileError}</p> : null}
               <div className="sns-shell-visibility-row">
                 <button
-                  className={`sns-visibility-button ${autoReplySettings.mode === 'ALWAYS' ? 'sns-visibility-button-active' : ''}`}
-                  disabled={autoReplyUpdating}
-                  onClick={() => void handleAutoReplyModeChange('ALWAYS')}
+                  className={`sns-visibility-button ${profile.visibility === 'PUBLIC' ? 'sns-visibility-button-active' : ''}`}
+                  disabled={visibilityUpdating}
+                  onClick={() => void handleVisibilityChange('PUBLIC')}
                   type="button"
                 >
-                  항상
+                  공개 계정
                 </button>
                 <button
-                  className={`sns-visibility-button ${autoReplySettings.mode === 'AWAY' ? 'sns-visibility-button-active' : ''}`}
-                  disabled={autoReplyUpdating}
-                  onClick={() => void handleAutoReplyModeChange('AWAY')}
+                  className={`sns-visibility-button ${profile.visibility === 'PRIVATE' ? 'sns-visibility-button-active' : ''}`}
+                  disabled={visibilityUpdating}
+                  onClick={() => void handleVisibilityChange('PRIVATE')}
                   type="button"
                 >
-                  부재중일 때만
-                </button>
-                <button
-                  className={`sns-visibility-button ${autoReplySettings.mode === 'OFF' ? 'sns-visibility-button-active' : ''}`}
-                  disabled={autoReplyUpdating}
-                  onClick={() => void handleAutoReplyModeChange('OFF')}
-                  type="button"
-                >
-                  사용 안함
+                  비공개 계정
                 </button>
               </div>
-            ) : null}
-            <p className="sns-shell-muted">
-              마지막 활동 시각:{' '}
-              {autoReplySettings.lastActivityAt ? new Date(autoReplySettings.lastActivityAt).toLocaleString('ko-KR') : '아직 기록 없음'}
-            </p>
-          </section>
+            </section>
+
+            <section className="sns-shell-settings-panel">
+              <header className="sns-shell-post-header">
+                <div>
+                  <strong>자동응답 설정</strong>
+                  <p>텍스트 DM에서 내 클론이 언제 대신 답장할지 정합니다. 부재중 기준은 마지막 API 요청 후 3분입니다.</p>
+                </div>
+              </header>
+              {autoReplyError ? <p className="auth-error">{autoReplyError}</p> : null}
+              {autoReplyLoading ? <p className="sns-shell-muted">설정을 불러오는 중입니다.</p> : null}
+              {!autoReplyLoading ? (
+                <div className="sns-shell-visibility-row">
+                  <button
+                    className={`sns-visibility-button ${autoReplySettings.mode === 'ALWAYS' ? 'sns-visibility-button-active' : ''}`}
+                    disabled={autoReplyUpdating}
+                    onClick={() => void handleAutoReplyModeChange('ALWAYS')}
+                    type="button"
+                  >
+                    항상
+                  </button>
+                  <button
+                    className={`sns-visibility-button ${autoReplySettings.mode === 'AWAY' ? 'sns-visibility-button-active' : ''}`}
+                    disabled={autoReplyUpdating}
+                    onClick={() => void handleAutoReplyModeChange('AWAY')}
+                    type="button"
+                  >
+                    부재중일 때만
+                  </button>
+                  <button
+                    className={`sns-visibility-button ${autoReplySettings.mode === 'OFF' ? 'sns-visibility-button-active' : ''}`}
+                    disabled={autoReplyUpdating}
+                    onClick={() => void handleAutoReplyModeChange('OFF')}
+                    type="button"
+                  >
+                    사용 안함
+                  </button>
+                </div>
+              ) : null}
+              <p className="sns-shell-muted">
+                마지막 활동 시각:{' '}
+                {autoReplySettings.lastActivityAt ? new Date(autoReplySettings.lastActivityAt).toLocaleString('ko-KR') : '아직 기록 없음'}
+              </p>
+            </section>
+
+            <section className="sns-shell-settings-panel">
+              <header className="sns-shell-post-header">
+                <div>
+                  <strong>AI 응답 가시성</strong>
+                  <p>현재 MVP에서는 전역 on/off 대신 DM 안에서 AI 묶음을 개인별로 숨기거나 다시 볼 수 있습니다.</p>
+                </div>
+                <button className="secondary-button" onClick={() => setActiveTab('dm')} type="button">
+                  DM으로 이동
+                </button>
+              </header>
+              <div className="sns-shell-settings-list">
+                <article className="sns-shell-settings-note">
+                  <strong>숨김 범위</strong>
+                  <p>`상대의 유발 메시지 + 해당 AI 응답` 묶음을 현재 내 화면에서만 숨깁니다.</p>
+                </article>
+                <article className="sns-shell-settings-note">
+                  <strong>상대방 영향</strong>
+                  <p>내가 숨겨도 상대방 화면과 메시지 원본 저장에는 영향을 주지 않습니다.</p>
+                </article>
+                <article className="sns-shell-settings-note">
+                  <strong>복원 방법</strong>
+                  <p>DM 상세에서 `숨긴 AI 응답 묶음` 카드의 `다시 보기`로 언제든 복원할 수 있습니다.</p>
+                </article>
+              </div>
+            </section>
+          </>
         ) : null}
 
         {activeTab !== 'profile' && activeTab !== 'search' && activeTab !== 'dm' && activeTab !== 'settings' ? (

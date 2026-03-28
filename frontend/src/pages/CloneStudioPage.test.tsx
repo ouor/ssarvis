@@ -439,8 +439,9 @@ describe('CloneStudioPage user-scoped data flow', () => {
     )
 
     expect(await screen.findByRole('button', { name: 'Profile' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText('기존 스튜디오를 유지하면서 계정 공개성을 먼저 고정합니다.')).toBeInTheDocument()
+    expect(screen.getByText('내 프로필과 AI 자산 작업공간을 함께 관리합니다.')).toBeInTheDocument()
     expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
+    expect(screen.queryByText('계정 공개성')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Home' }))
     expect(screen.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-pressed', 'true')
@@ -451,6 +452,87 @@ describe('CloneStudioPage user-scoped data flow', () => {
     await user.click(screen.getByRole('button', { name: 'Profile' }))
     expect(screen.getByRole('button', { name: 'Profile' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('사용자14님의 자산과 친구 관계, 공개 자산을 한 화면에서 관리하며 대화와 논쟁 흐름을 이어갈 수 있습니다.')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('계정 공개성, 자동응답, AI 가시성 정책을 한곳에서 관리합니다.')).toBeInTheDocument()
+    expect(screen.getByText('AI 응답 가시성')).toBeInTheDocument()
+  })
+
+  it('manages visibility and AI guidance from settings', async () => {
+    const user = userEvent.setup()
+
+    vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+
+      if (url.endsWith('/questions.json')) {
+        return jsonResponse([{ question: 'Q1', choices: ['A', 'B'] }])
+      }
+
+      if (
+        url.includes('/api/clones?scope=mine')
+        || url.includes('/api/clones?scope=friend')
+        || url.includes('/api/clones?scope=public')
+        || url.includes('/api/voices?scope=mine')
+        || url.includes('/api/voices?scope=friend')
+        || url.includes('/api/voices?scope=public')
+      ) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/chat/conversations') || url.endsWith('/api/debates')) {
+        return jsonResponse([])
+      }
+
+      if (url.endsWith('/api/profiles/me/auto-reply')) {
+        if (init?.method === 'PATCH') {
+          return jsonResponse({
+            mode: 'ALWAYS',
+            lastActivityAt: '2026-03-28T00:00:00Z',
+          })
+        }
+
+        return jsonResponse({
+          mode: 'OFF',
+          lastActivityAt: '2026-03-28T00:00:00Z',
+        })
+      }
+
+      if (url.endsWith('/api/profiles/me/visibility') && init?.method === 'PATCH') {
+        expect(String(init.body)).toContain('"visibility":"PRIVATE"')
+        return jsonResponse({
+          userId: 14,
+          username: 'user14',
+          displayName: '사용자14',
+          visibility: 'PRIVATE',
+          me: true,
+          following: false,
+        })
+      }
+
+      throw new Error(`Unhandled request: ${url}`)
+    })
+
+    render(
+      <CloneStudioPage
+        currentUser={{ userId: 14, username: 'user14', displayName: '사용자14', visibility: 'PUBLIC' }}
+        deactivating={false}
+        onDeactivate={async () => {}}
+        onLogout={() => {}}
+      />,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Settings' }))
+    expect(await screen.findByText('AI 응답 가시성')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '비공개 계정' }))
+    expect(await screen.findByText('복원 방법')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '항상' }))
+    expect(await screen.findByText(/마지막 활동 시각:/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'DM으로 이동' }))
+    expect(await screen.findByRole('button', { name: 'DM' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('updates the display name from the profile edit card', async () => {
@@ -721,7 +803,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
     expect(await screen.findByText('내 클론 논쟁 설정')).toBeInTheDocument()
   })
 
-  it('searches public accounts and updates account visibility from the profile shell', async () => {
+  it('searches public accounts and updates account visibility from settings', async () => {
     const user = userEvent.setup()
 
     vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
@@ -796,6 +878,7 @@ describe('CloneStudioPage user-scoped data flow', () => {
       />,
     )
 
+    await user.click(await screen.findByRole('button', { name: 'Settings' }))
     expect(await screen.findByRole('button', { name: '공개 계정' })).toHaveClass('sns-visibility-button-active')
 
     await user.click(screen.getByRole('button', { name: '비공개 계정' }))

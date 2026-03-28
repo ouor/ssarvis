@@ -204,6 +204,10 @@ Authorization: Bearer <access-token>
 }
 ```
 
+프론트 사용 흐름
+- 현재 MVP에서는 `Profile`이 아니라 `Settings` 탭에서 이 API를 호출한다.
+- 개인 설정 성격의 항목을 `Settings`로 모으기 위한 정보 구조 결정이 반영된 상태다.
+
 ## GET `/api/profiles/me/auto-reply`
 
 내 자동응답 설정과 마지막 활동 시각을 반환한다.

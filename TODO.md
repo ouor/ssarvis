@@ -10,11 +10,11 @@
 - 기준 문서: [PRD.md](/C:/Users/hurwy/Codes/ssarvis/PRD.md)
 - 검토 시점: 2026-03-28
 - 현재 판단: 핵심 SNS/DM/AI 자동응답 흐름은 대부분 구현됨
-- 남은 공백: Settings 정보 구조 정리
+- 남은 공백: 주요 TODO 없음
 
 ## 우선순위 요약
 
-1. Settings 화면 구조를 PRD 기준으로 정리
+1. 주요 TODO 없음
 
 ## 완료 1. 프로필 편집 기능 추가
 
@@ -107,21 +107,23 @@ PRD는 `Settings`를 공개성, 자동응답, AI 표시/숨김 관련 개인 설
 - `DM` 화면
   - AI 묶음 숨기기/다시 보기 존재
 
-### 필요한 작업
+### 반영 내용
 
 - 제품 구조 정리
-  - 공개성을 `Profile`에 남길지 `Settings`로 이동할지 결정
-  - PRD를 현재 UX에 맞게 수정할지, 구현을 PRD에 맞출지 선택
+  - 공개성을 `Settings`로 이동
+  - PRD와 현재 UX를 같은 기준으로 정리
 - 프론트
-  - 결정된 정보 구조에 맞춰 탭 책임 재배치
-  - AI 숨김 관련 개인 설정이 별도 전역 설정을 의미하는지, 현재처럼 대화 단위 조작만 의미하는지 문구 정리
+  - `Profile`에서 공개성 카드를 제거
+  - `Settings`에 공개성, 자동응답, AI 응답 가시성 안내를 모음
+  - AI 숨김은 전역 토글이 아니라 DM 묶음 단위라는 점을 UI 문구로 명확화
 - 문서
   - [PRD.md](/C:/Users/hurwy/Codes/ssarvis/PRD.md), [API_SPEC.md](/C:/Users/hurwy/Codes/ssarvis/backend/API_SPEC.md), [GUIDE.md](/C:/Users/hurwy/Codes/ssarvis/frontend/GUIDE.md) 간 서술 일치화
+ - 테스트
+  - `Settings` 탭에서 공개성, 자동응답, AI 가시성 안내 흐름 테스트 추가
 
 ### 완료 조건
 
-- `Profile`과 `Settings`의 책임이 문서와 구현에서 일치한다
-- 사용자가 계정 공개성, 자동응답, AI 관련 개인 설정 위치를 헷갈리지 않는다
+- 완료
 
 ### 관련 파일
 
@@ -141,5 +143,5 @@ PRD는 `Settings`를 공개성, 자동응답, AI 표시/숨김 관련 개인 설
 
 ## 메모
 
-- 본 문서는 구현 완료 항목이 아니라 `PRD 대비 남은 공백`만 정리한다
-- 다음 작업은 `TODO 1`로 남은 Settings 책임 정리를 문서와 구현 양쪽에서 맞추는 것이다
+- 본 문서는 구현 완료 항목과 후순위 검토 항목을 함께 기록한다
+- 현재 주요 TODO는 모두 반영되었고, 이후 작업은 신규 기능 우선순위에 따라 다시 추가한다

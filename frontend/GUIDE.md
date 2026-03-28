@@ -26,13 +26,14 @@
   - 사람 간 DM 상세
 - `Profile`
   - 프로필 편집
-  - 계정 공개성
   - 내 게시물
   - 내 AI 프로필 자산 요약
   - 프로필 기반 논쟁 진입
   - 레거시 클론 스튜디오 작업공간
 - `Settings`
+  - 계정 공개성
   - 자동응답 설정
+  - AI 응답 가시성 정책 안내
 
 중요 포인트
 - 메인 내비게이션은 이미 SNS 중심이다.
@@ -153,7 +154,6 @@
 
 1. 새 제품 기준 영역
 - 프로필 편집 카드
-- 계정 공개성 카드
 - 내 게시물 패널
 - `내 AI 프로필 자산` 패널
 
@@ -260,18 +260,22 @@ DM 응답에서 꼭 알아둘 필드
 - [SnsShell.tsx](./src/features/sns-shell/SnsShell.tsx)
 
 현재 로컬 상태
+- `profile`, `profileError`, `visibilityUpdating`
 - `autoReplySettings`
 - `autoReplyLoading`
 - `autoReplyUpdating`
 - `autoReplyError`
 
 주요 함수
+- `handleVisibilityChange(nextVisibility)`
 - `loadAutoReplySettings()`
 - `handleAutoReplyModeChange(mode)`
 
 현재 동작
+- `Settings` 탭에서 `PATCH /api/profiles/me/visibility`로 계정 공개성을 바꾼다.
 - `Settings` 탭 진입 시 `GET /api/profiles/me/auto-reply`
 - 버튼 선택 시 `PATCH /api/profiles/me/auto-reply`
+- `AI 응답 가시성` 카드는 현재 MVP 정책을 안내하고 `DM` 탭으로 이동시키는 역할을 한다.
 - 모드 값은 다음처럼 쓴다.
   - `ALWAYS`
   - `AWAY`
@@ -280,6 +284,7 @@ DM 응답에서 꼭 알아둘 필드
 주의
 - 부재중 판정은 프론트 타이머가 아니라 서버의 `lastActivityAt` 기준이다.
 - 프론트는 마지막 활동 시각을 표시만 하고 판정하지 않는다.
+- AI 숨김은 전역 토글이 아니라 DM 내부 묶음 단위 조작이며, Settings는 그 정책 설명과 진입점을 제공한다.
 
 ## 9. 게시물과 공개성 구현 포인트
 
