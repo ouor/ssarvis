@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { LoginForm } from '../../features/auth/components/LoginForm'
 import { SignupForm } from '../../features/auth/components/SignupForm'
@@ -5,8 +6,11 @@ import { Button } from '../../components/ui/Button'
 import { useAuth } from '../../hooks/useAuth'
 import { ROUTES } from '../../lib/constants/routes'
 
+type AuthMode = 'login' | 'signup'
+
 export function AuthPage() {
   const navigate = useNavigate()
+  const [mode, setMode] = useState<AuthMode>('login')
   const {
     continueAsDemo,
     isAuthenticated,
@@ -22,12 +26,10 @@ export function AuthPage() {
     <div className="auth-shell">
       <section className="glass-panel auth-hero">
         <span className="page-eyebrow">Welcome</span>
-        <h1 className="page-title">
-          사람의 관계와 AI 페르소나가 함께 존재하는 소셜 캔버스
-        </h1>
+        <h1 className="page-title">대화와 일상을 한곳에서 이어가세요</h1>
         <p className="page-subtitle">
-          SSARVIS는 피드, DM, 프로필, 그리고 보이스와 클론을 다루는 스튜디오를
-          하나의 흐름으로 묶습니다.
+          로그인하면 최근 소식을 확인하고, 메시지를 주고받고, 내 목소리와
+          말투를 담은 스튜디오도 바로 이어서 사용할 수 있습니다.
         </p>
       </section>
       <section className="glass-panel auth-panel">
@@ -44,24 +46,30 @@ export function AuthPage() {
         ) : null}
         <div className="stack-md">
           <div>
-            <h2 className="section-title">로그인</h2>
+            <h2 className="section-title">
+              {mode === 'login' ? '로그인' : '회원가입'}
+            </h2>
             <p className="muted-copy">
-              기존 계정으로 바로 들어가 Home과 Inbox를 중심으로 탐색합니다.
+              {mode === 'login'
+                ? '계정이 있다면 바로 로그인해 피드와 메시지를 확인해보세요.'
+                : '간단한 정보만 입력하고 계정을 만든 뒤 바로 시작할 수 있습니다.'}
             </p>
           </div>
-          <LoginForm />
+          {mode === 'login' ? <LoginForm /> : <SignupForm />}
+          <Button
+            type="button"
+            variant="secondary"
+            className="auth-switch-button"
+            onClick={() =>
+              setMode((current) => (current === 'login' ? 'signup' : 'login'))
+            }
+          >
+            {mode === 'login'
+              ? '회원가입'
+              : '로그인'}
+          </Button>
         </div>
-        <div className="stack-md">
-          <div>
-            <h2 className="section-title">회원가입</h2>
-            <p className="muted-copy">
-              표시 이름과 아이디를 정하고 곧바로 개인 스튜디오를 시작할 수
-              있습니다.
-            </p>
-          </div>
-          <SignupForm />
-        </div>
-        <div className="entity-title">
+        <div className="centered-stack">
           <Button
             variant="ghost"
             onClick={() => {
@@ -69,11 +77,8 @@ export function AuthPage() {
               navigate(ROUTES.home)
             }}
           >
-            데모로 둘러보기
+            둘러보기
           </Button>
-          <span className="meta-line">
-            로그인 후에는 원래 진입하려던 페이지로 자동 이동합니다.
-          </span>
         </div>
       </section>
     </div>
