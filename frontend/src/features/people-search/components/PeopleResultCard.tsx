@@ -1,4 +1,5 @@
 import { Avatar } from '../../../components/ui/Avatar'
+import { ProfileLink } from '../../../components/shared/ProfileLink'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Chip } from '../../../components/ui/Chip'
@@ -21,8 +22,12 @@ export function PeopleResultCard({
         <Avatar name={user.displayName} />
         <div className="entity-meta stack-sm">
           <div className="entity-title">
-            <strong>{user.displayName}</strong>
-            <span className="meta-line">@{user.username}</span>
+            <ProfileLink username={user.username} className="profile-link-strong">
+              <strong>{user.displayName}</strong>
+            </ProfileLink>
+            <ProfileLink username={user.username} className="meta-line profile-link">
+              @{user.username}
+            </ProfileLink>
             <Chip tone={user.visibility === 'PUBLIC' ? 'success' : 'warm'}>
               {user.visibility}
             </Chip>

@@ -4,6 +4,7 @@ import { EmptyState } from '../../components/shared/EmptyState'
 import { LoadingState } from '../../components/shared/LoadingState'
 import { ToastMessage } from '../../components/shared/ToastMessage'
 import { PageHeader } from '../../components/shared/PageHeader'
+import { ProfileLink } from '../../components/shared/ProfileLink'
 import { Card } from '../../components/ui/Card'
 import { useAuth } from '../../hooks/useAuth'
 import {
@@ -361,8 +362,12 @@ export function MessagesPage() {
               <>
                 <Card>
                   <div className="entity-title">
-                    <strong>{activeUser.displayName}</strong>
-                    <span className="meta-line">@{activeUser.username}</span>
+                    <ProfileLink username={activeUser.username} className="profile-link-strong">
+                      <strong>{activeUser.displayName}</strong>
+                    </ProfileLink>
+                    <ProfileLink username={activeUser.username} className="meta-line profile-link">
+                      @{activeUser.username}
+                    </ProfileLink>
                   </div>
                 </Card>
                 {isMessagesLoading ? (
@@ -406,8 +411,12 @@ export function MessagesPage() {
           {activeUser ? (
             <>
               <div className="entity-title">
-                <strong>{activeUser.displayName}</strong>
-                <span className="meta-line">@{activeUser.username}</span>
+                <ProfileLink username={activeUser.username} className="profile-link-strong">
+                  <strong>{activeUser.displayName}</strong>
+                </ProfileLink>
+                <ProfileLink username={activeUser.username} className="meta-line profile-link">
+                  @{activeUser.username}
+                </ProfileLink>
               </div>
               <p className="muted-copy">
                 공개 프로필은 누구나 DM을 시작할 수 있고, 비공개 프로필은 관계

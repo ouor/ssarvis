@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import moreHorizontalIcon from '../../../assets/more-horizontal.svg'
+import { ProfileLink } from '../../../components/shared/ProfileLink'
 import { Avatar } from '../../../components/ui/Avatar'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Textarea } from '../../../components/ui/Textarea'
-import { ROUTES } from '../../../lib/constants/routes'
+import { buildPostDetailRoute } from '../../../lib/constants/routes'
 import type { FeedPostViewModel } from '../types'
 
 type FeedCardProps = {
@@ -90,11 +91,15 @@ export function FeedCard({
           <div className="entity-row">
             <div className="entity-meta stack-sm">
               <div className="entity-title">
-                <strong>{post.author.displayName}</strong>
-                <span className="meta-line">@{post.author.username}</span>
+                <ProfileLink username={post.author.username} className="profile-link-strong">
+                  <strong>{post.author.displayName}</strong>
+                </ProfileLink>
+                <ProfileLink username={post.author.username} className="meta-line profile-link">
+                  @{post.author.username}
+                </ProfileLink>
               </div>
               <Link
-                to={ROUTES.postDetail.replace(':postId', String(post.id))}
+                to={buildPostDetailRoute(post.id)}
                 className="feed-card-link"
               >
                 {post.postedAt}

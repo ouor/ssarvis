@@ -3,6 +3,7 @@ import { ContextPanel } from '../../components/shared/ContextPanel'
 import { EmptyState } from '../../components/shared/EmptyState'
 import { LoadingState } from '../../components/shared/LoadingState'
 import { PageHeader } from '../../components/shared/PageHeader'
+import { ProfileLink } from '../../components/shared/ProfileLink'
 import { Button } from '../../components/ui/Button'
 import refreshIcon from '../../assets/refresh.svg'
 import { Card } from '../../components/ui/Card'
@@ -219,8 +220,12 @@ export function HomePage() {
           <h2 className="section-title">추천 사람</h2>
           {suggestedUsers.map((user) => (
             <div key={user.userId} className="entity-title">
-              <span>{user.displayName}</span>
-              <span className="meta-line">@{user.username}</span>
+              <ProfileLink username={user.username} className="profile-link">
+                {user.displayName}
+              </ProfileLink>
+              <ProfileLink username={user.username} className="meta-line profile-link">
+                @{user.username}
+              </ProfileLink>
             </div>
           ))}
         </Card>

@@ -62,6 +62,11 @@ public class PostController {
         return postService.listProfilePosts(user.userId(), profileUserId);
     }
 
+    @GetMapping("/api/public/profiles/{username}/posts")
+    public List<PostSummaryResponse> publicProfilePosts(@PathVariable String username) {
+        return postService.listPublicProfilePostsByUsername(username);
+    }
+
     @PatchMapping("/api/posts/{postId}")
     public PostSummaryResponse updatePost(
             @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,

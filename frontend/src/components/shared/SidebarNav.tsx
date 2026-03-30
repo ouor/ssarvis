@@ -1,21 +1,21 @@
 import { NavLink } from 'react-router-dom'
-import { ROUTES } from '../../lib/constants/routes'
 import { useAuth } from '../../hooks/useAuth'
 import { getDemoUser } from '../../lib/demo/adapters'
+import { buildUserProfileRoute, ROUTES } from '../../lib/constants/routes'
+import { ProfileLink } from './ProfileLink'
 import { Avatar } from '../ui/Avatar'
 import { Button } from '../ui/Button'
-
-const navItems = [
-  { label: 'Home', to: ROUTES.home },
-  { label: 'Messages', to: ROUTES.messages },
-  { label: 'Studio', to: ROUTES.studio },
-  { label: 'People', to: ROUTES.people },
-  { label: 'Profile', to: ROUTES.profile },
-]
 
 export function SidebarNav() {
   const { currentUser, isDemo, logout } = useAuth()
   const user = currentUser ?? getDemoUser()
+  const navItems = [
+    { label: 'Home', to: ROUTES.home },
+    { label: 'Messages', to: ROUTES.messages },
+    { label: 'Studio', to: ROUTES.studio },
+    { label: 'People', to: ROUTES.people },
+    { label: 'Profile', to: buildUserProfileRoute(user.username) },
+  ]
 
   return (
     <aside className="sidebar">
@@ -42,14 +42,17 @@ export function SidebarNav() {
 
       <div className="sidebar-footer">
         <Button variant="primary">새 글 쓰기</Button>
-        <div className="glass-card ui-card sidebar-user">
+        <ProfileLink
+          username={user.username}
+          className="glass-card ui-card sidebar-user"
+        >
           <Avatar name={user.displayName} />
           <div>
             <strong>{user.displayName}</strong>
             <div className="meta-line">@{user.username}</div>
             {isDemo ? <div className="meta-line">Demo Session</div> : null}
           </div>
-        </div>
+        </ProfileLink>
         <Button variant="ghost" onClick={logout}>
           로그아웃
         </Button>

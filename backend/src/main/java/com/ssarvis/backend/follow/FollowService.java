@@ -130,6 +130,52 @@ public class FollowService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public UserProfileResponse getProfileByUsername(Long currentUserId, String username) {
+        UserAccount viewer = authService.getActiveUserAccount(currentUserId);
+        if (!StringUtils.hasText(username)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "username is required.");
+        }
+
+        UserAccount profileOwner = authService.findActiveUserAccountByUsername(username.trim());
+
+        boolean me = viewer.getId().equals(profileOwner.getId());
+        boolean following = followRepository.existsByFollowerIdAndFolloweeId(currentUserId, profileOwner.getId());
+        if (!me && profileOwner.getVisibility() == AccountVisibility.PRIVATE && !following) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This private profile is not available.");
+        }
+
+        return new UserProfileResponse(
+                profileOwner.getId(),
+                profileOwner.getUsername(),
+                profileOwner.getDisplayName(),
+                profileOwner.getVisibility(),
+                me,
+                following
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public UserProfileResponse getPublicProfileByUsername(String username) {
+        if (!StringUtils.hasText(username)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "username is required.");
+        }
+
+        UserAccount profileOwner = authService.findActiveUserAccountByUsername(username.trim());
+        if (profileOwner.getVisibility() == AccountVisibility.PRIVATE) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This private profile is not available.");
+        }
+
+        return new UserProfileResponse(
+                profileOwner.getId(),
+                profileOwner.getUsername(),
+                profileOwner.getDisplayName(),
+                profileOwner.getVisibility(),
+                false,
+                false
+        );
+    }
+
     @Transactional
     public UserProfileResponse updateMyVisibility(Long currentUserId, VisibilityUpdateRequest request) {
         if (request == null || request.visibility() == null) {

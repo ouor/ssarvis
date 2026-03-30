@@ -60,6 +60,22 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
+    public List<PostSummaryResponse> listPublicProfilePostsByUsername(String username) {
+        if (!StringUtils.hasText(username)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "username is required.");
+        }
+
+        UserAccount owner = authService.findActiveUserAccountByUsername(username.trim());
+        if (owner.getVisibility() == AccountVisibility.PRIVATE) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This private profile is not available.");
+        }
+
+        return postRepository.findAllByOwnerIdOrderByCreatedAtDesc(owner.getId()).stream()
+                .map(this::toSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public PostSummaryResponse getPost(Long currentUserId, Long postId) {
         UserAccount viewer = authService.getActiveUserAccount(currentUserId);
         Post post = getVisiblePost(viewer.getId(), postId);

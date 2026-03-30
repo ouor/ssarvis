@@ -116,6 +116,12 @@ public class AuthService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found or inactive."));
     }
 
+    public UserAccount findActiveUserAccountByUsername(String username) {
+        String normalizedUsername = normalize(username);
+        return userAccountRepository.findByUsernameAndDeletedAtIsNull(normalizedUsername)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found or inactive."));
+    }
+
     public List<UserAccount> searchActiveUsers(Long currentUserId, String query, Pageable pageable) {
         getActiveUserAccount(currentUserId);
         return userAccountRepository.searchActiveUsers(currentUserId, normalize(query), pageable);

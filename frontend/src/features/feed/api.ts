@@ -21,6 +21,16 @@ export function getMyPosts(token: string) {
   return apiRequest<FeedPostResponse[]>('/api/profiles/me/posts', { token })
 }
 
+export function getProfilePosts(token: string, profileUserId: number) {
+  return apiRequest<FeedPostResponse[]>(`/api/profiles/${profileUserId}/posts`, {
+    token,
+  })
+}
+
+export function getPublicProfilePosts(username: string) {
+  return apiRequest<FeedPostResponse[]>(`/api/public/profiles/${username}/posts`)
+}
+
 export function updatePost(token: string, postId: number, content: string) {
   return apiRequest<FeedPostResponse>(`/api/posts/${postId}`, {
     method: 'PATCH',

@@ -2,16 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { EmptyState } from '../../components/shared/EmptyState'
 import { LoadingState } from '../../components/shared/LoadingState'
 import { PageHeader } from '../../components/shared/PageHeader'
-import { Card } from '../../components/ui/Card'
 import { useAuth } from '../../hooks/useAuth'
 import { deletePost, getMyPosts, updatePost } from '../../features/feed/api'
-import { FeedList } from '../../features/feed/components/FeedList'
 import { toFeedPostViewModel } from '../../features/feed/mappers'
 import type { FeedPostViewModel } from '../../features/feed/types'
 import { AutoReplyCard } from '../../features/profile-settings/components/AutoReplyCard'
 import { AccountActionsCard } from '../../features/profile-settings/components/AccountActionsCard'
 import { ProfileBasicsCard } from '../../features/profile-settings/components/ProfileBasicsCard'
 import { ProfileHeader } from '../../features/profile-settings/components/ProfileHeader'
+import { ProfilePostsCard } from '../../features/profile-settings/components/ProfilePostsCard'
 import { VisibilityToggle } from '../../features/profile-settings/components/VisibilityToggle'
 import {
   getAutoReplySettings,
@@ -36,6 +35,10 @@ import {
 } from '../../lib/demo/adapters'
 
 export function ProfilePage() {
+  return <OwnProfileContent />
+}
+
+export function OwnProfileContent() {
   const { currentUser, isDemo, syncCurrentUser } = useAuth()
   const [profile, setProfile] = useState<ProfileSummary | null>(
     isDemo ? getDemoProfileSummary() : null,
@@ -296,13 +299,13 @@ export function ProfilePage() {
     <div className="page-shell">
       <PageHeader
         eyebrow="Profile"
-        title="개인의 존재감이 가장 따뜻하게 드러나는 공간"
-        subtitle="프로필 화면은 Studio보다 덜 기술적이어야 하며, 관계와 정체성을 안정적으로 보여주는 앵커 역할을 합니다."
+        title="내 프로필"
+        subtitle="내 정보와 공개 범위를 정리하고, 작성한 게시물을 한곳에서 확인하세요."
       />
       {isLoading ? (
         <LoadingState
-          title="프로필을 불러오는 중입니다"
-          copy="프로필 요약, 자동응답, 게시물을 함께 불러와 설정 화면을 구성하고 있어요."
+          title="프로필을 불러오고 있어요"
+          copy="내 정보와 게시물을 준비하고 있습니다."
         />
       ) : loadError ? (
         <EmptyState title="프로필을 불러올 수 없어요" copy={loadError} />
@@ -333,19 +336,13 @@ export function ProfilePage() {
             />
             <AccountActionsCard />
           </div>
-          <Card className="stack-md">
-            <h2 className="section-title">내 게시물</h2>
-            {posts.length > 0 ? (
-              <FeedList
-                posts={posts}
-                currentUserId={user.userId}
-                onEditPost={handleEditPost}
-                onDeletePost={handleDeletePost}
-              />
-            ) : (
-              <p className="muted-copy">아직 작성한 게시물이 없습니다.</p>
-            )}
-          </Card>
+          <ProfilePostsCard
+            posts={posts}
+            currentUserId={user.userId}
+            onEditPost={handleEditPost}
+            onDeletePost={handleDeletePost}
+            emptyCopy="아직 작성한 게시물이 없습니다."
+          />
         </>
       )}
     </div>

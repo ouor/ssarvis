@@ -473,6 +473,25 @@ img {
   text-decoration-color: currentColor;
 }
 
+.profile-link {
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.profile-link:hover,
+.profile-link-strong:hover {
+  text-decoration-color: currentColor;
+}
+
+.profile-link-strong {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+}
+
 .feed-card-menu {
   position: relative;
   flex-shrink: 0;

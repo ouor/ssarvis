@@ -1,15 +1,19 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { SidebarNav } from '../../components/shared/SidebarNav'
-import { ROUTES } from '../../lib/constants/routes'
-
-const mobileTabs = [
-  { label: 'Home', to: ROUTES.home },
-  { label: 'Messages', to: ROUTES.messages },
-  { label: 'Studio', to: ROUTES.studio },
-  { label: 'Profile', to: ROUTES.profile },
-]
+import { useAuth } from '../../hooks/useAuth'
+import { getDemoUser } from '../../lib/demo/adapters'
+import { buildUserProfileRoute, ROUTES } from '../../lib/constants/routes'
 
 export function AppShell() {
+  const { currentUser } = useAuth()
+  const user = currentUser ?? getDemoUser()
+  const mobileTabs = [
+    { label: 'Home', to: ROUTES.home },
+    { label: 'Messages', to: ROUTES.messages },
+    { label: 'Studio', to: ROUTES.studio },
+    { label: 'Profile', to: buildUserProfileRoute(user.username) },
+  ]
+
   return (
     <div className="app-shell">
       <SidebarNav />

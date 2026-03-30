@@ -4,11 +4,12 @@ import { HomePage } from '../../pages/home/HomePage'
 import { MessagesPage } from '../../pages/messages/MessagesPage'
 import { PeoplePage } from '../../pages/people/PeoplePage'
 import { PostDetailPage } from '../../pages/post/PostDetailPage'
-import { ProfilePage } from '../../pages/profile/ProfilePage'
+import { UserProfilePage } from '../../pages/profile/UserProfilePage'
 import { StudioPage } from '../../pages/studio/StudioPage'
 import { ROUTES } from '../../lib/constants/routes'
 import { AppShell } from '../layouts/AppShell'
 import { AuthLayout } from '../layouts/AuthLayout'
+import { UserProfileRouteLayout } from '../layouts/UserProfileRouteLayout'
 import { ProtectedRoute } from './ProtectedRoute'
 
 export const router = createBrowserRouter([
@@ -22,11 +23,14 @@ export const router = createBrowserRouter([
           { path: ROUTES.messages, element: <MessagesPage /> },
           { path: ROUTES.postDetail, element: <PostDetailPage /> },
           { path: ROUTES.people, element: <PeoplePage /> },
-          { path: ROUTES.profile, element: <ProfilePage /> },
           { path: ROUTES.studio, element: <StudioPage /> },
         ],
       },
     ],
+  },
+  {
+    element: <UserProfileRouteLayout />,
+    children: [{ path: ROUTES.userProfile, element: <UserProfilePage /> }],
   },
   {
     element: <AuthLayout />,

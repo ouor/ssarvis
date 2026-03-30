@@ -15,7 +15,7 @@ describe('ProfilePage', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: /개인의 존재감이 가장 따뜻하게 드러나는 공간/i,
+        name: '내 프로필',
       }),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '표시 이름 저장' })).toBeInTheDocument()

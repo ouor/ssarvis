@@ -91,6 +91,19 @@ public class FollowController {
         return followService.getProfile(user.userId(), profileUserId);
     }
 
+    @GetMapping("/api/profiles/by-username/{username}")
+    public UserProfileResponse profileByUsername(
+            @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user,
+            @PathVariable String username
+    ) {
+        return followService.getProfileByUsername(user.userId(), username);
+    }
+
+    @GetMapping("/api/public/profiles/by-username/{username}")
+    public UserProfileResponse publicProfileByUsername(@PathVariable String username) {
+        return followService.getPublicProfileByUsername(username);
+    }
+
     @GetMapping("/api/profiles/me/auto-reply")
     public AutoReplySettingsResponse autoReplySettings(
             @RequestAttribute(JwtAuthenticationInterceptor.AUTHENTICATED_USER_ATTRIBUTE) AuthenticatedUser user

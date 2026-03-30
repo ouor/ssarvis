@@ -21,8 +21,7 @@ export function ProfileHeader({ user }: ProfileHeaderProps) {
           </div>
           <div className="meta-line">@{user.username}</div>
           <p className="muted-copy">
-            사람과 사람의 대화, 그리고 AI 페르소나를 연결하는 일상형 프로필
-            공간입니다.
+            소개와 게시물을 함께 보는 프로필 공간입니다.
           </p>
         </div>
       </div>
