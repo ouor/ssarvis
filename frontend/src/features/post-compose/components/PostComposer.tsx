@@ -35,7 +35,6 @@ export function PostComposer({
     <Card>
       <form className="stack-md" onSubmit={handleSubmit}>
         <div className="stack-sm">
-          <span className="page-eyebrow">Share</span>
           <h2 className="section-title">지금 떠오르는 생각을 남겨보세요</h2>
         </div>
         <Textarea
@@ -44,7 +43,7 @@ export function PostComposer({
           onChange={(event) => setContent(event.target.value)}
         />
         {error ? <p className="meta-line">{error}</p> : null}
-        <div>
+        <div className="justify-end">
           <Button
             type="submit"
             disabled={isSubmitting || content.trim().length === 0}

@@ -4,6 +4,7 @@ import { EmptyState } from '../../components/shared/EmptyState'
 import { LoadingState } from '../../components/shared/LoadingState'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Button } from '../../components/ui/Button'
+import refreshIcon from '../../assets/refresh.svg'
 import { Card } from '../../components/ui/Card'
 import { Chip } from '../../components/ui/Chip'
 import { useAuth } from '../../hooks/useAuth'
@@ -112,28 +113,20 @@ export function HomePage() {
       <div className="page-shell">
         <PageHeader
           eyebrow="Home"
-          title="사람의 흐름 위에 AI 스튜디오가 겹쳐지는 피드"
-          subtitle="소셜 피드를 중심에 두고, 오른쪽 패널에서 현재 프로필과 스튜디오 상태를 곁들여 제품의 성격을 부드럽게 드러냅니다."
+          title="친구들의 소식과 내 이야기를 바로 확인하세요"
+          subtitle="새 글을 남기고, 다른 사람의 근황을 보고, 내 스튜디오 상태도 한눈에 살펴볼 수 있습니다."
           actions={
-            <Button variant="secondary" onClick={() => void loadFeed()}>
-              피드 새로고침
+            <Button
+              variant="secondary"
+              className="ui-button-icon-only"
+              onClick={() => void loadFeed()}
+              aria-label="피드 새로고침"
+              title="피드 새로고침"
+            >
+              <img src={refreshIcon} alt="" aria-hidden="true" className="ui-button-icon" />
             </Button>
           }
         />
-        <div className="stats-row">
-          <Card className="stat-card">
-            <strong>{posts.length}</strong>
-            <span>현재 피드 게시물</span>
-          </Card>
-          <Card className="stat-card">
-            <strong>{suggestedUsers.length}</strong>
-            <span>추천 사용자</span>
-          </Card>
-          <Card className="stat-card">
-            <strong>{studioStatus.voiceReady ? 1 : 0}</strong>
-            <span>활성 보이스 자산</span>
-          </Card>
-        </div>
         <PostComposer
           isSubmitting={isSubmitting}
           error={composerError}
@@ -142,7 +135,7 @@ export function HomePage() {
         {isLoading ? (
           <LoadingState
             title="피드를 불러오는 중입니다"
-            copy="내가 볼 수 있는 게시물을 기준으로 홈 피드를 구성하고 있어요."
+            copy="최신 게시물과 추천 정보를 불러오고 있습니다."
           />
         ) : error ? (
           <EmptyState title="피드를 불러올 수 없어요" copy={error} />
@@ -166,9 +159,11 @@ export function HomePage() {
           </div>
         </Card>
         <Card className="stack-md">
-          <h2 className="section-title">Studio Snapshot</h2>
+          <h2 className="section-title">내 스튜디오</h2>
           <Chip tone="success">{studioStatus.cloneVisibility}</Chip>
-          <p className="muted-copy">{studioStatus.cloneSummary}</p>
+          <p className="muted-copy">
+            내 클론과 보이스 준비 상태를 여기서 빠르게 확인할 수 있습니다.
+          </p>
         </Card>
         <Card className="stack-md">
           <h2 className="section-title">추천 사람</h2>

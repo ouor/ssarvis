@@ -15,9 +15,9 @@ describe('HomePage', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: /사람의 흐름 위에 ai 스튜디오가 겹쳐지는 피드/i,
+        name: /친구들의 소식과 내 이야기를 바로 확인하세요/i,
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Studio Snapshot')).toBeInTheDocument()
+    expect(screen.getByText('내 스튜디오')).toBeInTheDocument()
   })
 })
