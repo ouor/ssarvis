@@ -8,7 +8,7 @@ import refreshIcon from '../../assets/refresh.svg'
 import { Card } from '../../components/ui/Card'
 import { Chip } from '../../components/ui/Chip'
 import { useAuth } from '../../hooks/useAuth'
-import { createPost, getFeed } from '../../features/feed/api'
+import { createPost, deletePost, getFeed, updatePost } from '../../features/feed/api'
 import { FeedList } from '../../features/feed/components/FeedList'
 import { toFeedPostViewModel } from '../../features/feed/mappers'
 import type { FeedPostViewModel } from '../../features/feed/types'
@@ -73,6 +73,7 @@ export function HomePage() {
           id: Date.now(),
           author: currentUser ?? getDemoUser(),
           postedAt: '방금 전',
+          createdAt: new Date().toISOString(),
           content,
         },
         ...current,
@@ -101,6 +102,50 @@ export function HomePage() {
       return false
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  async function handleEditPost(postId: number, content: string) {
+    if (isDemo) {
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, content } : post)),
+      )
+      return true
+    }
+
+    try {
+      const token = getRequiredAccessToken(
+        '세션 정보가 없어 게시글을 수정할 수 없습니다.',
+      )
+      const response = await updatePost(token, postId, content)
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === postId ? toFeedPostViewModel(response) : post,
+        ),
+      )
+      return true
+    } catch {
+      setComposerError('게시글 수정에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      return false
+    }
+  }
+
+  async function handleDeletePost(postId: number) {
+    if (isDemo) {
+      setPosts((current) => current.filter((post) => post.id !== postId))
+      return true
+    }
+
+    try {
+      const token = getRequiredAccessToken(
+        '세션 정보가 없어 게시글을 삭제할 수 없습니다.',
+      )
+      await deletePost(token, postId)
+      setPosts((current) => current.filter((post) => post.id !== postId))
+      return true
+    } catch {
+      setComposerError('게시글 삭제에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      return false
     }
   }
 
@@ -145,7 +190,12 @@ export function HomePage() {
             copy="첫 게시물을 남겨서 Home 피드의 리듬을 만들어보세요."
           />
         ) : (
-          <FeedList posts={posts} />
+          <FeedList
+            posts={posts}
+            currentUserId={user.userId}
+            onEditPost={handleEditPost}
+            onDeletePost={handleDeletePost}
+          />
         )}
       </div>
       <ContextPanel>

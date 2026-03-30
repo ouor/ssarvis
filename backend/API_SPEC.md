@@ -368,6 +368,29 @@ Query Parameter
 }
 ```
 
+## GET `/api/posts/{postId}`
+
+게시물 단건을 조회한다.
+
+### Success Response
+
+```json
+{
+  "postId": 11,
+  "ownerUserId": 1,
+  "ownerUsername": "haru",
+  "ownerDisplayName": "하루",
+  "ownerVisibility": "PUBLIC",
+  "content": "오늘의 기록",
+  "createdAt": "2026-03-28T00:00:00Z"
+}
+```
+
+조회 규칙
+- 내가 작성한 게시물은 항상 조회 가능하다.
+- 공개 계정 게시물은 조회 가능하다.
+- 비공개 계정 게시물은 이미 팔로우 중인 경우만 조회 가능하다.
+
 ## GET `/api/posts/feed`
 
 현재 사용자 기준으로 볼 수 있는 피드 게시물을 반환한다.
@@ -391,6 +414,47 @@ Query Parameter
 피드 규칙
 - 공개 계정 게시물은 조회 가능하다.
 - 비공개 계정 게시물은 이미 팔로우 중인 경우만 조회 가능하다.
+
+## PATCH `/api/posts/{postId}`
+
+내 게시물을 수정한다.
+
+### Request Body
+
+```json
+{
+  "content": "수정된 기록"
+}
+```
+
+### Success Response
+
+```json
+{
+  "postId": 11,
+  "ownerUserId": 1,
+  "ownerUsername": "haru",
+  "ownerDisplayName": "하루",
+  "ownerVisibility": "PUBLIC",
+  "content": "수정된 기록",
+  "createdAt": "2026-03-28T00:00:00Z"
+}
+```
+
+수정 규칙
+- 본인 게시물만 수정할 수 있다.
+- `content`는 공백일 수 없다.
+
+## DELETE `/api/posts/{postId}`
+
+내 게시물을 삭제한다.
+
+### Success Response
+
+- `204 No Content`
+
+삭제 규칙
+- 본인 게시물만 삭제할 수 있다.
 
 ## GET `/api/profiles/me/posts`
 

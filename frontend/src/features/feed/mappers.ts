@@ -27,6 +27,7 @@ export function toFeedPostViewModel(
       visibility: response.ownerVisibility,
     },
     postedAt: formatPostedAt(response.createdAt),
+    createdAt: response.createdAt,
     content: response.content,
   }
 }

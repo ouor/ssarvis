@@ -4,7 +4,7 @@ import { LoadingState } from '../../components/shared/LoadingState'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Card } from '../../components/ui/Card'
 import { useAuth } from '../../hooks/useAuth'
-import { getMyPosts } from '../../features/feed/api'
+import { deletePost, getMyPosts, updatePost } from '../../features/feed/api'
 import { FeedList } from '../../features/feed/components/FeedList'
 import { toFeedPostViewModel } from '../../features/feed/mappers'
 import type { FeedPostViewModel } from '../../features/feed/types'
@@ -248,6 +248,50 @@ export function ProfilePage() {
     }
   }
 
+  async function handleEditPost(postId: number, content: string) {
+    if (isDemo) {
+      setPosts((current) =>
+        current.map((post) => (post.id === postId ? { ...post, content } : post)),
+      )
+      return true
+    }
+
+    try {
+      const token = getRequiredAccessToken(
+        '세션이 없어 게시글을 수정할 수 없습니다.',
+      )
+      const response = await updatePost(token, postId, content)
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === postId ? toFeedPostViewModel(response) : post,
+        ),
+      )
+      return true
+    } catch {
+      setLoadError('게시글 수정에 실패했습니다.')
+      return false
+    }
+  }
+
+  async function handleDeletePost(postId: number) {
+    if (isDemo) {
+      setPosts((current) => current.filter((post) => post.id !== postId))
+      return true
+    }
+
+    try {
+      const token = getRequiredAccessToken(
+        '세션이 없어 게시글을 삭제할 수 없습니다.',
+      )
+      await deletePost(token, postId)
+      setPosts((current) => current.filter((post) => post.id !== postId))
+      return true
+    } catch {
+      setLoadError('게시글 삭제에 실패했습니다.')
+      return false
+    }
+  }
+
   return (
     <div className="page-shell">
       <PageHeader
@@ -292,7 +336,12 @@ export function ProfilePage() {
           <Card className="stack-md">
             <h2 className="section-title">내 게시물</h2>
             {posts.length > 0 ? (
-              <FeedList posts={posts} />
+              <FeedList
+                posts={posts}
+                currentUserId={user.userId}
+                onEditPost={handleEditPost}
+                onDeletePost={handleDeletePost}
+              />
             ) : (
               <p className="muted-copy">아직 작성한 게시물이 없습니다.</p>
             )}

@@ -33,12 +33,17 @@ export function getDemoFeedPosts(): FeedPostViewModel[] {
     id: post.id,
     author: post.author,
     postedAt: post.postedAt,
+    createdAt: post.postedAt,
     content: post.content,
   }))
 }
 
 export function getDemoProfilePosts(userId: number) {
   return getDemoFeedPosts().filter((post) => post.author.userId === userId)
+}
+
+export function getDemoPost(postId: number) {
+  return getDemoFeedPosts().find((post) => post.id === postId) ?? null
 }
 
 export function getDemoPeopleResults(): ProfileSummary[] {

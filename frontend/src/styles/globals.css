@@ -454,6 +454,71 @@ img {
   flex-wrap: wrap;
 }
 
+.feed-card {
+  position: relative;
+}
+
+.feed-card-link {
+  width: fit-content;
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  transition: color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.feed-card-link:hover {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+
+.feed-card-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.feed-card-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  display: grid;
+  min-width: 120px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: var(--blur-soft);
+}
+
+.feed-card-menu-item {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-weight: 700;
+}
+
+.feed-card-menu-item:hover {
+  background: rgba(20, 33, 43, 0.06);
+}
+
+.feed-card-menu-item.danger {
+  color: #b74d4d;
+}
+
+.feed-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 .message-bubble {
   max-width: 82%;
   padding: 14px 16px;

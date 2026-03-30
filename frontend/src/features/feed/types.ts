@@ -19,5 +19,6 @@ export type FeedPostViewModel = {
     visibility: Visibility
   }
   postedAt: string
+  createdAt: string
   content: string
 }

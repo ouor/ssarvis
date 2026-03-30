@@ -59,6 +59,58 @@ public class PostService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public PostSummaryResponse getPost(Long currentUserId, Long postId) {
+        UserAccount viewer = authService.getActiveUserAccount(currentUserId);
+        Post post = getVisiblePost(viewer.getId(), postId);
+        return toSummary(post);
+    }
+
+    @Transactional
+    public PostSummaryResponse updatePost(Long userId, Long postId, UpdatePostRequest request) {
+        if (request == null || !StringUtils.hasText(request.content())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "content must not be blank.");
+        }
+
+        authService.getActiveUserAccount(userId);
+        Post post = getOwnedPost(userId, postId);
+        post.updateContent(request.content().trim());
+        return toSummary(post);
+    }
+
+    @Transactional
+    public void deletePost(Long userId, Long postId) {
+        authService.getActiveUserAccount(userId);
+        Post post = getOwnedPost(userId, postId);
+        postRepository.delete(post);
+    }
+
+    private Post getVisiblePost(Long currentUserId, Long postId) {
+        Post post = postRepository.findByIdWithOwner(postId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found."));
+
+        Long ownerUserId = post.getUser().getId();
+        boolean me = ownerUserId.equals(currentUserId);
+        boolean following = followRepository.existsByFollowerIdAndFolloweeId(currentUserId, ownerUserId);
+
+        if (!me && post.getUser().getVisibility() == AccountVisibility.PRIVATE && !following) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This post is not available.");
+        }
+
+        return post;
+    }
+
+    private Post getOwnedPost(Long userId, Long postId) {
+        Post post = postRepository.findByIdWithOwner(postId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Post not found."));
+
+        if (!post.getUser().getId().equals(userId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only manage your own posts.");
+        }
+
+        return post;
+    }
+
     private PostSummaryResponse toSummary(Post post) {
         return new PostSummaryResponse(
                 post.getId(),

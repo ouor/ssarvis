@@ -55,6 +55,10 @@ public class Post {
         return content;
     }
 
+    public void updateContent(String content) {
+        this.content = content;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
